@@ -1,0 +1,6 @@
+# This directory is intended to hold the train/val/test splits of the dataset.
+# You can create subdirectories here for each split as needed, for example:
+# - train/
+# - val/
+# - test/
+# Each subdirectory can contain the respective images or data files.
