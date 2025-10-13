@@ -1,35 +1,32 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+// frontend/src/App.jsx
+import React, { useState } from 'react';
+// Import the components from their new location
+import { Sidebar } from './components/Sidebar'; 
 
-function App() {
-  const [count, setCount] = useState(0)
+// Placeholder pages (you will implement these later in frontend/src/pages/)
+import { Dashboard } from './pages/Dashboard';
+import { Reports } from './pages/Reports';
+import { MyFarms } from './pages/MyFarms'; 
+import { AlertSettings } from './pages/Alerts'; // Renamed to Alerts
+import { UserManagement } from './pages/UserManagement';
+
+export default function App() {
+  // Initialize state to the 'my-farms' screen to show the design you created
+  const [currentScreen, setCurrentScreen] = useState('my-farms'); 
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    <div className="flex h-screen bg-gray-50">
+      {/* Pass the state and the setter function as props */}
+      <Sidebar currentScreen={currentScreen} onNavigate={setCurrentScreen} />
+      
+      <main className="flex-1 overflow-y-auto">
+        {/* Conditional Rendering based on state */}
+        {currentScreen === 'dashboard' && <Dashboard />}
+        {currentScreen === 'reports' && <Reports />}
+        {currentScreen === 'my-farms' && <MyFarms />}
+        {currentScreen === 'alert-settings' && <AlertSettings />}
+        {currentScreen === 'user-management' && <UserManagement />}
+      </main>
+    </div>
+  );
 }
-
-export default App
