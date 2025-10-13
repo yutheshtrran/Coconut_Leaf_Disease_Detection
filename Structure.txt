@@ -94,19 +94,19 @@ coconut-leaf-detection/
 │   │   ├── index.js
 │   │   ├── App.js
 │   │   ├── components/
-│   │   │   ├── Navbar.js
-│   │   │   ├── Sidebar.js
-│   │   │   ├── ImageUpload.js
-│   │   │   ├── DetectionResult.js
-│   │   │   ├── ReportCard.js
-│   │   │   └── AlertBadge.js
+│   │   │   ├── Navbar.jsx
+│   │   │   ├── Sidebar.jsx
+│   │   │   ├── ImageUpload.jsx
+│   │   │   ├── DetectionResult.jsx
+│   │   │   ├── ReportCard.jsx
+│   │   │   └── AlertBadge.jsx
 │   │   ├── pages/
-│   │   │   ├── Dashboard.js
-│   │   │   ├── Upload.js
-│   │   │   ├── Reports.js
-│   │   │   ├── Alerts.js
-│   │   │   ├── Login.js
-│   │   │   └── Register.js
+│   │   │   ├── Dashboard.jsx
+│   │   │   ├── Upload.jsx
+│   │   │   ├── Reports.jsx
+│   │   │   ├── Alerts.jsx
+│   │   │   ├── Login.jsx
+│   │   │   └── Register.jsx
 │   │   ├── services/
 │   │   │   ├── api.js                  # Axios instance
 │   │   │   ├── authService.js
