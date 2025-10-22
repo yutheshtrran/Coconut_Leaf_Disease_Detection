@@ -97,9 +97,11 @@ coconut-leaf-detection/
 │   │   │   ├── Navbar.jsx
 │   │   │   ├── Sidebar.jsx
 │   │   │   ├── ImageUpload.jsx
+|   |   |   ├── Icons.jsx
 │   │   │   ├── DetectionResult.jsx
 │   │   │   ├── ReportCard.jsx
 │   │   │   └── AlertBadge.jsx
+|   |   | 
 │   │   ├── pages/
 │   │   │   ├── Dashboard.jsx
 │   │   │   ├── Upload.jsx
@@ -107,6 +109,9 @@ coconut-leaf-detection/
 │   │   │   ├── Alerts.jsx
 │   │   │   ├── Login.jsx
 │   │   │   └── Register.jsx
+|   |   |   └── UserManagement.jsx
+|   |   |   └── MyFarms.jsx
+|   |   |  
 │   │   ├── services/
 │   │   │   ├── api.js                  # Axios instance
 │   │   │   ├── authService.js
