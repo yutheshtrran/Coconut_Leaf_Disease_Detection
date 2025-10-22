@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { LayoutDashboard, FileText, Sprout, BellRing, Users, MapPin, BarChart3 } from '../components/Icons';
 
 // =================================================================================
-// 2. PAGE PLACEHOLDERS (To fulfill App.jsx imports)
+// 1. PAGE PLACEHOLDERS (To fulfill App.jsx imports)
 // =================================================================================
 
 const MyFarms = () => (
@@ -35,7 +35,7 @@ const UserManagement = () => (
 
 
 // =================================================================================
-// 3. SIDEBAR COMPONENT (Required by App.jsx)
+// 2. SIDEBAR COMPONENT (Required by App.jsx)
 // =================================================================================
 
 const NavItem = ({ icon: Icon, label, screen, currentScreen, onNavigate }) => {
@@ -108,7 +108,7 @@ export function Sidebar({ currentScreen, onNavigate }) {
 }
 
 // =================================================================================
-// 4. DASHBOARD COMPONENT (Requested file: Dashboard.jsx)
+// 3. DASHBOARD COMPONENT (Requested file: Dashboard.jsx)
 // =================================================================================
 
 const chartData = [
@@ -246,7 +246,7 @@ export function Dashboard() {
 }
 
 // =================================================================================
-// 5. MAIN APPLICATION (Requested file: App.jsx)
+// 4. MAIN APPLICATION (Requested file: App.jsx)
 // =================================================================================
 
 export default function App() {
