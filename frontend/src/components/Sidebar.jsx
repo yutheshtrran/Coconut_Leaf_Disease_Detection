@@ -1,4 +1,6 @@
 import React from 'react';
+import { LayoutDashboard, FileText, Sprout, BellRing, Users } from './Icons';
+
 
 const Sidebar = ({ currentScreen, onNavigate }) => {
   return (
