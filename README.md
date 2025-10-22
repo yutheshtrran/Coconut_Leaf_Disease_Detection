@@ -1,4 +1,4 @@
-# Coconut Leaf Detection Application
+# Coconut Leaf Disease Detection Application
 
 ## Overview
 The Coconut Leaf Detection application is designed to identify and analyze coconut leaf images for various purposes, including detecting nutritional deficiencies and parasitic infections. This project utilizes machine learning techniques to automate the detection process, providing a user-friendly interface for users to upload images and receive analysis results.
