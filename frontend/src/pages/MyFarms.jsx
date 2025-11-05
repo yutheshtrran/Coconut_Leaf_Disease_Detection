@@ -1,13 +1,14 @@
-import React from 'react';
+import React from "react";
 
 const MyFarms = () => {
   return (
-    <div className="p-4">
-      <h1 className="text-2xl font-bold mb-4">My Farms</h1>
-      <p className="text-gray-700">
-        This page will display a list of your farms and their details.
-      </p>
-      {/* Future implementation: list of farms, farm stats, actions */}
+    <div className="ml-64 pt-16 p-8 bg-gray-100 min-h-screen">
+      {/* 
+        ml-64 = offset for sidebar width
+        pt-16 = offset for Navbar height
+      */}
+      <h1 className="text-3xl font-bold mb-6">My Farms Page</h1>
+      <p>Here your farms will appear.</p>
     </div>
   );
 };

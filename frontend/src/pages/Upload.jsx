@@ -1,16 +1,14 @@
-import React from 'react';
-import ImageUpload from '../components/ImageUpload';
+import React from "react";
 
 const Upload = () => {
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100">
-      <h1 className="text-2xl font-bold mb-4">
-        Upload Coconut Leaf Images
-      </h1>
-      <p className="mb-6 text-center max-w-md">
-        Please upload images of coconut leaves for detection.
-      </p>
-      <ImageUpload />
+    <div className="ml-64 pt-16 p-8 bg-gray-100 min-h-screen">
+      {/* 
+        ml-64 = offset for sidebar width
+        pt-16 = offset for Navbar height
+      */}
+      <h1 className="text-3xl font-bold mb-6">Upload Page</h1>
+      <p>Here you can upload new leaf images for analysis.</p>
     </div>
   );
 };

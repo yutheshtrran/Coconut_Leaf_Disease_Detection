@@ -1,43 +1,52 @@
-import React from 'react';
-import { LayoutDashboard, FileText, Sprout, BellRing, Users } from './Icons';
+import React from "react";
+import { LayoutDashboard, FileText, Map, Bell, Users, Settings } from "lucide-react";
+import NavLink from "./NavLink.jsx";
 
+const navItems = [
+  { name: "Dashboard", icon: LayoutDashboard, to: "/" },
+  { name: "Reports", icon: FileText, to: "/reports" },
+  { name: "My Farms", icon: Map, to: "/upload" },
+  { name: "Alert Settings", icon: Bell, to: "/alerts" },
+  { name: "User Management", icon: Users, to: "/users" },
+];
 
-const Sidebar = ({ currentScreen, onNavigate }) => {
+const Sidebar = () => {
+  const logoColor = "#4CAF50";
+
   return (
-    <div className="bg-gray-800 text-white w-64 h-full">
-      <h2 className="text-2xl font-bold p-4">Coconut Leaf Detection</h2>
-      <ul className="mt-6">
-        <li
-          className="p-4 hover:bg-gray-700 cursor-pointer"
-          onClick={() => onNavigate('dashboard')}
+    <div className="flex flex-col h-screen w-64 bg-white border-r border-gray-200 shadow-lg fixed">
+      {/* Logo */}
+      <div className="flex items-center p-6 border-b border-gray-100">
+        <div
+          className="w-8 h-8 rounded-full flex items-center justify-center mr-2 shadow-inner"
+          style={{ backgroundColor: "#e8e8e8" }}
         >
-          Dashboard
-        </li>
-        <li
-          className="p-4 hover:bg-gray-700 cursor-pointer"
-          onClick={() => onNavigate('reports')}
-        >
-          Reports
-        </li>
-        <li
-          className="p-4 hover:bg-gray-700 cursor-pointer"
-          onClick={() => onNavigate('my-farms')}
-        >
-          My Farms
-        </li>
-        <li
-          className="p-4 hover:bg-gray-700 cursor-pointer"
-          onClick={() => onNavigate('alert-settings')}
-        >
-          Alerts
-        </li>
-        <li
-          className="p-4 hover:bg-gray-700 cursor-pointer"
-          onClick={() => onNavigate('user-management')}
-        >
-          User Management
-        </li>
-      </ul>
+          <Settings className="w-5 h-5" style={{ color: logoColor }} />
+        </div>
+        <h1 className="text-xl font-bold tracking-tight" style={{ color: logoColor }}>
+          CocoGuard
+        </h1>
+      </div>
+
+      {/* Nav */}
+      <nav className="flex-grow p-4 space-y-2 overflow-y-auto">
+        {navItems.map((item) => (
+          <NavLink key={item.name} name={item.name} icon={item.icon} to={item.to} />
+        ))}
+      </nav>
+
+      {/* Profile */}
+      <div className="p-4 border-t border-gray-100">
+        <div className="flex items-center space-x-3 p-3 hover:bg-gray-50 rounded-xl cursor-pointer transition">
+          <div className="w-10 h-10 rounded-full flex items-center justify-center bg-green-200 text-green-800 font-bold text-lg">
+            A
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-gray-800">Admin</p>
+            <p className="text-xs text-gray-500">Administrator</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

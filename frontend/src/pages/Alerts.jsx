@@ -1,15 +1,16 @@
-import React from 'react';
+import React from "react";
 
-function Alerts() {
+const Alerts = () => {
   return (
-    <div className="p-4">
-      <h1 className="text-2xl font-bold mb-4">Alerts</h1>
-      <p className="text-gray-700">
-        This page will display alerts related to coconut leaf detection.
-      </p>
-      {/* Future implementation for displaying alerts will go here */}
+    <div className="ml-64 pt-16 p-8 bg-gray-100 min-h-screen">
+      {/* 
+        ml-64 = offset for sidebar width
+        pt-16 = offset for Navbar height
+      */}
+      <h1 className="text-3xl font-bold mb-6">Alerts Page</h1>
+      <p>Check critical alerts and disease notifications here.</p>
     </div>
   );
-}
+};
 
 export default Alerts;

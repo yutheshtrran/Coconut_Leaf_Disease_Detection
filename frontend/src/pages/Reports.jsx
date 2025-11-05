@@ -1,13 +1,14 @@
-import React from 'react';
+import React from "react";
 
 const Reports = () => {
   return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-4">Reports</h1>
-      <p className="mb-2">
-        Here you can find the reports related to coconut leaf detection.
-      </p>
-      {/* Future implementation: list of reports, charts, or export options */}
+    <div className="ml-64 pt-16 p-8 bg-gray-100 min-h-screen">
+      {/* 
+        ml-64 = offset for sidebar width
+        pt-16 = offset for Navbar height
+      */}
+      <h1 className="text-3xl font-bold mb-6">Reports Page</h1>
+      <p>View historical analysis reports here.</p>
     </div>
   );
 };
