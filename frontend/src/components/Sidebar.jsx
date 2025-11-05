@@ -5,7 +5,7 @@ import NavLink from "./NavLink.jsx";
 const navItems = [
   { name: "Dashboard", icon: LayoutDashboard, to: "/" },
   { name: "Reports", icon: FileText, to: "/reports" },
-  { name: "My Farms", icon: Map, to: "/upload" },
+  { name: "My Farms", icon: Map, to: "/MyFarms" },
   { name: "Alert Settings", icon: Bell, to: "/alerts" },
   { name: "User Management", icon: Users, to: "/users" },
 ];
