@@ -22,7 +22,7 @@ const Navbar = () => {
     { name: 'Dashboard', path: '/' },
     { name: 'Upload', path: '/upload' },
     { name: 'About Us', path: '/about' },
-    { name: 'Login', path: '/login' },
+    { name: 'Login ♻', path: '/login' },
   ];
 
   return (
@@ -32,7 +32,7 @@ const Navbar = () => {
           {/* Logo */}
           <div className="flex-shrink-0">
             <Link to="/" className="text-green-900 text-3xl font-extrabold cursor-pointer hover:text-green-700 transition">
-              🥥 CocoLeaf Detect
+              🥥 Coco-Guard
             </Link>
           </div>
 
