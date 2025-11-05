@@ -10,10 +10,12 @@ import Login from "./pages/Login.jsx";
 import Register from "./pages/Register.jsx";
 import UserManagement from "./pages/UserManagement.jsx";
 import AboutUs from "./pages/AboutUs.jsx";
+import MyFarms from "./pages/MyFarms.jsx";
 
 // Components
 import Navbar from "./components/Navbar.jsx";
 import Sidebar from "./components/Sidebar.jsx";
+import { Import } from "lucide-react";
 
 function App() {
   return (
@@ -38,6 +40,7 @@ function App() {
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route path="/users" element={<UserManagement />} />
+              <Route path="/myfarms" element={<MyFarms />} />
               <Route path="/about" element={<AboutUs />} />
             </Routes>
           </main>
