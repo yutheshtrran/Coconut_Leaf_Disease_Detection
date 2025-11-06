@@ -1,9 +1,11 @@
 import React from "react";
-import { LayoutDashboard, FileText, Map, Bell, Users, Settings } from "lucide-react";
+import { LayoutDashboard, FileText, Map, Bell, Users, Settings, TrendingUp } from "lucide-react";
 import NavLink from "./NavLink.jsx";
+import { useNavigate } from "react-router-dom"; // <-- Add this
 
 const navItems = [
   { name: "Dashboard", icon: LayoutDashboard, to: "/" },
+  { name: "Drone Analysis", icon: TrendingUp, to: "/upload" },
   { name: "Reports", icon: FileText, to: "/reports" },
   { name: "My Farms", icon: Map, to: "/MyFarms" },
   { name: "Alert Settings", icon: Bell, to: "/alerts" },
@@ -12,6 +14,7 @@ const navItems = [
 
 const Sidebar = () => {
   const logoColor = "#4CAF50";
+  const navigate = useNavigate(); // <-- Initialize navigation hook
 
   return (
     <div className="flex flex-col h-screen w-64 bg-white border-r border-gray-200 shadow-lg fixed">
@@ -35,9 +38,12 @@ const Sidebar = () => {
         ))}
       </nav>
 
-      {/* Profile */}
+      {/* Profile (Admin) */}
       <div className="p-4 border-t border-gray-100">
-        <div className="flex items-center space-x-3 p-3 hover:bg-gray-50 rounded-xl cursor-pointer transition">
+        <div
+          onClick={() => navigate("/admin")} // <-- Add navigation here
+          className="flex items-center space-x-3 p-3 hover:bg-gray-50 rounded-xl cursor-pointer transition"
+        >
           <div className="w-10 h-10 rounded-full flex items-center justify-center bg-green-200 text-green-800 font-bold text-lg">
             A
           </div>

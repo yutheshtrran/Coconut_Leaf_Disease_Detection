@@ -20,7 +20,6 @@ const Navbar = () => {
 
   const navItems = [
     { name: 'Dashboard', path: '/' },
-    { name: 'Upload', path: '/upload' },
     { name: 'About Us', path: '/about' },
     { name: 'Login ♻', path: '/login' },
   ];
