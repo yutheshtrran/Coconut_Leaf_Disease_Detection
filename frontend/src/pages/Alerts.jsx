@@ -11,7 +11,7 @@ const NotificationItem = ({ label, description, name, checked, onChange }) => (
       name={name}
       checked={checked}
       onChange={onChange}
-      className="w-5 h-5 mt-1 text-emerald-600 bg-white border-gray-300 rounded focus:ring-emerald-500 cursor-pointer"
+      className="w-5 h-5 mt-1 text-green-600 bg-white border-gray-300 rounded focus:ring-green-500 cursor-pointer"
     />
   </div>
 );
@@ -24,7 +24,7 @@ const InputGroup = ({ label, name, type, value, onChange }) => (
       name={name}
       value={value}
       onChange={onChange}
-      className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition duration-150"
+      className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:border-green-500 focus:ring-1 focus:ring-green-500 transition duration-150"
       placeholder={`Enter your ${label.toLowerCase()}`}
     />
   </div>
@@ -34,7 +34,7 @@ const Toast = ({ message, visible, onClose }) => {
   if (!visible) return null;
   return (
     <div
-      className="fixed bottom-5 right-5 z-50 bg-emerald-600 text-white p-4 rounded-md shadow-2xl transition-opacity duration-300 opacity-100"
+      className="fixed bottom-5 right-5 z-50 bg-green-600 text-white p-4 rounded-md shadow-2xl transition-opacity duration-300 opacity-100"
       role="alert"
     >
       <div className="flex items-center">
@@ -53,7 +53,7 @@ const Toast = ({ message, visible, onClose }) => {
           ></path>
         </svg>
         <p className="font-medium">{message}</p>
-        <button onClick={onClose} className="ml-4 text-white hover:text-emerald-200">
+        <button onClick={onClose} className="ml-4 text-white hover:text-green-200">
           &times;
         </button>
       </div>
@@ -103,15 +103,15 @@ const Alerts = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex" style={{ marginTop: '1cm' }}>
+    <div className="min-h-screen bg-green-50 flex" style={{ marginTop: '1cm' }}>
       {/* Wrapper div to shift content 5cm right */}
       <div style={{ marginLeft: '6cm', flex: 1 }}>
         <main className="p-6">
           <div className="bg-white shadow-xl rounded-lg p-6 md:p-8">
             {/* Header */}
-            <h2 className="text-2xl font-bold text-gray-900 mb-6 pb-2 border-b border-gray-300 flex items-center">
+            <h2 className="text-2xl font-bold text-green-800 mb-6 pb-2 border-b border-gray-300 flex items-center">
               <svg
-                className="w-6 h-6 mr-3 text-emerald-600"
+                className="w-6 h-6 mr-3 text-green-600"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -131,7 +131,7 @@ const Alerts = () => {
             <div className="flex flex-col lg:flex-row gap-6 mt-6">
               {/* Recipient Section */}
               <section className="flex-1 p-4 border border-gray-200 rounded-md">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-100">
+                <h3 className="text-lg font-semibold text-green-700 mb-4 pb-2 border-b border-gray-100">
                   Contact Details
                 </h3>
                 <InputGroup
@@ -152,7 +152,7 @@ const Alerts = () => {
 
               {/* Notification Preferences */}
               <section className="flex-1 p-4 border border-gray-200 rounded-md">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-200">
+                <h3 className="text-lg font-semibold text-green-700 mb-4 pb-2 border-b border-gray-200">
                   Alert & Communication Channels
                 </h3>
 
@@ -181,7 +181,7 @@ const Alerts = () => {
                 />
 
                 <div className="mt-6 pt-4 border-t border-gray-200">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-200">
+                  <h3 className="text-lg font-semibold text-green-700 mb-4 pb-2 border-b border-gray-200">
                     Promotional & Feature Updates
                   </h3>
                 </div>
@@ -207,7 +207,7 @@ const Alerts = () => {
             {/* Save Button */}
             <button
               onClick={handleSave}
-              className="mt-6 w-full py-3 px-4 bg-emerald-600 text-white font-semibold text-lg rounded-md shadow-lg hover:bg-emerald-700 transition duration-200 ease-in-out"
+              className="mt-6 w-full py-3 px-4 bg-green-600 text-white font-semibold text-lg rounded-md shadow-lg hover:bg-green-700 transition duration-200 ease-in-out"
             >
               Save Changes
             </button>
