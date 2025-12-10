@@ -1,40 +1,52 @@
 import axios from 'axios';
 
-const api = axios.create({
-  baseURL: 'http://localhost:5000/api', // Adjust the base URL as needed
+const API = axios.create({
+  baseURL: 'http://localhost:5000/api',
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
 });
+// Response interceptor: on 401 try to refresh once then retry the request
+let isRefreshing = false;
+let failedQueue = [];
 
-// Example API call to upload an image
-export const uploadImage = async (formData) => {
-  try {
-    const response = await api.post('/upload', formData);
-    return response.data;
-  } catch (error) {
-    throw error.response ? error.response.data : error.message;
-  }
+const processQueue = (error, token = null) => {
+  failedQueue.forEach((prom) => {
+    if (error) prom.reject(error);
+    else prom.resolve(token);
+  });
+  failedQueue = [];
 };
 
-// Example API call to get detection results
-export const getDetectionResults = async (imageId) => {
-  try {
-    const response = await api.get(`/results/${imageId}`);
-    return response.data;
-  } catch (error) {
-    throw error.response ? error.response.data : error.message;
-  }
-};
+API.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+    if (error.response && error.response.status === 401 && !originalRequest._retry) {
+      if (isRefreshing) {
+        return new Promise(function (resolve, reject) {
+          failedQueue.push({ resolve, reject });
+        })
+          .then(() => API(originalRequest))
+          .catch((err) => Promise.reject(err));
+      }
 
-// Example API call to get reports
-export const getReports = async () => {
-  try {
-    const response = await api.get('/reports');
-    return response.data;
-  } catch (error) {
-    throw error.response ? error.response.data : error.message;
+      originalRequest._retry = true;
+      isRefreshing = true;
+      try {
+        await API.post('/auth/refresh'); // server will set new cookies
+        processQueue(null, true);
+        return API(originalRequest);
+      } catch (err) {
+        processQueue(err, null);
+        return Promise.reject(err);
+      } finally {
+        isRefreshing = false;
+      }
+    }
+    return Promise.reject(error);
   }
-};
+);
 
-export default api;
+export default API;
