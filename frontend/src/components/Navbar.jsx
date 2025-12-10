@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 // Inline SVG icons
 const MenuIcon = (props) => (
@@ -18,10 +19,12 @@ const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const location = useLocation();
 
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
   const navItems = [
     { name: 'Dashboard', path: '/' },
     { name: 'About Us', path: '/about' },
-    { name: 'Login ♻', path: '/login' },
   ];
 
   return (
@@ -50,6 +53,18 @@ const Navbar = () => {
                 {item.name}
               </Link>
             ))}
+            {!user && (
+              <Link to="/login" className="px-4 py-2 rounded-xl text-sm font-bold text-green-800 hover:bg-green-100/50">Login</Link>
+            )}
+            {!user && (
+              <Link to="/register" className="px-4 py-2 rounded-xl text-sm font-bold text-green-800 hover:bg-green-100/50">Register</Link>
+            )}
+            {user && (
+              <div className="flex items-center space-x-3">
+                <span className="px-3 py-2 rounded-xl text-sm font-semibold text-green-900">{user.username}</span>
+                <button onClick={async () => { await logout(); navigate('/login'); }} className="px-3 py-2 rounded-xl bg-red-600 text-white text-sm">Logout</button>
+              </div>
+            )}
           </div>
 
           {/* Mobile menu button */}

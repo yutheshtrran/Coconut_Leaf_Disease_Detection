@@ -24,18 +24,33 @@ The project is organized into several directories, each serving a specific purpo
 ### Installation
 
 1. Clone the repository:
+
    ```
    git clone https://github.com/yourusername/coconut-leaf-detection.git
    cd coconut-leaf-detection/backend
    ```
 
 2. Install dependencies:
+
    ```
    npm install
    ```
 
 3. Set up environment variables:
    - Create a `.env` file in the `backend` directory and configure your environment variables.
+
+#### Securing secrets
+
+- Do NOT commit your `.env` file to source control. A sample `backend/.env.example` is provided — copy it to `.env` and fill in real values.
+- For production, use a secrets manager (AWS Secrets Manager, Azure Key Vault, GCP Secret Manager) or environment-specific deployment variables.
+- Example to create a local `.env` from the example (PowerShell):
+
+```powershell
+Copy-Item backend\.env.example backend\.env
+# then edit backend\.env and add real credentials
+```
+
+If you ever accidentally commit secrets, rotate them immediately (database user passwords, API keys, JWT secrets).
 
 4. Start the server:
    ```

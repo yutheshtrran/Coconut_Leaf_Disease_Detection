@@ -67,3 +67,13 @@ exports.deleteUserAccount = async (req, res) => {
         res.status(500).json({ message: 'Error deleting user account', error });
     }
 };
+
+// Admin: list all users
+exports.listUsers = async (req, res) => {
+    try {
+        const users = await User.find().select('-password -refreshTokens -resetPasswordToken -resetPasswordExpires');
+        res.status(200).json({ users });
+    } catch (error) {
+        res.status(500).json({ message: 'Error listing users', error });
+    }
+};

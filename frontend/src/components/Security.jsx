@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import PasswordField from './PasswordField';
 import { Key, Lock, Shield, ShieldCheck, Save, AlertCircle, CheckCircle } from "lucide-react";
 
 const Security = () => {
@@ -75,12 +76,10 @@ const Security = () => {
             <label className="block text-sm font-semibold text-gray-700 mb-1 flex items-center gap-2">
               <Lock size={16} className="text-green-500" /> Current Password
             </label>
-            <input
-              type="password"
+            <PasswordField
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
               placeholder="••••••••"
-              // Enhanced focus ring and border color
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-150"
             />
           </div>
@@ -91,8 +90,7 @@ const Security = () => {
               <label className="block text-sm font-semibold text-gray-700 mb-1 flex items-center gap-2">
                 <Key size={16} className="text-green-500" /> New Password
               </label>
-              <input
-                type="password"
+              <PasswordField
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="Must be at least 8 characters"
@@ -105,8 +103,7 @@ const Security = () => {
               <label className="block text-sm font-semibold text-gray-700 mb-1 flex items-center gap-2">
                 <Key size={16} className="text-green-500" /> Confirm New Password
               </label>
-              <input
-                type="password"
+              <PasswordField
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Re-enter new password"
