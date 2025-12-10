@@ -84,27 +84,6 @@ const Login = () => {
               <label htmlFor="remember-me" className="ml-2 text-gray-600 select-none">Remember me</label>
             </div>
             <a href="/forgot-password" className="font-medium text-sm text-[#387637] hover:text-green-700 transition duration-150">Forgot password?</a>
-            {showResend && (
-              <div className="mt-2">
-                <button type="button" onClick={async () => {
-                  try {
-                    setResendStatus('Checking...');
-                    const s = await verificationStatus(email);
-                    setResendStatus('Sending...');
-                    if (s.pending) {
-                      await resendPending(email);
-                      setResendStatus('Registration code resent');
-                    } else {
-                      await resendVerification(email);
-                      setResendStatus('Verification email resent');
-                    }
-                  } catch (e) {
-                    setResendStatus(e?.response?.data?.message || 'Could not resend');
-                  }
-                }} className="text-sm text-[#387637] hover:text-green-700">Resend verification</button>
-                {resendStatus && <div className="text-xs text-gray-600 mt-1">{resendStatus}</div>}
-              </div>
-            )}
           </div>
 
           <button type="submit" disabled={loading} className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-lg shadow-md text-lg font-medium text-white bg-[#387637] hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#387637] transition duration-200 disabled:opacity-50">
