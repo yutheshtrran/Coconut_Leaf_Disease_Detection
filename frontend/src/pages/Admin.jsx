@@ -27,7 +27,7 @@ const Admin = () => {
       {/* Sidebar */}
       <aside className="w-64 bg-white shadow-lg border-r border-green-200 p-6 ml-60">
         <h2 className="text-2xl font-bold text-green-800 mb-6 text-center">
-          Profile
+          Admin Panel
         </h2>
 
         <nav className="space-y-3">

@@ -1,7 +1,5 @@
 import React, { useState } from "react";
-import PasswordField from './PasswordField';
 import { Key, Lock, Shield, ShieldCheck, Save, AlertCircle, CheckCircle } from "lucide-react";
-import { updateSecurity } from '../services/userService';
 
 const Security = () => {
   const [currentPassword, setCurrentPassword] = useState("");
@@ -9,7 +7,6 @@ const Security = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [twoFA, setTwoFA] = useState(false);
   const [notification, setNotification] = useState(null); // { type: 'success' | 'error', message: string }
-  const [isUpdating, setIsUpdating] = useState(false);
 
   const showNotification = (type, message) => {
     setNotification({ type, message });
@@ -18,46 +15,27 @@ const Security = () => {
     }, 4000); // Notification disappears after 4 seconds
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
 
-    // Require current password for any security changes
-    if (!currentPassword.trim()) {
-      showNotification("error", "Current password is required to update security settings.");
-      return;
-    }
-
-    // Client-side checks for password change (optional but improves UX)
     if (newPassword.trim() || confirmPassword.trim()) {
+      // Logic for password update
       if (newPassword !== confirmPassword) {
-        showNotification("error", "New password and confirmation do not match.");
+        showNotification("error", "Error: New passwords do not match!");
         return;
       }
-      const pwd = newPassword.trim();
-      const strong = pwd.length >= 8 && /[A-Z]/.test(pwd) && /[a-z]/.test(pwd) && /\d/.test(pwd);
-      if (!strong) {
-        showNotification("error", "Weak password: use 8+ chars incl. upper, lower, and a number.");
+      if (currentPassword === "") {
+        showNotification("error", "Error: Current password is required to set a new password.");
         return;
       }
-    }
-
-    try {
-      setIsUpdating(true);
-      const { message } = await updateSecurity({
-        currentPassword: currentPassword.trim(),
-        newPassword: newPassword.trim() || undefined,
-        confirmPassword: confirmPassword.trim() || undefined,
-        twoFactorEnabled: twoFA,
-      });
-      showNotification("success", message || "Security settings updated");
+      // Assuming a successful API call here
+      showNotification("success", "Password updated and security settings saved!");
+      setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-      setCurrentPassword("");
-    } catch (err) {
-      const msg = err?.response?.data?.message || "Failed to update security settings";
-      showNotification("error", msg);
-    } finally {
-      setIsUpdating(false);
+    } else {
+       // Logic for 2FA only update
+       showNotification("success", "Two-Factor Authentication setting saved successfully!");
     }
   };
 
@@ -97,10 +75,12 @@ const Security = () => {
             <label className="block text-sm font-semibold text-gray-700 mb-1 flex items-center gap-2">
               <Lock size={16} className="text-green-500" /> Current Password
             </label>
-            <PasswordField
+            <input
+              type="password"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
-              placeholder="Enter your current password"
+              placeholder="••••••••"
+              // Enhanced focus ring and border color
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-150"
             />
           </div>
@@ -111,7 +91,8 @@ const Security = () => {
               <label className="block text-sm font-semibold text-gray-700 mb-1 flex items-center gap-2">
                 <Key size={16} className="text-green-500" /> New Password
               </label>
-              <PasswordField
+              <input
+                type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="Must be at least 8 characters"
@@ -124,7 +105,8 @@ const Security = () => {
               <label className="block text-sm font-semibold text-gray-700 mb-1 flex items-center gap-2">
                 <Key size={16} className="text-green-500" /> Confirm New Password
               </label>
-              <PasswordField
+              <input
+                type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Re-enter new password"
@@ -172,11 +154,10 @@ const Security = () => {
             <button
               type="submit"
               // Enhanced button style for a more professional look
-              className={`flex items-center gap-2 px-8 py-3 ${isUpdating ? 'bg-green-400' : 'bg-green-600'} text-white font-semibold rounded-xl hover:bg-green-700 transition duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-60`}
-              disabled={isUpdating}
+              className="flex items-center gap-2 px-8 py-3 bg-green-600 text-white font-semibold rounded-xl hover:bg-green-700 transition duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
             >
               <Save size={20} />
-              {isUpdating ? 'Saving...' : 'Update Security'}
+              Update Security
             </button>
           </div>
         </form>

@@ -3,7 +3,7 @@ const router = express.Router();
 const reportController = require('../controllers/reportController');
 
 // Route to get all reports
-router.get('/', reportController.getReports);
+router.get('/', reportController.getAllReports);
 
 // Route to create a new report
 router.post('/', reportController.createReport);
@@ -12,9 +12,9 @@ router.post('/', reportController.createReport);
 router.get('/:id', reportController.getReportById);
 
 // Route to update a report by ID
-router.put('/:id', reportController.updateReport);
+router.put('/:id', reportController.updateReportById);
 
 // Route to delete a report by ID
-router.delete('/:id', reportController.deleteReport);
+router.delete('/:id', reportController.deleteReportById);
 
 module.exports = router;
