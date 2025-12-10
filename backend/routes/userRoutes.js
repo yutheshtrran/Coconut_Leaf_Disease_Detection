@@ -1,20 +1,25 @@
 const express = require('express');
 const router = express.Router();
 const userController = require('../controllers/userController');
+const auth = require('../middleware/authMiddleware');
+const requireRole = require('../middleware/roleMiddleware');
+const upload = require('../services/storageService');
 
-// Route to register a new user
-router.post('/register', userController.register);
+// Public: register/login still available here but app uses auth routes primarily
+router.post('/register', userController.registerUser);
+router.post('/login', userController.loginUser);
 
-// Route to login a user
-router.post('/login', userController.login);
+// Protected: profile operations
+router.get('/profile', auth, userController.getUserProfile);
+router.put('/profile', auth, userController.updateUserProfile);
+router.post('/profile/photo', auth, upload.single('profilePhoto'), userController.uploadProfilePhoto);
+router.delete('/profile/photo', auth, userController.deleteProfilePhoto);
+router.put('/security', auth, userController.updateUserSecurity);
+router.delete('/account', auth, userController.deleteUserAccount);
 
-// Route to get user profile
-router.get('/profile', userController.getProfile);
-
-// Route to update user profile
-router.put('/profile', userController.updateProfile);
-
-// Route to delete user account
-router.delete('/account', userController.deleteAccount);
+// Admin: list users
+router.get('/', auth, requireRole('admin'), userController.listUsers);
+router.put('/:id', auth, requireRole('admin'), userController.adminUpdateUser);
+router.put('/promote', auth, requireRole('admin'), userController.adminPromoteByEmail);
 
 module.exports = router;
