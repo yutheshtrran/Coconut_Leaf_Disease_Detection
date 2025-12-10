@@ -13,9 +13,9 @@ router.post('/', flightController.createFlight);
 router.get('/:id', flightController.getFlightById);
 
 // Route to update a flight by ID
-router.put('/:id', flightController.updateFlight);
+router.put('/:id', flightController.updateFlightById);
 
 // Route to delete a flight by ID
-router.delete('/:id', flightController.deleteFlight);
+router.delete('/:id', flightController.deleteFlightById);
 
 module.exports = router;
