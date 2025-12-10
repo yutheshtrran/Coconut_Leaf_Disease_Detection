@@ -1,7 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { LogOut } from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
 
 // Inline SVG icons
 const MenuIcon = (props) => (
@@ -20,14 +18,10 @@ const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const location = useLocation();
 
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
-
   const navItems = [
     { name: 'Dashboard', path: '/' },
     { name: 'About Us', path: '/about' },
+    { name: 'Login ♻', path: '/login' },
   ];
 
   return (
@@ -56,24 +50,6 @@ const Navbar = () => {
                 {item.name}
               </Link>
             ))}
-            {!user && (
-              <Link to="/login" className="px-4 py-2 rounded-xl text-sm font-bold text-green-800 hover:bg-green-100/50">Login</Link>
-            )}
-            {!user && (
-              <Link to="/register" className="px-4 py-2 rounded-xl text-sm font-bold text-green-800 hover:bg-green-100/50">Register</Link>
-            )}
-            {user && (
-              <div className="flex items-center space-x-3">
-                <button
-                  onClick={() => setShowLogoutConfirm(true)}
-                  className="p-2 rounded-full bg-red-600 text-white hover:bg-red-700 transition"
-                  aria-label="Logout"
-                  title="Logout"
-                >
-                  <LogOut size={18} />
-                </button>
-              </div>
-            )}
           </div>
 
           {/* Mobile menu button */}
@@ -108,47 +84,8 @@ const Navbar = () => {
               {item.name}
             </Link>
           ))}
-          {user && (
-            <button
-              onClick={() => { setIsMenuOpen(false); setShowLogoutConfirm(true); }}
-              className="flex items-center gap-2 w-full text-left px-3 py-2 rounded-lg text-base font-medium bg-red-600 text-white hover:bg-red-700"
-            >
-              <LogOut size={18} /> Logout
-            </button>
-          )}
         </div>
       </div>
-
-      {showLogoutConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="bg-white rounded-2xl shadow-2xl w-[90vw] max-w-md p-6">
-            <h2 className="text-xl font-semibold mb-3">Confirm Logout</h2>
-            <p className="text-sm text-gray-600 mb-4">Are you sure you want to log out?</p>
-            <div className="flex justify-end gap-2">
-              <button
-                className="px-4 py-2 rounded-lg bg-gray-200"
-                onClick={() => setShowLogoutConfirm(false)}
-                disabled={isLoggingOut}
-              >
-                Cancel
-              </button>
-              <button
-                className="px-4 py-2 rounded-lg bg-red-600 text-white flex items-center gap-2"
-                onClick={async () => { setIsLoggingOut(true); try { await logout(); navigate('/login'); } finally { setIsLoggingOut(false); setShowLogoutConfirm(false); } }}
-                disabled={isLoggingOut}
-              >
-                {isLoggingOut && (
-                  <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
-                  </svg>
-                )}
-                {isLoggingOut ? 'Logging out…' : 'Logout'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </nav>
   );
 };
