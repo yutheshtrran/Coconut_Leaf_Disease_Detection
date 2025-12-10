@@ -1,10 +1,15 @@
 import axios from 'axios';
 
+// Use env var when available; fallback to explicit backend URL
+const baseURL = (import.meta && import.meta.env && import.meta.env.VITE_API_URL) || 'http://localhost:5000/api';
+
 const API = axios.create({
-  baseURL: 'http://localhost:5000/api',
+  baseURL: baseURL,
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
+    'Cache-Control': 'no-cache',
+    Pragma: 'no-cache',
   },
 });
 // Response interceptor: on 401 try to refresh once then retry the request

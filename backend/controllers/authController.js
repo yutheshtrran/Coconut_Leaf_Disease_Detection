@@ -26,8 +26,16 @@ function generateCode(length = 6) {
 // Step 1: Start registration - create a pending user and email a 6-digit code
 exports.startRegister = async (req, res) => {
   try {
-    const { username, email, password } = req.body;
-    if (!username || !email || !password) return res.status(400).json({ message: 'Missing fields' });
+    const { username, email, password, role } = req.body;
+    if (!username || !email || !password) return res.status(400).json({ message: 'Missing fields: username, email, and password are required.' });
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) return res.status(400).json({ message: 'Invalid email format' });
+    const strong = password.length >= 8 && /[A-Z]/.test(password) && /[a-z]/.test(password) && /\d/.test(password);
+    if (!strong) return res.status(400).json({ message: 'Weak password: use 8+ chars incl. upper, lower, and a number.' });
+
+    // validate role (registration cannot select admin)
+    const allowedRoles = ['farmer', 'agronomist', 'general'];
+    const selectedRole = allowedRoles.includes(role) ? role : 'general';
 
     // ensure no existing user with same email or username
     const existing = await User.findOne({ $or: [{ email }, { username }] });
@@ -43,7 +51,7 @@ exports.startRegister = async (req, res) => {
     const passwordHash = await bcrypt.hash(password, 10);
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
 
-    const pending = await PendingUser.create({ username, email, passwordHash, code, expiresAt });
+    const pending = await PendingUser.create({ username, email, passwordHash, role: selectedRole, code, expiresAt });
 
     // send code via email
     try {
@@ -57,7 +65,7 @@ exports.startRegister = async (req, res) => {
     return res.json({ message: 'Verification code sent to email' });
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ message: 'Server error' });
+    return res.status(500).json({ message: 'Server error during registration' });
   }
 };
 
@@ -75,7 +83,7 @@ exports.confirmRegister = async (req, res) => {
     }
 
     // create User using stored hash (User pre-save skips rehash when starts with $2)
-    const user = new User({ username: pending.username, email: pending.email, password: pending.passwordHash, emailVerified: true });
+    const user = new User({ username: pending.username, email: pending.email, password: pending.passwordHash, role: pending.role || 'general', emailVerified: true });
     // create tokens
     const accessToken = signAccessToken(user._id);
     const refreshToken = signRefreshToken(user._id);
@@ -149,12 +157,12 @@ exports.login = async (req, res) => {
     if (!emailOrUsername || !password) return res.status(400).json({ message: 'Missing fields' });
 
     const user = await User.findOne({ $or: [{ email: emailOrUsername }, { username: emailOrUsername }] });
-    if (!user) return res.status(401).json({ message: 'Invalid credentials' });
+    if (!user) return res.status(404).json({ message: 'This email/username is not registered' });
 
     if (!user.emailVerified) return res.status(403).json({ message: 'Email not verified' });
 
     const isMatch = await user.comparePassword(password);
-    if (!isMatch) return res.status(401).json({ message: 'Invalid credentials' });
+    if (!isMatch) return res.status(401).json({ message: 'Wrong password' });
 
     const accessToken = signAccessToken(user._id);
     const refreshToken = signRefreshToken(user._id);

@@ -16,7 +16,7 @@ async function run() {
     let user = await User.findOne({ $or: [{ email }, { username }] });
     if (user) {
       user.role = 'admin';
-      user.password = password; // will be hashed on save
+      if (password) user.password = password; // will be hashed on save
       await user.save();
       console.log('Updated existing user to admin:', user.username, user.email);
     } else {
