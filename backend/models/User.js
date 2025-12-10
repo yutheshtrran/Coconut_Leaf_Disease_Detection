@@ -18,8 +18,30 @@ const userSchema = new mongoose.Schema({
     },
     role: {
         type: String,
-        enum: ['user', 'admin'],
-        default: 'user',
+        enum: ['admin', 'farmer', 'agronomist', 'general'],
+        default: 'general',
+    },
+    status: {
+        type: String,
+        enum: ['active', 'inactive'],
+        default: 'active',
+    },
+    phoneNumber: {
+        type: String,
+        default: '',
+    },
+    bio: {
+        type: String,
+        default: '',
+        maxlength: 2000,
+    },
+    profileImageUrl: {
+        type: String,
+        default: '',
+    },
+    profileImagePublicId: {
+        type: String,
+        default: '',
     },
     refreshTokens: {
         type: [String],
@@ -58,10 +80,15 @@ const userSchema = new mongoose.Schema({
     verifyCodeExpires: {
         type: Date,
     },
+    twoFactorEnabled: {
+        type: Boolean,
+        default: false,
+    },
 });
 
 // Hash password before saving
 userSchema.pre('save', async function (next) {
+    this.updatedAt = new Date();
     if (!this.isModified('password')) return next();
     // If password already looks like a bcrypt hash, skip re-hashing
     if (typeof this.password === 'string' && this.password.startsWith('$2')) return next();
@@ -72,6 +99,12 @@ userSchema.pre('save', async function (next) {
     } catch (err) {
         return next(err);
     }
+});
+
+// Ensure updatedAt is set on findOneAndUpdate operations
+userSchema.pre('findOneAndUpdate', function (next) {
+    this.set({ updatedAt: new Date() });
+    next();
 });
 
 // Compare candidate password with stored hash

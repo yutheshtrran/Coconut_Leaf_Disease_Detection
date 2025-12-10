@@ -3,6 +3,7 @@ import PasswordField from '../components/PasswordField';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import AuthLayout from '../components/AuthLayout';
+import Toast from '../components/Toast';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -12,6 +13,9 @@ const Login = () => {
   
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [toastType, setToastType] = useState('info');
 
   const displayMessage = (msg) => {
     setMessage(msg);
@@ -28,8 +32,17 @@ const Login = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (password.length < 6) {
-      displayMessage('Password must be at least 6 characters long!');
+    // Reset field errors
+    setEmailError('');
+    setPasswordError('');
+    // Basic validations
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setEmailError('Please enter a valid email address.');
+      return;
+    }
+    if (password.length < 8 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\d/.test(password)) {
+      setPasswordError('Use a strong password (8+ chars, upper, lower, number).');
       return;
     }
     setLoading(true);
@@ -38,9 +51,23 @@ const Login = () => {
       displayMessage('Login successful — redirecting...');
       navigate('/');
     } catch (err) {
-      const msg = err.response?.data?.message || 'Login failed';
-      displayMessage(msg);
+      const status = err?.response?.status;
+      const msg = err?.response?.data?.message;
+      if (status === 404) {
+        setEmailError('This email/username is not registered.');
+      } else if (status === 401 && msg === 'Wrong password') {
+        setPasswordError('Wrong password.');
+      const [toastType, setToastType] = useState('info'); // Default toast type
+        setEmailError('Email not verified. Please check your inbox.');
+      } else {
+        displayMessage(msg || 'Login failed');
+      }
       // If not verified, user must complete verification flow (register -> verify)
+      const displayMessage = (msg, type = 'info') => {
+        setToastType(type);
+        setMessage(msg);
+        setTimeout(() => setMessage(''), 3000);
+      };
     } finally {
       setLoading(false);
     }
@@ -50,11 +77,8 @@ const Login = () => {
 
   const rightContent = (
     <>
-      {message && <div className="fixed top-4 z-50 p-4 bg-yellow-400 text-gray-900 rounded-lg shadow-xl">{message}</div>}
+      <Toast type={toastType} message={message} onClose={() => setMessage('')} />
       <div className="w-full max-w-md">
-        {message && (
-          <div className="mb-4 p-3 bg-yellow-100 text-yellow-800 rounded">{message}</div>
-        )}
         <p className="text-gray-500 mb-8">Sign in to your CocoGuard account to manage your farms</p>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -65,18 +89,18 @@ const Login = () => {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-[#387637] focus:border-[#387637] transition duration-150"
+              className={`w-full px-4 py-3 border ${emailError ? 'border-red-500' : 'border-gray-300'} rounded-lg shadow-sm focus:ring-[#387637] focus:border-[#387637] transition duration-150`}
               placeholder="admin@cocoguard.com"
               required
             />
+            {emailError && <p className="mt-1 text-sm text-red-600">{emailError}</p>}
           </div>
-
           <div>
             <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-            <div>
-              <PasswordField value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-[#387637] focus:border-[#387637] transition duration-150" placeholder="Enter your password" required />
+              <PasswordField value={password} onChange={(e) => setPassword(e.target.value)} className={`w-full px-4 py-3 border ${passwordError ? 'border-red-500' : 'border-gray-300'} rounded-lg shadow-sm focus:ring-[#387637] focus:border-[#387637] transition duration-150`} placeholder="Enter your password" required />
+              {passwordError && <p className="mt-1 text-sm text-red-600">{passwordError}</p>}
             </div>
-          </div>
+          
 
           <div className="flex justify-between items-center text-sm">
             <div className="flex items-center">

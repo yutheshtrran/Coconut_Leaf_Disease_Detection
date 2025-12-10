@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import PasswordField from '../components/PasswordField';
 import AuthLayout from '../components/AuthLayout';
 import CodeInput from '../components/CodeInput';
+import Toast from '../components/Toast';
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
@@ -37,6 +38,7 @@ export default function ForgotPassword() {
 
   const content = (
     <>
+      <Toast type={step === 'done' ? 'success' : (status && status.toLowerCase().includes('error') ? 'error' : 'info')} message={status} onClose={() => setStatus(null)} />
       {step === 'start' && (
         <form onSubmit={submit}>
           <label className="block mb-2">Email</label>
@@ -56,7 +58,6 @@ export default function ForgotPassword() {
       )}
 
       {step === 'done' && <p className="mt-3">{status || 'Password reset. You can now log in.'}</p>}
-      {status && step !== 'done' && <p className="mt-3">{status}</p>}
     </>
   );
 

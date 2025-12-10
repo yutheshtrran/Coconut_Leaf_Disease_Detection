@@ -3,19 +3,24 @@ import PasswordField from '../components/PasswordField';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import AuthLayout from '../components/AuthLayout';
+import Toast from '../components/Toast';
 
 const Register = () => {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [role, setRole] = useState('general');
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [toastType, setToastType] = useState('info');
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
   const [registered, setRegistered] = useState(false);
   const [registeredEmail, setRegisteredEmail] = useState(null);
 
-  const { user, register, confirmRegistration } = useAuth();
+  const { user, register, confirmRegistration, verificationStatus } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -26,24 +31,54 @@ const Register = () => {
     setMessage(msg);
     setTimeout(() => setMessage(''), 3000);
   };
+  const displayToast = (msg, type = 'info') => {
+    setToastType(type);
+    setMessage(msg);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (password.length < 6) {
-      displayMessage('Password must be at least 6 characters long!');
+    setEmailError('');
+    setPasswordError('');
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setEmailError('Please enter a valid email address.');
+      return;
+    }
+    // Strong password guidance
+    if (password.length < 8 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\d/.test(password)) {
+      setPasswordError('Use a strong password (8+ chars, upper, lower, number).');
       return;
     }
     if (password !== confirmPassword) {
-      displayMessage('Passwords do not match');
+      setPasswordError('Passwords do not match');
       return;
     }
     setLoading(true);
     try {
-      await register({ username, email, password });
-      // Navigate to verification page to enter 6-character code
+      // Check if there's already a pending registration or existing user
+      const status = await verificationStatus(email);
+      if (status?.pending) {
+        displayMessage('Pending registration found. Please verify your email.', 'info');
+        navigate(`/verify-email?email=${encodeURIComponent(email)}`);
+        return;
+      }
+      if (status?.userExists && status?.emailVerified) {
+        setEmailError('This email is already verified. Please sign in.');
+        return;
+      }
+
+      await register({ username, email, password, role });
+      displayToast('Verification code sent to your email', 'success');
       navigate(`/verify-email?email=${encodeURIComponent(email)}`);
     } catch (err) {
-      displayMessage(err.response?.data?.message || 'Registration failed');
+      const msg = err.response?.data?.message || 'Registration failed';
+      if (msg && msg.toLowerCase().includes('exists')) {
+        setEmailError('This email or username is already registered.');
+      } else {
+        displayMessage(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -53,15 +88,25 @@ const Register = () => {
 
   const rightContent = (
     <>
-      {message && (
-        <div className="fixed top-4 z-50 p-4 bg-yellow-400 text-gray-900 rounded-lg shadow-xl">
-          {message}
-        </div>
-      )}
+      {/* Single Toast for notifications */}
+      <Toast type={toastType} message={message} onClose={() => setMessage('')} />
       <div className="w-full max-w-md">
         <p className="text-gray-500 mb-8">Register to start protecting your coconut farms.</p>
 
         <form onSubmit={handleSubmit} className="space-y-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">User Type</label>
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-[#387637] focus:border-[#387637] transition duration-150"
+            >
+              <option value="farmer">Farmer</option>
+              <option value="agronomist">Agronomist</option>
+              <option value="general">General User</option>
+            </select>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
             <input
@@ -80,10 +125,11 @@ const Register = () => {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-[#387637] focus:border-[#387637] transition duration-150"
+              className={`w-full px-4 py-3 border ${emailError ? 'border-red-500' : 'border-gray-300'} rounded-lg shadow-sm focus:ring-[#387637] focus:border-[#387637] transition duration-150`}
               placeholder="you@example.com"
               required
             />
+            {emailError && <p className="mt-1 text-sm text-red-600">{emailError}</p>}
           </div>
 
           <div>
@@ -91,7 +137,7 @@ const Register = () => {
             <PasswordField
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-[#387637] focus:border-[#387637] transition duration-150"
+              className={`w-full px-4 py-3 border ${passwordError ? 'border-red-500' : 'border-gray-300'} rounded-lg shadow-sm focus:ring-[#387637] focus:border-[#387637] transition duration-150`}
               placeholder="Create a password"
               required
             />
@@ -102,10 +148,11 @@ const Register = () => {
             <PasswordField
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-[#387637] focus:border-[#387637] transition duration-150"
+              className={`w-full px-4 py-3 border ${passwordError ? 'border-red-500' : 'border-gray-300'} rounded-lg shadow-sm focus:ring-[#387637] focus:border-[#387637] transition duration-150`}
               placeholder="Confirm your password"
               required
             />
+            {passwordError && <p className="mt-1 text-sm text-red-600">{passwordError}</p>}
           </div>
 
           <button

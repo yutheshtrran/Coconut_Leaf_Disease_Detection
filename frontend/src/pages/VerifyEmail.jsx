@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import AuthLayout from '../components/AuthLayout';
 import CodeInput from '../components/CodeInput';
+import Toast from '../components/Toast';
 
 export default function VerifyEmail() {
   const [searchParams] = useSearchParams();
@@ -76,7 +77,7 @@ export default function VerifyEmail() {
 
   const content = (
     <>
-      <p className="mb-4 text-gray-600">{status}</p>
+      <Toast type={status && status.toLowerCase().includes('verified') ? 'success' : (status && status.toLowerCase().includes('fail') ? 'error' : 'info')} message={status} onClose={() => setStatus('')} />
       {email && (
         <>
           <CodeInput length={6} value={code} onChange={setCode} />
