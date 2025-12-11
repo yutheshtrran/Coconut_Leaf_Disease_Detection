@@ -351,3 +351,18 @@ exports.adminPromoteByEmail = async (req, res) => {
         return res.status(500).json({ message: 'Error promoting user', error });
     }
 };
+
+// Admin: delete a user by ID
+exports.adminDeleteUser = async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!id) return res.status(400).json({ message: 'User ID required' });
+        const user = await User.findById(id);
+        if (!user) return res.status(404).json({ message: 'User not found' });
+        await User.deleteOne({ _id: id });
+        return res.json({ message: 'User deleted successfully' });
+    } catch (error) {
+        console.error('Admin delete user error:', error);
+        return res.status(500).json({ message: 'Error deleting user', error });
+    }
+};

@@ -21,5 +21,6 @@ router.delete('/account', auth, userController.deleteUserAccount);
 router.get('/', auth, requireRole('admin'), userController.listUsers);
 router.put('/:id', auth, requireRole('admin'), userController.adminUpdateUser);
 router.put('/promote', auth, requireRole('admin'), userController.adminPromoteByEmail);
+router.delete('/:id/admin', auth, requireRole('admin'), userController.adminDeleteUser);
 
 module.exports = router;
