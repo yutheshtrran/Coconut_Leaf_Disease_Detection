@@ -4,10 +4,7 @@ const dbURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/coconut_leaf
 
 const connectDB = async () => {
     try {
-        await mongoose.connect(dbURI, {
-            useNewUrlParser: true,
-            useUnifiedTopology: true,
-        });
+        await mongoose.connect(dbURI);
         console.log('MongoDB connected successfully');
     } catch (error) {
         console.error('MongoDB connection failed:', error.message);

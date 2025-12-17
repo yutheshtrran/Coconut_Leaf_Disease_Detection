@@ -1,23 +1,8 @@
-<<<<<<< HEAD
-import React, { useState } from 'react';
-
-// Mock data
-const initialUsers = [
-  { id: 'USR-001', name: 'Admin', phone: '+94 77 711 1111', email: 'admin@cocoguard.com', role: 'Admin', status: 'Active', lastLogin: '2023-10-26' },
-  { id: 'USR-002', name: 'John Farmer', phone: '+94 77 722 2222', email: 'john@example.com', role: 'Farmer', status: 'Active', lastLogin: '2023-10-25' },
-  { id: 'USR-003', name: 'Sarah Admin', phone: '+94 77 733 3333', email: 'sarah@example.com', role: 'Admin', status: 'Active', lastLogin: '2023-10-26' },
-  { id: 'USR-004', name: 'Mike Farmer', phone: '+94 77 744 4444', email: 'mike@example.com', role: 'Farmer', status: 'Active', lastLogin: '2023-10-24' },
-  { id: 'USR-005', name: 'Emily Agronomist', phone: '+94 77 755 5555', email: 'emily@example.com', role: 'Agronomist', status: 'Inactive', lastLogin: '2023-10-15' },
-  { id: 'USR-006', name: 'David Farmer', phone: '+94 77 766 6666', email: 'david@example.com', role: 'Farmer', status: 'Active', lastLogin: '2023-10-23' },
-  { id: 'USR-007', name: 'Lisa Admin', phone: '+94 77 777 7777', email: 'lisa@example.com', role: 'Admin', status: 'Active', lastLogin: '2023-10-26' },
-];
-=======
 import React, { useEffect, useMemo, useState } from 'react';
 import API from '../services/api';
 import { Trash2, MoreHorizontal } from 'lucide-react';
 
 const ITEMS_PER_PAGE = 5;
->>>>>>> origin/dev-m3
 
 // Role badge helper
 const getRoleStyle = (role) => {
@@ -56,11 +41,7 @@ function DeleteConfirmModal({ user, onConfirm, onCancel, isLoading }) {
 }
 
 // Table component
-<<<<<<< HEAD
-const UserTable = ({ users }) => (
-=======
 const UserTable = ({ users, onChangeRole, onDeactivate, onActivate, onDelete }) => (
->>>>>>> origin/dev-m3
   <div className="overflow-x-auto">
     <table className="min-w-full table-auto border-separate border-spacing-y-2">
       <thead className="text-gray-500 text-sm uppercase bg-white border-b-2 border-gray-100">
@@ -71,45 +52,10 @@ const UserTable = ({ users, onChangeRole, onDeactivate, onActivate, onDelete }) 
           <th className="py-3 px-6 text-left">Email</th>
           <th className="py-3 px-6 text-left">Role</th>
           <th className="py-3 px-6 text-left">Status</th>
-          <th className="py-3 px-6 text-left">Last Login</th>
           <th className="py-3 px-6 text-center">Actions</th>
         </tr>
       </thead>
       <tbody className="bg-white">
-<<<<<<< HEAD
-        {users.map(user => (
-          <tr key={user.id} className="shadow-sm hover:shadow-lg transition-shadow duration-200 border-b border-gray-100">
-            <td className="py-3 px-6 whitespace-nowrap text-sm font-medium text-gray-900 rounded-l-xl">{user.id}</td>
-            <td className="py-3 px-6 whitespace-nowrap text-sm text-gray-700">{user.name}</td>
-            <td className="py-3 px-6 whitespace-nowrap text-sm text-gray-700">{user.phone}</td>
-            <td className="py-3 px-6 whitespace-nowrap text-sm text-gray-700">{user.email}</td>
-            <td className="py-3 px-6 whitespace-nowrap">
-              <span className={`inline-flex items-center px-4 py-1 text-xs font-semibold rounded-full ${getRoleStyle(user.role)}`}>
-                {user.role}
-              </span>
-            </td>
-            <td className="py-3 px-6 whitespace-nowrap">
-              <span className={`inline-flex items-center px-4 py-1 text-xs font-semibold rounded-full ${getStatusStyle(user.status)}`}>
-                {user.status}
-              </span>
-            </td>
-            <td className="py-3 px-6 whitespace-nowrap text-sm text-gray-700">{user.lastLogin}</td>
-            <td className="py-3 px-6 whitespace-nowrap text-sm rounded-r-xl">
-              <div className="flex items-center justify-center space-x-2">
-                <button className="text-gray-600 hover:text-indigo-600 transition duration-150 p-2 text-sm font-medium rounded-lg border border-gray-300">Edit</button>
-                <button className="text-red-500 hover:text-white hover:bg-red-500 transition duration-150 p-2 text-sm font-medium rounded-lg border border-red-500">Deactivate</button>
-                <button className="text-gray-400 hover:text-gray-700 transition duration-150 p-2">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="1" />
-                    <circle cx="19" cy="12" r="1" />
-                    <circle cx="5" cy="12" r="1" />
-                  </svg>
-                </button>
-              </div>
-            </td>
-          </tr>
-        ))}
-=======
         {users.length === 0 ? (
           <tr><td colSpan="7" className="py-4 px-6 text-center text-gray-500">No users found</td></tr>
         ) : (
@@ -149,25 +95,21 @@ const UserTable = ({ users, onChangeRole, onDeactivate, onActivate, onDelete }) 
             </tr>
           ))
         )}
->>>>>>> origin/dev-m3
       </tbody>
     </table>
   </div>
 );
 
 // Filters component
-const Filters = () => {
-  const allRoles = ['All Roles', 'Admin', 'Farmer', 'Agronomist'];
-  const [selectedRole, setSelectedRole] = useState(allRoles[0]);
-  const [searchQuery, setSearchQuery] = useState('');
-
+const Filters = ({ selectedRole, setSelectedRole, searchQuery, setSearchQuery }) => {
+  const allRoles = ['All Roles', 'Admin', 'Farmer', 'Agronomist', 'General User'];
   return (
     <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4 mb-6">
       <div className="relative flex-grow sm:flex-grow-0">
         <select
           value={selectedRole}
           onChange={(e) => setSelectedRole(e.target.value)}
-          className="w-full sm:w-48 py-2.5 pl-4 pr-10 border border-gray-300 bg-white rounded-xl text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500 appearance-none"
+          className="w-full sm:w-56 py-2.5 pl-4 pr-10 border border-gray-300 bg-white rounded-xl text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500 appearance-none"
         >
           {allRoles.map(role => <option key={role} value={role}>{role}</option>)}
         </select>
@@ -220,9 +162,6 @@ const Pagination = ({ currentPage, setCurrentPage, totalPages }) => {
 
 // Main component
 const UserManagement = () => {
-<<<<<<< HEAD
-  const users = initialUsers;
-=======
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedRole, setSelectedRole] = useState('All Roles');
@@ -326,7 +265,6 @@ const UserManagement = () => {
       return roleOk && searchOk;
     });
   }, [users, selectedRole, searchQuery]);
->>>>>>> origin/dev-m3
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
   const paginatedUsers = filtered.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
@@ -338,26 +276,6 @@ const UserManagement = () => {
           {/* Header */}
           <div className="flex justify-between items-center mb-6 border-b pb-4">
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">User Access and Roles</h1>
-<<<<<<< HEAD
-            <button className="flex items-center px-4 py-2 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition duration-150 shadow-md">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-              Add New User
-            </button>
-          </div>
-
-          {/* Filters */}
-          <Filters />
-
-          {/* User Table */}
-          <UserTable users={users} />
-
-          {/* Pagination */}
-          <Pagination />
-
-=======
             <div className="flex items-center gap-2">
               <input value={promoteEmail} onChange={(e) => setPromoteEmail(e.target.value)} placeholder="Promote by email" className="px-3 py-2 border rounded-lg" />
               <button onClick={async () => {
@@ -390,7 +308,6 @@ const UserManagement = () => {
               )}
             </>
           )}
->>>>>>> origin/dev-m3
         </div>
       </div>
 
