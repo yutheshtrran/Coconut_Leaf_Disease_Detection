@@ -9,10 +9,8 @@ import sys
 ML_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # Points to ml/
 sys.path.append(ML_DIR)
 
-# Now use absolute import (no ..)
 from reports.report_generator import generate_dummy_report
 
-# Existing imports
 from inference import predict, load_config, load_class_names
 
 app = Flask(__name__)
