@@ -8,6 +8,4 @@ device: cuda
 class_names:
   - healthy
   - leaf_blight
-  - leaf_yellowing
-  - rust
-  - powdery_mildew
+  

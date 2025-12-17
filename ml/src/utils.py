@@ -1,6 +1,7 @@
-# ml/src/utils.py
+# ML/src/utils.py
 import torch
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+import os
 
 def calculate_metrics(y_true, y_pred):
     y_true = y_true.cpu().numpy()
@@ -13,5 +14,8 @@ def calculate_metrics(y_true, y_pred):
 
     return acc, prec, rec, f1
 
-def save_model(model, path="ml/weights/best_model.pth"):
+def save_model(model, filename="best_model.pth"):
+    weights_dir = os.path.join(os.path.dirname(__file__), "..", "weights")
+    os.makedirs(weights_dir, exist_ok=True)
+    path = os.path.join(weights_dir, filename)
     torch.save(model.state_dict(), path)
