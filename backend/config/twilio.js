@@ -1,18 +1,25 @@
 const twilio = require('twilio');
 
-const accountSid = process.env.TWILIO_ACCOUNT_SID; // Your Account SID from www.twilio.com/console
-const authToken = process.env.TWILIO_AUTH_TOKEN;   // Your Auth Token from www.twilio.com/console
+const accountSid = process.env.TWILIO_ACCOUNT_SID;
+const authToken = process.env.TWILIO_AUTH_TOKEN;
 
-const client = twilio(accountSid, authToken);
+let client = null;
+const isConfigured = typeof accountSid === 'string' && accountSid.startsWith('AC') && typeof authToken === 'string' && authToken.length > 0;
+if (isConfigured) {
+    try {
+        client = twilio(accountSid, authToken);
+    } catch (err) {
+        console.warn('Twilio initialization failed:', err?.message);
+    }
+} else {
+    console.warn('Twilio not configured: set TWILIO_ACCOUNT_SID (starts with AC) and TWILIO_AUTH_TOKEN');
+}
 
 const sendSms = (to, from, body) => {
-    return client.messages.create({
-        to: to,
-        from: from,
-        body: body
-    });
+    if (!client) {
+        return Promise.reject(new Error('Twilio client not configured'));
+    }
+    return client.messages.create({ to, from, body });
 };
 
-module.exports = {
-    sendSms
-};
+module.exports = { sendSms };

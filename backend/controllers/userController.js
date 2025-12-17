@@ -1,6 +1,7 @@
 // User controller for handling user-related operations
 
 const User = require('../models/User');
+const bcrypt = require('bcryptjs');
 
 // Register a new user
 exports.registerUser = async (req, res) => {
@@ -45,16 +46,125 @@ exports.getUserProfile = async (req, res) => {
 
 // Update user profile
 exports.updateUserProfile = async (req, res) => {
-    const { username, email } = req.body;
+    // Allow updating username (display name), phoneNumber, bio; do NOT allow email here
+    const { username, phoneNumber, bio, currentPassword } = req.body;
+    // Debug log for troubleshooting profile updates
+    console.log('Profile update request', { userId: req.user?.id, username, phoneNumber, bioLength: (bio || '').length });
 
     try {
-        const user = await User.findByIdAndUpdate(req.user.id, { username, email }, { new: true });
+        if (!currentPassword || typeof currentPassword !== 'string') {
+            return res.status(401).json({ message: 'Current password required to save changes.' });
+        }
+
+        const userDoc = await User.findById(req.user.id).select('+password');
+        if (!userDoc) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        const passOk = await bcrypt.compare(currentPassword, userDoc.password);
+        if (!passOk) {
+            return res.status(401).json({ message: 'Incorrect current password.' });
+        }
+
+        const updates = {};
+        if (typeof username === 'string') {
+            const trimmed = username.trim();
+            if (trimmed.length === 0) {
+                return res.status(400).json({ message: 'Name is required and cannot be empty.' });
+            }
+            updates.username = trimmed;
+        }
+        if (typeof bio === 'string') {
+            updates.bio = bio.slice(0, 2000);
+        }
+
+        if (typeof phoneNumber === 'string') {
+            const sanitized = phoneNumber.replace(/[\s\-()]/g, '');
+            if (sanitized.length > 0) {
+                const e164 = /^\+?[1-9]\d{1,14}$/;
+                if (!e164.test(sanitized)) {
+                    return res.status(400).json({
+                        message: 'Invalid phone number format. Use E.164 (e.g., +94771234567).',
+                    });
+                }
+                updates.phoneNumber = sanitized;
+            } else {
+                updates.phoneNumber = '';
+            }
+        }
+
+        Object.assign(userDoc, updates);
+        await userDoc.save();
+        const userSafe = userDoc.toObject();
+        delete userSafe.password;
+        delete userSafe.refreshTokens;
+        delete userSafe.resetPasswordToken;
+        delete userSafe.resetPasswordExpires;
+        res.status(200).json({ message: 'User profile updated', user: userSafe });
+    } catch (error) {
+        console.error('Error updating user profile:', error);
+        // Map common Mongoose validation errors to 400 for better UX
+        if (error && (error.name === 'ValidationError' || error.name === 'MongoServerError')) {
+            return res.status(400).json({ message: error.message });
+        }
+        res.status(500).json({ message: 'Error updating user profile', error });
+    }
+};
+
+// Upload/update profile photo
+exports.uploadProfilePhoto = async (req, res) => {
+    try {
+        const { currentPassword } = req.body || {};
+        if (!currentPassword || typeof currentPassword !== 'string') {
+            return res.status(401).json({ message: 'Current password required to save changes.' });
+        }
+
+        const userForPass = await User.findById(req.user.id).select('+password');
+        if (!userForPass) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        const ok = await bcrypt.compare(currentPassword, userForPass.password);
+        if (!ok) {
+            return res.status(401).json({ message: 'Incorrect current password.' });
+        }
+
+        if (!req.file) {
+            return res.status(400).json({ message: 'No file uploaded' });
+        }
+
+        // Ensure Cloudinary is configured
+        const cloudinary = require('../services/cloudinary');
+        if (!cloudinary.config().cloud_name) {
+            return res.status(500).json({ message: 'Image service not configured' });
+        }
+
+        // If user already has an image, try to delete the previous one
+        const existing = await User.findById(req.user.id).select('profileImagePublicId');
+        if (!existing) return res.status(404).json({ message: 'User not found' });
+        if (existing.profileImagePublicId) {
+            try { await cloudinary.uploader.destroy(existing.profileImagePublicId); } catch (_) {}
+        }
+
+        // Upload buffer as base64 data URI to Cloudinary
+        const base64 = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+        const result = await cloudinary.uploader.upload(base64, {
+            folder: 'coco-guard/profiles',
+            overwrite: true,
+            invalidate: true,
+        });
+
+        const user = await User.findByIdAndUpdate(
+            req.user.id,
+            { profileImageUrl: result.secure_url, profileImagePublicId: result.public_id },
+            { new: true }
+        ).select('-password -refreshTokens -resetPasswordToken -resetPasswordExpires');
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
         }
+        // Keep messaging unified with profile flow
         res.status(200).json({ message: 'User profile updated', user });
     } catch (error) {
-        res.status(500).json({ message: 'Error updating user profile', error });
+        console.error('Cloudinary upload error:', error);
+        res.status(500).json({ message: 'Error uploading profile photo', error });
     }
 };
 
@@ -66,8 +176,6 @@ exports.deleteUserAccount = async (req, res) => {
     } catch (error) {
         res.status(500).json({ message: 'Error deleting user account', error });
     }
-<<<<<<< HEAD
-=======
 };
 
 // Admin: list all users
@@ -257,5 +365,4 @@ exports.adminDeleteUser = async (req, res) => {
         console.error('Admin delete user error:', error);
         return res.status(500).json({ message: 'Error deleting user', error });
     }
->>>>>>> origin/dev-m3
 };

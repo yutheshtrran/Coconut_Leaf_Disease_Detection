@@ -8,6 +8,10 @@ import Reports from "./pages/Reports.jsx";
 import Alerts from "./pages/Alerts.jsx";
 import Login from "./pages/Login.jsx";
 import Register from "./pages/Register.jsx";
+import VerifyEmail from "./pages/VerifyEmail.jsx";
+import ResetPassword from "./pages/ResetPassword.jsx";
+import ForgotPassword from "./pages/ForgotPassword.jsx";
+import ResendVerification from "./pages/ResendVerification.jsx";
 import UserManagement from "./pages/UserManagement.jsx";
 import AboutUs from "./pages/AboutUs.jsx";
 import MyFarms from "./pages/MyFarms.jsx";
@@ -16,43 +20,103 @@ import Admin from "./pages/Admin.jsx";
 // Components
 import Navbar from "./components/Navbar.jsx";
 import Sidebar from "./components/Sidebar.jsx";
+import ProtectedRoute from './components/ProtectedRoute.jsx';
 
 function AppWrapper() {
   const location = useLocation();
 
-  // Pages where Navbar and Sidebar should appear blurred behind login/register
-  const blurLayoutPages = ["/login", "/register"];
+  // Pages where Navbar and Sidebar should be hidden (auth and public entry pages)
+  const blurLayoutPages = ["/", "/login", "/register", "/verify-email", "/forgot-password", "/reset-password", "/resend-verification"];
 
   const showBlurLayout = blurLayoutPages.includes(location.pathname.toLowerCase());
   const showLayout = !showBlurLayout;
 
   return (
     <div className="relative flex min-h-screen bg-gray-100">
-      {/* Sidebar */}
-      <div
-        className={`flex-shrink-0 ${showBlurLayout ? "pointer-events-none filter blur-sm opacity-60" : ""}`}
-      >
-        <Sidebar />
-      </div>
+      {/* Sidebar - only show when not on auth pages */}
+      {showLayout && (
+        <div className="flex-shrink-0">
+          <Sidebar />
+        </div>
+      )}
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
-        <div className={`${showBlurLayout ? "pointer-events-none filter blur-sm opacity-60" : ""}`}>
-          <Navbar />
-        </div>
+        {showLayout && (
+          <div>
+            <Navbar />
+          </div>
+        )}
 
-        <main className={`flex-1 p-4 ${showLayout ? "mt-0" : ""}`}>
+        <main className={`flex-1 p-0 ${showLayout ? 'p-4' : ''}`}>
           <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/upload" element={<Upload />} />
-            <Route path="/reports" element={<Reports />} />
-            <Route path="/alerts" element={<Alerts />} />
+            {/* Public routes */}
+            <Route path="/" element={<Login />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
-            <Route path="/users" element={<UserManagement />} />
-            <Route path="/myfarms" element={<MyFarms />} />
+            <Route path="/verify-email" element={<VerifyEmail />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/resend-verification" element={<ResendVerification />} />
             <Route path="/about" element={<AboutUs />} />
-            <Route path="/admin" element={<Admin />} />
+
+            {/* Protected routes - require login */}
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/upload"
+              element={
+                <ProtectedRoute>
+                  <Upload />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/reports"
+              element={
+                <ProtectedRoute>
+                  <Reports />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/alerts"
+              element={
+                <ProtectedRoute>
+                  <Alerts />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/users"
+              element={
+                <ProtectedRoute>
+                  <UserManagement />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/myfarms"
+              element={
+                <ProtectedRoute>
+                  <MyFarms />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute>
+                  <Admin />
+                </ProtectedRoute>
+              }
+            />
           </Routes>
         </main>
       </div>
