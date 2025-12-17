@@ -1,10 +1,18 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file  # Added send_file here
 from flask_cors import CORS
 import os
 import traceback
 import json
+import sys
 
-# Correct import
+# Fix for importing from sibling directory (ml/reports/)
+ML_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # Points to ml/
+sys.path.append(ML_DIR)
+
+# Now use absolute import (no ..)
+from reports.report_generator import generate_dummy_report
+
+# Existing imports
 from inference import predict, load_config, load_class_names
 
 app = Flask(__name__)
@@ -82,6 +90,16 @@ def predict_api():
         print("Exception during /predict:")
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route("/report/view/<report_id>")
+def view_report(report_id):
+    pdf_path = generate_dummy_report(report_id)
+    return send_file(pdf_path, mimetype="application/pdf")
+
+@app.route("/report/download/<report_id>")
+def download_report(report_id):
+    pdf_path = generate_dummy_report(report_id)
+    return send_file(pdf_path, as_attachment=True)
 
 if __name__ == '__main__':
     print(f"Starting server on http://127.0.0.1:5000")
