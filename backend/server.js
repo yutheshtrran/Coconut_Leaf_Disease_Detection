@@ -44,6 +44,8 @@ try {
   app.use('/api/reports', require('./routes/reportRoutes'));
   app.use('/api/alerts', require('./routes/alertRoutes'));
   app.use('/api/auth', require('./routes/authRoutes'));
+  // ML prediction route
+  app.use('/api/ml', require('./routes/mlRoutes'));
 } catch (error) {
   console.error('⚠️ Route loading error:', error.message);
 }
