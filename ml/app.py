@@ -1,52 +1,28 @@
+# ml/src/app.py
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from inference import predict
 import os
-import traceback
-
-# Import your inference pipeline
-from src.inference import infer, load_config, load_class_names
 
 app = Flask(__name__)
 CORS(app)
 
-# Paths
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.abspath(os.path.join(BASE_DIR, '..', 'weights', 'best_model.pth'))
-CONFIG_PATH = os.path.abspath(os.path.join(BASE_DIR, '..', 'config.yaml'))
+UPLOAD_FOLDER = "ml/uploads"
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# Load class names from config
-cfg = load_config(CONFIG_PATH)
-CLASS_NAMES = load_class_names(cfg)
+@app.route("/predict", methods=["POST"])
+def predict_api():
+    if "file" not in request.files:
+        return jsonify({"error": "No file provided"}), 400
 
-if not os.path.exists(MODEL_PATH):
-    print(f"[WARNING] Model not found at {MODEL_PATH}. Predictions will use fallback logic.")
+    file = request.files["file"]
+    file_path = os.path.join(UPLOAD_FOLDER, file.filename)
+    file.save(file_path)
 
-@app.route('/predict', methods=['POST'])
-def predict():
-    try:
-        if 'file' not in request.files:
-            return jsonify({'error': 'No file part in request'}), 400
+    result = predict(file_path)
+    os.remove(file_path)  # cleanup
 
-        file = request.files['file']
-        if file.filename == '':
-            return jsonify({'error': 'No selected file'}), 400
+    return jsonify(result)
 
-        content = file.read()
-        out = infer(content, model_path=MODEL_PATH, config_path=CONFIG_PATH)
-
-        return jsonify({
-            'disease': out.get('predicted_class', 'Unknown'),
-            'confidence': out.get('confidence', 0.0),
-            'severity': out.get('severity_level', 'Low'),
-            'raw_scores': out.get('raw_scores', []),
-            'all_diseases': CLASS_NAMES  # Return all possible disease names
-        })
-
-    except Exception as e:
-        print("Exception during /predict:")
-        traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
-
-if __name__ == '__main__':
-    print(f"Starting server on http://127.0.0.1:5000")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)
