@@ -1,17 +1,13 @@
+# ml/src/config.yaml
 image_size: 224
 batch_size: 16
 learning_rate: 0.0001
 num_epochs: 15
 model_name: resnet50
+device: cuda
 class_names:
   - healthy
   - leaf_blight
   - leaf_yellowing
   - rust
   - powdery_mildew
-  - leaf_scorch
-  - root_rot
-  - stem_borer
-  - leaf_spot
-  - wilt
-  - black_tip_disease
