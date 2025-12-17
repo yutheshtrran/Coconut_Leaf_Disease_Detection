@@ -1,14 +1,16 @@
-# ml/src/train.py
+# ML/src/train.py
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torchvision import models
 from dataset import get_data_loaders
 from utils import calculate_metrics, save_model
+import os
 from yaml import safe_load
 
-# Load config
-with open("ml/src/config.yaml") as f:
+# Load config dynamically
+config_path = os.path.join(os.path.dirname(__file__), "config.yaml")
+with open(config_path) as f:
     config = safe_load(f)
 
 device = torch.device(config['device'] if torch.cuda.is_available() else 'cpu')
@@ -17,7 +19,7 @@ device = torch.device(config['device'] if torch.cuda.is_available() else 'cpu')
 train_loader, val_loader, classes = get_data_loaders()
 num_classes = len(classes)
 
-# Load pretrained model
+# Load pretrained ResNet50
 model = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
 model.fc = nn.Linear(model.fc.in_features, num_classes)
 model = model.to(device)

@@ -1,13 +1,13 @@
-# ml/src/dataset.py
+# ML/src/dataset.py
 import os
 from torchvision import transforms
 from torchvision.datasets import ImageFolder
 from torch.utils.data import DataLoader
-
 from yaml import safe_load
 
-# Load config
-with open("ml/src/config.yaml") as f:
+# Load config dynamically
+config_path = os.path.join(os.path.dirname(__file__), "config.yaml")
+with open(config_path) as f:
     config = safe_load(f)
 
 def get_data_loaders():
@@ -31,8 +31,10 @@ def get_data_loaders():
                              [0.229, 0.224, 0.225])
     ])
 
-    train_dataset = ImageFolder(root="ml/data/splits/train", transform=train_transform)
-    val_dataset = ImageFolder(root="ml/data/splits/val", transform=val_transform)
+    # Dataset paths
+    base_dir = os.path.join(os.path.dirname(__file__), "..", "data", "splits")
+    train_dataset = ImageFolder(root=os.path.join(base_dir, "train"), transform=train_transform)
+    val_dataset = ImageFolder(root=os.path.join(base_dir, "val"), transform=val_transform)
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
