@@ -6,6 +6,9 @@ import traceback
 # Import your inference pipeline
 from src.inference import infer, load_config, load_class_names
 
+from reports.report_generator import generate_dummy_report
+from flask import send_file
+
 app = Flask(__name__)
 CORS(app)
 
@@ -46,6 +49,16 @@ def predict():
         print("Exception during /predict:")
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
+@app.route("/report/view/<report_id>")
+def view_report(report_id):
+    pdf_path = generate_dummy_report(report_id)
+    return send_file(pdf_path, mimetype="application/pdf")
+
+@app.route("/report/download/<report_id>")
+def download_report(report_id):
+    pdf_path = generate_dummy_report(report_id)
+    return send_file(pdf_path, as_attachment=True)
 
 if __name__ == '__main__':
     print(f"Starting server on http://127.0.0.1:5000")
