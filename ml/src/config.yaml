@@ -1,21 +1,17 @@
-learning_rate: 0.001
-batch_size: 32
-num_epochs: 50
-image_size: [224, 224]
-model_name: "ResNet50"
-optimizer: "Adam"
-loss_function: "CategoricalCrossentropy"
-metrics:
-  - "accuracy"
-data:
-  train_data_path: "data/splits/train/"
-  val_data_path: "data/splits/val/"
-  test_data_path: "data/splits/test/"
-  augmentation:
-    rotation_range: 20
-    width_shift_range: 0.2
-    height_shift_range: 0.2
-    shear_range: 0.2
-    zoom_range: 0.2
-    horizontal_flip: true
-    fill_mode: "nearest"
+image_size: 224
+batch_size: 16
+learning_rate: 0.0001
+num_epochs: 15
+model_name: resnet50
+class_names:
+  - healthy
+  - leaf_blight
+  - leaf_yellowing
+  - rust
+  - powdery_mildew
+  - leaf_scorch
+  - root_rot
+  - stem_borer
+  - leaf_spot
+  - wilt
+  - black_tip_disease

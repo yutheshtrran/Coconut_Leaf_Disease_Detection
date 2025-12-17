@@ -1,36 +1,45 @@
-class CoconutLeafDetectionModel:
-    def __init__(self, input_shape, num_classes):
-        self.input_shape = input_shape
-        self.num_classes = num_classes
-        self.model = self.build_model()
+import os
+from typing import Optional
+import torch
+import torch.nn as nn
+import torchvision.models as models
 
-    def build_model(self):
-        from tensorflow.keras.models import Sequential
-        from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
+def create_backbone(model_name: str = 'resnet50', pretrained: bool = True):
+    name = model_name.lower()
+    if name.startswith('resnet'):
+        m = {'resnet18': models.resnet18, 'resnet34': models.resnet34}.get(name, models.resnet50)(pretrained=pretrained)
+        return m, 'resnet'
+    if name.startswith('efficientnet'):
+        m = models.efficientnet_b0(pretrained=pretrained)
+        return m, 'efficientnet'
+    return models.resnet50(pretrained=pretrained), 'resnet'
 
-        model = Sequential()
-        model.add(Conv2D(32, (3, 3), activation='relu', input_shape=self.input_shape))
-        model.add(MaxPooling2D(pool_size=(2, 2)))
-        model.add(Conv2D(64, (3, 3), activation='relu'))
-        model.add(MaxPooling2D(pool_size=(2, 2)))
-        model.add(Conv2D(128, (3, 3), activation='relu'))
-        model.add(MaxPooling2D(pool_size=(2, 2)))
-        model.add(Flatten())
-        model.add(Dense(128, activation='relu'))
-        model.add(Dropout(0.5))
-        model.add(Dense(self.num_classes, activation='softmax'))
+class MyModel(nn.Module):
+    def __init__(self, num_classes: int, model_name: str = 'resnet50', pretrained: bool = True):
+        super().__init__()
+        backbone, kind = create_backbone(model_name, pretrained=pretrained)
+        self.backbone = backbone
+        self.kind = kind
 
-        model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
-        return model
+        if kind == 'resnet':
+            in_features = self.backbone.fc.in_features
+            self.backbone.fc = nn.Linear(in_features, num_classes)
+        elif kind == 'efficientnet':
+            in_features = self.backbone.classifier[1].in_features
+            self.backbone.classifier[1] = nn.Linear(in_features, num_classes)
 
-    def summary(self):
-        return self.model.summary()
+    def forward(self, x):
+        return self.backbone(x)
 
-    def train(self, train_data, train_labels, validation_data, validation_labels, epochs=10, batch_size=32):
-        return self.model.fit(train_data, train_labels, validation_data=(validation_data, validation_labels), epochs=epochs, batch_size=batch_size)
-
-    def evaluate(self, test_data, test_labels):
-        return self.model.evaluate(test_data, test_labels)
-
-    def predict(self, input_data):
-        return self.model.predict(input_data)
+def load_weights(model: nn.Module, path: str, map_location: Optional[str] = None) -> nn.Module:
+    import os
+    if map_location is None:
+        map_location = 'cpu'
+    if not path or not os.path.exists(path):
+        raise FileNotFoundError(f'Weights file not found: {path}')
+    data = torch.load(path, map_location=map_location)
+    if isinstance(data, dict):
+        model.load_state_dict(data)
+    else:
+        model = data
+    return model
