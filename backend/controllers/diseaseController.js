@@ -6,6 +6,9 @@ const fs = require('fs');
  * Create a new disease entry with optional sample images
  */
 exports.createDisease = async (req, res) => {
+  console.log('req.body:', req.body);        
+  console.log('req.files:', req.files ? req.files.map(f => f.filename) : 'None');
+  
   const { name, description, impact, remedy } = req.body;
 
   // Validate required text fields
@@ -80,6 +83,9 @@ exports.getDiseaseById = async (req, res) => {
  * Update an existing disease (text fields + optional new images appended)
  */
 exports.updateDisease = async (req, res) => {
+  console.log('req.body:', req.body);        
+  console.log('req.files:', req.files ? req.files.map(f => f.filename) : 'None');
+
   const { name, description, impact, remedy } = req.body;
 
   try {

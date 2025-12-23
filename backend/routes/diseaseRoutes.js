@@ -7,9 +7,12 @@ const diseaseController = require('../controllers/diseaseController');
 
 // Ensure uploads/diseases directory exists
 const uploadDir = path.join(__dirname, '..', 'uploads', 'diseases');
+
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
-  console.log('Created directory:', uploadDir);
+  console.log('✅ Created uploads directory:', uploadDir);
+} else {
+  console.log('ℹ️ Uploads directory already exists:', uploadDir);
 }
 
 // Multer configuration

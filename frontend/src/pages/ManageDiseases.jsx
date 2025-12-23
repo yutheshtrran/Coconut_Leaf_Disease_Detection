@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Edit2, Trash2, AlertCircle, Save, X, Eye, Image as ImageIcon } from 'lucide-react';
 import api from '../services/api';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 const ManageDiseases = () => {
   const [diseases, setDiseases] = useState([]);
   const [formData, setFormData] = useState({ name: '', description: '', impact: '', remedy: '' });
@@ -37,42 +39,40 @@ const ManageDiseases = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.name.trim()) {
-      return setMessage({ text: 'Disease name required', type: 'error' });
-    }
-
     setLoading(true);
-    const data = new FormData();
-    data.append('name', formData.name.trim());
-    data.append('description', formData.description);
-    data.append('impact', formData.impact);
-    data.append('remedy', formData.remedy);
-    images.forEach((img) => data.append('images', img));
-
-    // Custom config to let browser set multipart/form-data boundary
-    const config = {
-      headers: {
-        // Do NOT set Content-Type — browser will handle it
-      },
-    };
+    setMessage({ text: '', type: '' });
 
     try {
-      if (editingId) {
-        await api.put(`/diseases/${editingId}`, data, config);
-        setMessage({ text: 'Updated successfully', type: 'success' });
-      } else {
-        await api.post('/diseases', data, config);
-        setMessage({ text: 'Added successfully', type: 'success' });
-      }
-      resetForm();
-      fetchDiseases();
+        const data = new FormData();
+        data.append('name', formData.name.trim());
+        data.append('description', formData.description);
+        data.append('impact', formData.impact);
+        data.append('remedy', formData.remedy);
+
+        images.forEach((image) => {
+        data.append('images', image);
+        });
+
+        let res;
+        if (editingId) {
+        res = await api.put(`/diseases/${editingId}`, data);
+        } else {
+        res = await api.post('/diseases', data);
+        }
+
+        // This line will now always run on successful HTTP response
+        setMessage({ text: 'Disease saved successfully!', type: 'success' });
+        await fetchDiseases(); // Refresh list
+        resetForm(); // Clear form
     } catch (err) {
-      console.error('Upload error:', err);
-      setMessage({ text: 'Operation failed', type: 'error' });
+        // Only real errors (network, 4xx/5xx with error body) come here
+        const errorMsg = err.response?.data?.message || 'Failed to save disease';
+        setMessage({ text: errorMsg, type: 'error' });
+        console.error('Save error:', err);
     } finally {
-      setLoading(false);
+        setLoading(false);
     }
-  };
+    };
 
   const startEdit = (disease) => {
     setFormData({
@@ -177,7 +177,12 @@ const ManageDiseases = () => {
                     </p>
                     <div className="grid grid-cols-3 gap-2 relative">
                       {visibleImages.map((img, i) => (
-                        <img key={i} src={`http://localhost:5000${img}`} alt={`Sample ${i + 1}`} className="w-full h-24 object-cover rounded border border-gray-200" />
+                        <img 
+                            key={i} 
+                            src={`${API_BASE}${img}`} 
+                            alt={`Sample ${i + 1}`} 
+                            className="w-full h-48 object-cover rounded-lg border border-gray-300 shadow" 
+                        />
                       ))}
                       {moreCount > 0 && (
                         <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 rounded text-white font-bold text-lg">
@@ -219,7 +224,12 @@ const ManageDiseases = () => {
                   <p className="text-lg font-semibold mb-4">All Sample Images ({selectedDisease.samples.length})</p>
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                     {selectedDisease.samples.map((img, i) => (
-                      <img key={i} src={`http://localhost:5000${img}`} alt={`Full sample ${i + 1}`} className="w-full h-48 object-cover rounded-lg border border-gray-300 shadow" />
+                      <img 
+                        key={i} 
+                        src={`${API_BASE}${img}`} 
+                        alt={`Sample ${i + 1}`} 
+                        className="w-full h-48 object-cover rounded-lg border border-gray-300 shadow" 
+                       />
                     ))}
                   </div>
                 </div>
