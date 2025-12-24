@@ -21,7 +21,7 @@ const uploadToCloudinary = async (buffer, originalname) => {
         folder: CLOUDINARY_FOLDER || 'diseases/samples', // Uses .env folder or fallback
         public_id: originalname.replace(/\.[^/.]+$/, ''), // Remove extension for clean ID
         resource_type: 'image',
-        overwrite: true, // Optional: overwrite if same name
+        overwrite: true, // Overwrite if same name
       },
       (error, result) => {
         if (error) return reject(error);
