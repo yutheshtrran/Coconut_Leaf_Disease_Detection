@@ -40,7 +40,7 @@ const ManageDiseases = () => {
   // Helper to handle both local and Cloudinary URLs
   const getImageSrc = (img) => {
     if (img && img.startsWith('https://')) {
-      return img; // Full Cloudinary URL – use directly
+      return img; // Cloudinary URL
     }
     return `${API_BASE}${img}`; // Local path fallback
   };
