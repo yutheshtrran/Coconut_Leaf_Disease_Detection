@@ -2,30 +2,10 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs');
 const diseaseController = require('../controllers/diseaseController');
 
-// Ensure uploads/diseases directory exists
-const uploadDir = path.join(__dirname, '..', 'uploads', 'diseases');
-
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-  console.log('✅ Created uploads directory:', uploadDir);
-} else {
-  console.log('ℹ️ Uploads directory already exists:', uploadDir);
-}
-
-// Multer configuration
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir); // Absolute path
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    const ext = path.extname(file.originalname);
-    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
-  },
-});
+// Multer with memory storage (for Cloudinary)
+const storage = multer.memoryStorage();
 
 const upload = multer({
   storage,

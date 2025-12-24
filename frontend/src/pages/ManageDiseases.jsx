@@ -37,42 +37,48 @@ const ManageDiseases = () => {
     setEditingId(null);
   };
 
+  // Helper to handle both local and Cloudinary URLs
+  const getImageSrc = (img) => {
+    if (img && img.startsWith('https://')) {
+      return img; // Full Cloudinary URL – use directly
+    }
+    return `${API_BASE}${img}`; // Local path fallback
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setMessage({ text: '', type: '' });
 
     try {
-        const data = new FormData();
-        data.append('name', formData.name.trim());
-        data.append('description', formData.description);
-        data.append('impact', formData.impact);
-        data.append('remedy', formData.remedy);
+      const data = new FormData();
+      data.append('name', formData.name.trim());
+      data.append('description', formData.description);
+      data.append('impact', formData.impact);
+      data.append('remedy', formData.remedy);
 
-        images.forEach((image) => {
+      images.forEach((image) => {
         data.append('images', image);
-        });
+      });
 
-        let res;
-        if (editingId) {
+      let res;
+      if (editingId) {
         res = await api.put(`/diseases/${editingId}`, data);
-        } else {
+      } else {
         res = await api.post('/diseases', data);
-        }
+      }
 
-        // This line will now always run on successful HTTP response
-        setMessage({ text: 'Disease saved successfully!', type: 'success' });
-        await fetchDiseases(); // Refresh list
-        resetForm(); // Clear form
+      setMessage({ text: 'Disease saved successfully!', type: 'success' });
+      await fetchDiseases();
+      resetForm();
     } catch (err) {
-        // Only real errors (network, 4xx/5xx with error body) come here
-        const errorMsg = err.response?.data?.message || 'Failed to save disease';
-        setMessage({ text: errorMsg, type: 'error' });
-        console.error('Save error:', err);
+      const errorMsg = err.response?.data?.message || 'Failed to save disease';
+      setMessage({ text: errorMsg, type: 'error' });
+      console.error('Save error:', err);
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
-    };
+  };
 
   const startEdit = (disease) => {
     setFormData({
@@ -177,11 +183,11 @@ const ManageDiseases = () => {
                     </p>
                     <div className="grid grid-cols-3 gap-2 relative">
                       {visibleImages.map((img, i) => (
-                        <img 
-                            key={i} 
-                            src={`${API_BASE}${img}`} 
-                            alt={`Sample ${i + 1}`} 
-                            className="w-full h-48 object-cover rounded-lg border border-gray-300 shadow" 
+                        <img
+                          key={i}
+                          src={getImageSrc(img)}
+                          alt={`Sample ${i + 1}`}
+                          className="w-full h-48 object-cover rounded-lg border border-gray-300 shadow"
                         />
                       ))}
                       {moreCount > 0 && (
@@ -198,8 +204,12 @@ const ManageDiseases = () => {
                     <Eye size={18} className="mr-1" /> View Details
                   </button>
                   <div className="flex gap-3">
-                    <button onClick={() => startEdit(disease)} className="text-blue-600 hover:text-blue-800"><Edit2 size={20} /></button>
-                    <button onClick={() => deleteDisease(disease._id)} className="text-red-600 hover:text-red-800"><Trash2 size={20} /></button>
+                    <button onClick={() => startEdit(disease)} className="text-blue-600 hover:text-blue-800">
+                      <Edit2 size={20} />
+                    </button>
+                    <button onClick={() => deleteDisease(disease._id)} className="text-red-600 hover:text-red-800">
+                      <Trash2 size={20} />
+                    </button>
                   </div>
                 </div>
               </div>
@@ -213,7 +223,9 @@ const ManageDiseases = () => {
             <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-8">
               <div className="flex justify-between items-start mb-6">
                 <h2 className="text-2xl font-bold">{selectedDisease.name}</h2>
-                <button onClick={() => setModalOpen(false)} className="text-gray-500 hover:text-gray-700"><X size={24} /></button>
+                <button onClick={() => setModalOpen(false)} className="text-gray-500 hover:text-gray-700">
+                  <X size={24} />
+                </button>
               </div>
               <p className="text-gray-700 mb-4"><strong>Description:</strong> {selectedDisease.description || '—'}</p>
               <p className="text-gray-700 mb-4"><strong>Impact:</strong> {selectedDisease.impact || '—'}</p>
@@ -224,12 +236,12 @@ const ManageDiseases = () => {
                   <p className="text-lg font-semibold mb-4">All Sample Images ({selectedDisease.samples.length})</p>
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                     {selectedDisease.samples.map((img, i) => (
-                      <img 
-                        key={i} 
-                        src={`${API_BASE}${img}`} 
-                        alt={`Sample ${i + 1}`} 
-                        className="w-full h-48 object-cover rounded-lg border border-gray-300 shadow" 
-                       />
+                      <img
+                        key={i}
+                        src={getImageSrc(img)}
+                        alt={`Sample ${i + 1}`}
+                        className="w-full h-48 object-cover rounded-lg border border-gray-300 shadow"
+                      />
                     ))}
                   </div>
                 </div>
