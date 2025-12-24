@@ -14,13 +14,27 @@ const API = axios.create({
   },
 });
 
-// Transform request: Prevent Axios from overriding FormData with JSON serialization
-API.defaults.transformRequest = [(data) => {
-  // If data is FormData, return it untouched (browser sets correct multipart headers + boundary)
+// // Transform request: Prevent Axios from overriding FormData with JSON serialization
+// API.defaults.transformRequest = [(data) => {
+//   // If data is FormData, return it untouched (browser sets correct multipart headers + boundary)
+//   if (data instanceof FormData) {
+//     return data;
+//   }
+//   // Otherwise, allow default JSON handling
+//   return data;
+// }];
+// Transform request: Force JSON for plain objects, preserve FormData
+API.defaults.transformRequest = [(data, headers) => {
   if (data instanceof FormData) {
+    // For FormData (uploads), let browser set multipart
+    delete headers['Content-Type'];
     return data;
   }
-  // Otherwise, allow default JSON handling
+  // For plain objects, explicitly JSON.stringify
+  if (typeof data === 'object' && data !== null) {
+    headers['Content-Type'] = 'application/json';
+    return JSON.stringify(data);
+  }
   return data;
 }];
 
