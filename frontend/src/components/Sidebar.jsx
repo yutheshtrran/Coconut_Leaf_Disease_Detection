@@ -9,6 +9,7 @@ const navItems = [
   { name: "Drone Analysis", icon: TrendingUp, to: "/upload" },
   { name: "Reports", icon: FileText, to: "/reports" },
   { name: "My Farms", icon: Map, to: "/MyFarms" },
+  { name: "Diseases", icon: FileText, to: "/diseases", adminOnly: true },
   { name: "Alert Settings", icon: Bell, to: "/alerts" },
   { name: "User Management", icon: Users, to: "/users", adminOnly: true },
 ];
