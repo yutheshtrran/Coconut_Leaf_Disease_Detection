@@ -4,6 +4,7 @@ venv/
 .env/
 .venv/
 
+
 # Ignore dependency directories
 node_modules/
 
@@ -30,3 +31,9 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+
+# ML data & artifacts
+ml/data/original/
+ml/data/processed/
+ml/models/
+ml/experiments/  
