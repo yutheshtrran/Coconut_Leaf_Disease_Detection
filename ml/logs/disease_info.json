@@ -1,27 +1,61 @@
 {
-  "healthy": {
-    "description": "Plant is healthy and shows no signs of disease.",
-    "impact": "No negative impact expected.",
-    "remedy": "Maintain current care routine."
+  "healthy_leaves": {
+    "description": "Leaves are green, firm, and free from visible disease symptoms.",
+    "impact": "No negative impact on plant growth or yield.",
+    "remedy": "Maintain proper irrigation, nutrition, and regular monitoring."
   },
-  "leaf_blight": {
-    "description": "Leaf blight causes browning and spotting on leaves.",
-    "impact": "Reduced photosynthesis, may decrease yield.",
-    "remedy": "Remove affected leaves, apply fungicide, ensure proper spacing and airflow."
+
+  "bud_root_dropping": {
+    "description": "Dropping or decay of buds and roots, often caused by fungal or bacterial infection.",
+    "impact": "Severely affects plant stability and nutrient uptake, may lead to plant death.",
+    "remedy": "Improve drainage, remove infected plants, apply appropriate fungicide or bactericide."
   },
-  "leaf_yellowing": {
-    "description": "Yellowing of leaves due to nutrient deficiency or disease.",
+
+  "bud_rot": {
+    "description": "Rotting of the central bud caused by pathogens, usually in humid or waterlogged conditions.",
+    "impact": "Stops new leaf growth and can kill the plant if untreated.",
+    "remedy": "Remove affected tissue, apply systemic fungicide, avoid water accumulation in the crown."
+  },
+
+  "caterpillars": {
+    "description": "Leaf damage caused by caterpillar feeding, including holes and chewed edges.",
+    "impact": "Reduces leaf area and photosynthesis, weakens plant.",
+    "remedy": "Hand-pick caterpillars, use biological control or approved insecticides."
+  },
+
+  "drying_of_leaflets": {
+    "description": "Leaflets appear dry and brittle, often due to water stress or disease.",
+    "impact": "Reduced photosynthesis and overall plant vigor.",
+    "remedy": "Ensure adequate watering, improve soil moisture retention, treat underlying disease."
+  },
+
+  "flaccidity": {
+    "description": "Leaves appear limp and droopy due to loss of turgor pressure.",
+    "impact": "Indicates water stress or root damage, leading to reduced growth.",
+    "remedy": "Correct irrigation issues, check root health, improve soil aeration."
+  },
+
+  "gray_leaf_spot": {
+    "description": "Gray or brown spots on leaves caused by fungal infection.",
+    "impact": "Decreases photosynthetic efficiency and may cause premature leaf drop.",
+    "remedy": "Remove infected leaves, apply fungicide, reduce leaf wetness."
+  },
+
+  "leaf_rot": {
+    "description": "Decay of leaf tissue, often starting at the base or edges.",
+    "impact": "Weakens plant and can spread rapidly in humid conditions.",
+    "remedy": "Prune affected leaves, improve airflow, apply fungicide."
+  },
+
+  "leaflets": {
+    "description": "General abnormalities or damage observed on leaflets.",
+    "impact": "May reduce photosynthesis depending on severity.",
+    "remedy": "Identify specific cause (nutrient, pest, or disease) and treat accordingly."
+  },
+
+  "yellowing": {
+    "description": "Yellow discoloration of leaves caused by nutrient deficiency, stress, or disease.",
     "impact": "Reduced growth and productivity.",
-    "remedy": "Check soil nutrients, apply balanced fertilizer, ensure proper irrigation."
-  },
-  "rust": {
-    "description": "Rust infection causes orange-brown pustules on leaves.",
-    "impact": "Weakens plant, reduces photosynthesis, can lead to leaf drop.",
-    "remedy": "Apply rust-specific fungicide, remove infected leaves, avoid overhead watering."
-  },
-  "powdery_mildew": {
-    "description": "White powdery fungal growth on leaves and stems.",
-    "impact": "Stunts growth, reduces crop quality.",
-    "remedy": "Use sulfur or potassium bicarbonate sprays, prune infected areas, improve airflow."
+    "remedy": "Apply balanced fertilizer, check soil pH, ensure proper drainage."
   }
 }
