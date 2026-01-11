@@ -6,6 +6,15 @@ num_epochs: 15
 model_name: resnet50
 device: cuda
 class_names:
-  - healthy
-  - leaf_blight
+  - Bud Root Dropping
+  - Bud Rot
+  - Caterpillars
+  - Drying of Leaflets
+  - Flaccidity
+  - Gray Leaf Spot
+  - Healthy Leaves
+  - Leaf Rot
+  - Leaflets
+  - Yellowing
+
   
