@@ -32,7 +32,12 @@ const Upload = () => {
     e.stopPropagation();
     setIsDragActive(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      setSelectedFiles(Array.from(e.dataTransfer.files));
+      const files = Array.from(e.dataTransfer.files);
+      setSelectedFiles(files);
+      // detect type for dropped files
+      const firstFile = files[0];
+      const isVideo = firstFile.type && firstFile.type.startsWith('video/');
+      setUploadType(isVideo ? 'video' : 'image');
     }
   };
   const handleFileSelect = (e) => {
@@ -127,7 +132,21 @@ const Upload = () => {
         method: "POST",
         body: formData,
       });
-      const data = await response.json();
+
+      let data = null;
+      try {
+        data = await response.json();
+      } catch (parseErr) {
+        console.error('Failed to parse JSON response from /analyze-video', parseErr);
+      }
+
+      if (!response.ok) {
+        const msg = (data && (data.error || data.message)) || `Server returned ${response.status}`;
+        console.error('Video analysis failed:', response.status, data);
+        alert(`Video analysis failed: ${msg}`);
+        setLoading(false);
+        return;
+      }
 
       // Parse video analysis response
       const analysis = {
