@@ -22,8 +22,7 @@ app.use(cors({
 }));
 app.use(cookieParser());
 app.use(express.json()); // replaces body-parser
-// Serve uploaded files statically
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 
 // Connect to MongoDB
 const connectDB = async () => {
@@ -45,7 +44,9 @@ try {
   app.use('/api/alerts', require('./routes/alertRoutes'));
   app.use('/api/auth', require('./routes/authRoutes'));
   // ML prediction route
-  app.use('/api/ml', require('./routes/mlRoutes'));
+  // app.use('/api/ml', require('./routes/mlRoutes'));
+
+  app.use('/api/diseases', require('./routes/diseaseRoutes'));
 } catch (error) {
   console.error('⚠️ Route loading error:', error.message);
 }

@@ -1,0 +1,67 @@
+* [33m75c41d1[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mdev-rk[m[33m, [m[1;31morigin/dev-rk[m[33m)[m view and download report
+* [33md1663e1[m dummy report generation
+* [33m5cf632e[m merge
+*   [33mb394da4[m Merge remote-tracking branch 'origin/Yuthee_dev' into dev-rk
+[32m|[m[33m\[m  
+[32m|[m * [33m67700f3[m[33m ([m[1;31morigin/Yuthee_dev[m[33m)[m Image_PREDICTION Remedy_SUGGESIONS Health_ANALYSER
+[32m|[m * [33m18ef4d8[m ML
+[32m|[m * [33mafab26c[m Image_Folder
+[32m|[m *   [33m5f6f31d[m Merge branch 'main' of https://github.com/yutheshtrran/Coconut_Leaf_Disease_Detection into Yuthee_dev
+[32m|[m [34m|[m[35m\[m  
+[32m|[m [34m|[m * [33mb86527a[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m fix
+[32m|[m [34m|[m *   [33m4241ced[m Merge remote-tracking branch 'upstream/Yuthee_dev'
+[32m|[m [34m|[m [36m|[m[1;31m\[m  
+[32m|[m * [36m|[m [1;31m|[m [33m2079802[m uds
+[32m|[m * [36m|[m [1;31m|[m   [33m32b7389[m Merge branch 'Yuthee_dev' of https://github.com/yutheshtrran/Coconut_Leaf_Disease_Detection into Yuthee_dev
+[32m|[m [36m|[m[1;31m\[m [36m\[m [1;31m\[m  
+[32m|[m [36m|[m [1;31m|[m[36m/[m [1;31m/[m  
+[32m|[m [36m|[m[36m/[m[1;31m|[m [1;31m/[m   
+[32m|[m [36m|[m [1;31m|[m[1;31m/[m    
+[32m|[m [36m|[m * [33mf05752f[m Updates
+[32m|[m * [1;33m|[m [33m9708e7d[m Merge dev-m3 changes into main: restore frontend auth routing, protected routes, and backend updates from dev-m3
+[32m|[m * [1;33m|[m   [33m305aeab[m Merge branch 'dev-m3' into main
+[32m|[m [1;34m|[m[1;35m\[m [1;33m\[m  
+[32m|[m * [1;35m\[m [1;33m\[m   [33mba3da72[m Merge pull request #3 from yutheshtrran/revert-2-dev-rk
+[32m|[m [1;36m|[m[31m\[m [1;35m\[m [1;33m\[m  
+[32m|[m [1;36m|[m * [1;35m|[m [1;33m|[m [33mb39a0be[m[33m ([m[1;31morigin/revert-2-dev-rk[m[33m)[m Revert "Dev rk"
+[32m|[m [1;36m|[m[1;36m/[m [1;35m/[m [1;33m/[m  
+[32m|[m * [1;35m|[m [1;33m|[m   [33m6969de2[m Merge pull request #2 from yutheshtrran/dev-rk
+[32m|[m [32m|[m[33m\[m [1;35m\[m [1;33m\[m  
+* [32m|[m [33m|[m [1;35m|[m [1;33m|[m [33mcd9ce6e[m edit gitignore file - ignore pycache
+* [32m|[m [33m|[m [1;35m|[m [1;33m|[m [33m07b9821[m Add sample report generation
+* [32m|[m [33m|[m [1;35m|[m [1;33m|[m [33m85f8eb2[m add packages
+[1;33m|[m [32m|[m[1;33m_[m[33m|[m[1;33m_[m[1;35m|[m[1;33m/[m  
+[1;33m|[m[1;33m/[m[32m|[m [33m|[m [1;35m|[m   
+* [32m|[m [33m|[m [1;35m|[m [33m4440c69[m Ml_stuffs
+* [32m|[m [33m|[m [1;35m|[m [33m9d4e8f3[m[33m ([m[1;32mYuthee_dev[m[33m)[m ML_cv integration
+[1;35m|[m [32m|[m[1;35m_[m[33m|[m[1;35m/[m  
+[1;35m|[m[1;35m/[m[32m|[m [33m|[m   
+* [32m|[m [33m|[m [33m8c407ff[m[33m ([m[1;31morigin/dev-m3[m[33m)[m User management for Admin only
+[33m|[m [32m|[m[33m/[m  
+[33m|[m[33m/[m[32m|[m   
+* [32m|[m [33m12fc889[m[33m ([m[1;32mdev-m3[m[33m)[m Profile Updates and User Roles
+* [32m|[m [33m8a4a0a2[m Error Fixed
+* [32m|[m [33m566e5ec[m Updates for User Registration and Authentication
+* [32m|[m [33m96d5380[m Apply local update to package-lock.json
+[32m|[m[32m/[m  
+* [33mb6b37c6[m[33m ([m[1;32mmain[m[33m)[m Final UI dev
+* [33m8e2af41[m final fix
+* [33m2542032[m FE fix
+* [33mc99b085[m FE fix
+* [33me6af7dc[m FE Navbar & Side Bar
+* [33m1050ba0[m Dashboard
+* [33m125daf8[m Update Structure.txt
+*   [33medf6fc8[m Merge branch 'main' of https://github.com/yutheshtrran/Coconut_Leaf_Disease_Detection
+[34m|[m[35m\[m  
+[34m|[m * [33m890e001[m Update README.md
+* [35m|[m [33mea1b425[m FE render
+[35m|[m[35m/[m  
+* [33m8be2a7b[m str change
+* [33m35b7950[m fix Taildwind CSS
+* [33mac04ad1[m Migrated to Tailwind CSS v4, updated config files, and fixed React setup
+* [33m78b9553[m Rename frontend component pages to .jsx and update App.jsx
+* [33m62add89[m update App.jsx
+* [33m19c0819[m Rename frontend pages to .jsx and update App.jsx
+* [33mbc6e48e[m Add project structure documentation
+* [33m12920fd[m Add full project files: backend, frontend, ML, deployment, etc.
+* [33mf13b849[m first commit

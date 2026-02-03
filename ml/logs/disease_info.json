@@ -1,0 +1,27 @@
+{
+  "healthy": {
+    "description": "Plant is healthy and shows no signs of disease.",
+    "impact": "No negative impact expected.",
+    "remedy": "Maintain current care routine."
+  },
+  "leaf_blight": {
+    "description": "Leaf blight causes browning and spotting on leaves.",
+    "impact": "Reduced photosynthesis, may decrease yield.",
+    "remedy": "Remove affected leaves, apply fungicide, ensure proper spacing and airflow."
+  },
+  "leaf_yellowing": {
+    "description": "Yellowing of leaves due to nutrient deficiency or disease.",
+    "impact": "Reduced growth and productivity.",
+    "remedy": "Check soil nutrients, apply balanced fertilizer, ensure proper irrigation."
+  },
+  "rust": {
+    "description": "Rust infection causes orange-brown pustules on leaves.",
+    "impact": "Weakens plant, reduces photosynthesis, can lead to leaf drop.",
+    "remedy": "Apply rust-specific fungicide, remove infected leaves, avoid overhead watering."
+  },
+  "powdery_mildew": {
+    "description": "White powdery fungal growth on leaves and stems.",
+    "impact": "Stunts growth, reduces crop quality.",
+    "remedy": "Use sulfur or potassium bicarbonate sprays, prune infected areas, improve airflow."
+  }
+}
