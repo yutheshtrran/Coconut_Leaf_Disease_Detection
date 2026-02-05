@@ -31,8 +31,8 @@ const StatsCard = ({ title, value, variant = 'default' }) => {
   }
 
   return (
-    <div className={`p-6 bg-white rounded-xl shadow-lg transition duration-300 hover:shadow-xl ${borderClasses}`}>
-      <p className="text-sm font-semibold text-gray-500 uppercase tracking-wider">{title}</p>
+    <div className={`p-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg transition duration-300 hover:shadow-xl ${borderClasses}`}>
+      <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{title}</p>
       <p className={`mt-1 text-3xl font-extrabold ${textClasses}`}>{value}</p>
     </div>
   );
@@ -86,12 +86,12 @@ const Reports = () => {
   );
 
   return (
-    <div className="ml-64 pt-14 p-4 sm:p-8 bg-gray-50 min-h-screen font-['Inter', sans-serif]"
+    <div className="ml-64 pt-14 p-4 sm:p-8 bg-gray-50 dark:bg-gray-900 min-h-screen font-['Inter', sans-serif] transition-colors duration-300"
       style={{ marginTop: '1cm' }}>
       <div className="max-w-7xl mx-auto">
 
         {/* Title */}
-        <h1 className="text-2xl font-bold text-gray-800 mb-8">Historical Analysis Reports</h1>
+        <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-8">Historical Analysis Reports</h1>
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -101,8 +101,8 @@ const Reports = () => {
         </div>
 
         {/* Filters */}
-        <div className="bg-white p-6 rounded-xl shadow-lg mb-8">
-          <h2 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg mb-8 transition-colors duration-300">
+          <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-4 flex items-center">
             <Filter className="w-5 h-5 mr-2 text-indigo-600" />
             Report Filters
           </h2>

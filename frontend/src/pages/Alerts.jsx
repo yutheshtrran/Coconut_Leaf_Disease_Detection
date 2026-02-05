@@ -103,7 +103,7 @@ const Alerts = () => {
   };
 
   return (
-    <div className="min-h-screen bg-green-50 flex" style={{ marginTop: '1cm' }}>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex" style={{ marginTop: '1cm' }}>
       {/* Wrapper div to shift content 5cm right */}
       <div style={{ marginLeft: '6cm', flex: 1 }}>
         <main className="p-6">
