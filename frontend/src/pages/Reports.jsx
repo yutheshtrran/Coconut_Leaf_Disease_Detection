@@ -2,15 +2,16 @@ import React, { useState } from 'react';
 import { Eye, Download, MoreHorizontal, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
 
 // --- Mock Data ---
+const currentYear = new Date().getFullYear();
 const initialReports = [
-  { id: 'REP-005', farm: 'Farm A', date: '2023-10-26', issue: 'Potassium Deficiency', severity: { value: 92, label: 'CRITICAL', color: 'red' }, status: 'Finalized' },
-  { id: 'REP-004', farm: 'Farm B', date: '2023-10-25', issue: 'Nitrogen Deficiency', severity: { value: 85, label: 'HIGH', color: 'red' }, status: 'Finalized' },
-  { id: 'REP-003', farm: 'Farm C', date: '2023-10-24', issue: 'Water Stress', severity: { value: 45, label: 'MODERATE', color: 'blue' }, status: 'Finalized' },
-  { id: 'REP-002', farm: 'Farm A', date: '2023-10-23', issue: 'Pest Infestation', severity: { value: 68, label: 'MODERATE', color: 'blue' }, status: 'Finalized' },
-  { id: 'REP-001', farm: 'Farm D', date: '2023-10-22', issue: 'Nutrient Imbalance', severity: { value: 30, label: 'MODERATE', color: 'blue' }, status: 'Finalized' },
-  { id: 'REP-006', farm: 'Farm E', date: '2023-10-27', issue: 'Soil Erosion', severity: { value: 15, label: 'LOW', color: 'gray' }, status: 'Finalized' },
-  { id: 'REP-007', farm: 'Farm F', date: '2023-10-28', issue: 'Fungal Infection', severity: { value: 78, label: 'HIGH', color: 'red' }, status: 'Pending' },
-  { id: 'REP-008', farm: 'Farm C', date: '2023-10-29', issue: 'Weed Competition', severity: { value: 20, label: 'LOW', color: 'gray' }, status: 'Finalized' },
+  { id: 'REP-005', farm: 'Farm A', date: `${currentYear}-10-26`, issue: 'Potassium Deficiency', severity: { value: 92, label: 'CRITICAL', color: 'red' }, status: 'Finalized' },
+  { id: 'REP-004', farm: 'Farm B', date: `${currentYear}-10-25`, issue: 'Nitrogen Deficiency', severity: { value: 85, label: 'HIGH', color: 'red' }, status: 'Finalized' },
+  { id: 'REP-003', farm: 'Farm C', date: `${currentYear}-10-24`, issue: 'Water Stress', severity: { value: 45, label: 'MODERATE', color: 'blue' }, status: 'Finalized' },
+  { id: 'REP-002', farm: 'Farm A', date: `${currentYear}-10-23`, issue: 'Pest Infestation', severity: { value: 68, label: 'MODERATE', color: 'blue' }, status: 'Finalized' },
+  { id: 'REP-001', farm: 'Farm D', date: `${currentYear}-10-22`, issue: 'Nutrient Imbalance', severity: { value: 30, label: 'MODERATE', color: 'blue' }, status: 'Finalized' },
+  { id: 'REP-006', farm: 'Farm E', date: `${currentYear}-10-27`, issue: 'Soil Erosion', severity: { value: 15, label: 'LOW', color: 'gray' }, status: 'Finalized' },
+  { id: 'REP-007', farm: 'Farm F', date: `${currentYear}-10-28`, issue: 'Fungal Infection', severity: { value: 78, label: 'HIGH', color: 'red' }, status: 'Pending' },
+  { id: 'REP-008', farm: 'Farm C', date: `${currentYear}-10-29`, issue: 'Weed Competition', severity: { value: 20, label: 'LOW', color: 'gray' }, status: 'Finalized' },
 ];
 
 const totalReports = initialReports.length;
@@ -30,8 +31,8 @@ const StatsCard = ({ title, value, variant = 'default' }) => {
   }
 
   return (
-    <div className={`p-6 bg-white rounded-xl shadow-lg transition duration-300 hover:shadow-xl ${borderClasses}`}>
-      <p className="text-sm font-semibold text-gray-500 uppercase tracking-wider">{title}</p>
+    <div className={`p-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg transition duration-300 hover:shadow-xl ${borderClasses}`}>
+      <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{title}</p>
       <p className={`mt-1 text-3xl font-extrabold ${textClasses}`}>{value}</p>
     </div>
   );
@@ -103,12 +104,12 @@ const Reports = () => {
 
 
   return (
-    <div className="ml-64 pt-14 p-4 sm:p-8 bg-gray-50 min-h-screen font-['Inter', sans-serif]"
-    style={{ marginTop: '1cm' }}>
+    <div className="ml-64 pt-14 p-4 sm:p-8 bg-gray-50 dark:bg-gray-900 min-h-screen font-['Inter', sans-serif] transition-colors duration-300"
+      style={{ marginTop: '1cm' }}>
       <div className="max-w-7xl mx-auto">
 
         {/* Title */}
-        <h1 className="text-2xl font-bold text-gray-800 mb-8">Historical Analysis Reports</h1>
+        <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-8">Historical Analysis Reports</h1>
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -118,15 +119,15 @@ const Reports = () => {
         </div>
 
         {/* Filters */}
-        <div className="bg-white p-6 rounded-xl shadow-lg mb-8">
-          <h2 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg mb-8 transition-colors duration-300">
+          <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-4 flex items-center">
             <Filter className="w-5 h-5 mr-2 text-indigo-600" />
             Report Filters
           </h2>
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
             <input type="text" placeholder="Farm Name" className="col-span-2 lg:col-span-1 p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" />
-            <input type="text" placeholder="dd/mm/yyyy (Start)" className="p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" onFocus={(e)=>e.target.type='date'} onBlur={(e)=>e.target.type='text'} />
-            <input type="text" placeholder="dd/mm/yyyy (End)" className="p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" onFocus={(e)=>e.target.type='date'} onBlur={(e)=>e.target.type='text'} />
+            <input type="text" placeholder="dd/mm/yyyy (Start)" className="p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" onFocus={(e) => e.target.type = 'date'} onBlur={(e) => e.target.type = 'text'} />
+            <input type="text" placeholder="dd/mm/yyyy (End)" className="p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" onFocus={(e) => e.target.type = 'date'} onBlur={(e) => e.target.type = 'text'} />
             <select className="col-span-2 lg:col-span-1 p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 appearance-none bg-white">
               <option>All Issues</option>
               <option>Potassium Deficiency</option>
@@ -189,14 +190,14 @@ const Reports = () => {
           {/* Pagination */}
           <div className="flex justify-end p-4 border-t border-gray-200 bg-white">
             <div className="flex items-center space-x-1">
-              <button onClick={()=>handlePageChange(currentPage-1)} disabled={currentPage===1} className="flex items-center px-4 py-2 mx-1 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition duration-150">
+              <button onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1} className="flex items-center px-4 py-2 mx-1 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition duration-150">
                 <ChevronLeft className="w-4 h-4 mr-1" /> Previous
               </button>
               {[...Array(totalPages)].map((_, index) => {
-                const pageNumber = index+1;
+                const pageNumber = index + 1;
                 return renderPaginationButton(pageNumber, pageNumber);
               })}
-              <button onClick={()=>handlePageChange(currentPage+1)} disabled={currentPage===totalPages} className="flex items-center px-4 py-2 mx-1 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition duration-150">
+              <button onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages} className="flex items-center px-4 py-2 mx-1 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition duration-150">
                 Next <ChevronRight className="w-4 h-4 ml-1" />
               </button>
             </div>

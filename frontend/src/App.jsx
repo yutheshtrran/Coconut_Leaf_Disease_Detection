@@ -1,5 +1,6 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route, useLocation } from "react-router-dom";
+import { ThemeProvider } from "./context/ThemeContext.jsx";
 
 // Pages
 import Dashboard from "./pages/Dashboard.jsx";
@@ -33,7 +34,7 @@ function AppWrapper() {
   const showLayout = !showBlurLayout;
 
   return (
-    <div className="relative flex min-h-screen bg-gray-100">
+    <div className="relative flex min-h-screen bg-gray-100 dark:bg-gray-900 transition-colors duration-300">
       {/* Sidebar - only show when not on auth pages */}
       {showLayout && (
         <div className="flex-shrink-0">
@@ -128,9 +129,11 @@ function AppWrapper() {
 
 function App() {
   return (
-    <Router>
-      <AppWrapper />
-    </Router>
+    <ThemeProvider>
+      <Router>
+        <AppWrapper />
+      </Router>
+    </ThemeProvider>
   );
 }
 

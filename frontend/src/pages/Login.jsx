@@ -10,7 +10,7 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   // show/hide handled by PasswordField now
-  
+
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [emailError, setEmailError] = useState('');
@@ -22,13 +22,13 @@ const Login = () => {
     setTimeout(() => setMessage(''), 3000);
   };
 
-    const { user, login } = useAuth();
+  const { user, login } = useAuth();
   const navigate = useNavigate();
 
-    // If already logged in, redirect to dashboard
-    React.useEffect(() => {
-      if (user) navigate('/dashboard');
-    }, [user]);
+  // If already logged in, redirect to dashboard
+  React.useEffect(() => {
+    if (user) navigate('/dashboard');
+  }, [user]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -57,7 +57,7 @@ const Login = () => {
         setEmailError('This email/username is not registered.');
       } else if (status === 401 && msg === 'Wrong password') {
         setPasswordError('Wrong password.');
-      const [toastType, setToastType] = useState('info'); // Default toast type
+        const [toastType, setToastType] = useState('info'); // Default toast type
         setEmailError('Email not verified. Please check your inbox.');
       } else {
         displayMessage(msg || 'Login failed');
@@ -79,33 +79,33 @@ const Login = () => {
     <>
       <Toast type={toastType} message={message} onClose={() => setMessage('')} />
       <div className="w-full max-w-md">
-        <p className="text-gray-500 mb-8">Sign in to your CocoGuard account to manage your farms</p>
+        <p className="text-gray-500 dark:text-gray-400 mb-8">Sign in to your CocoGuard account to manage your farms</p>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
             <input
               id="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className={`w-full px-4 py-3 border ${emailError ? 'border-red-500' : 'border-gray-300'} rounded-lg shadow-sm focus:ring-[#387637] focus:border-[#387637] transition duration-150`}
+              className={`w-full px-4 py-3 border ${emailError ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} rounded-lg shadow-sm focus:ring-[#387637] focus:border-[#387637] transition duration-150 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100`}
               placeholder="admin@cocoguard.com"
               required
             />
             {emailError && <p className="mt-1 text-sm text-red-600">{emailError}</p>}
           </div>
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-              <PasswordField value={password} onChange={(e) => setPassword(e.target.value)} className={`w-full px-4 py-3 border ${passwordError ? 'border-red-500' : 'border-gray-300'} rounded-lg shadow-sm focus:ring-[#387637] focus:border-[#387637] transition duration-150`} placeholder="Enter your password" required />
-              {passwordError && <p className="mt-1 text-sm text-red-600">{passwordError}</p>}
-            </div>
-          
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Password</label>
+            <PasswordField value={password} onChange={(e) => setPassword(e.target.value)} className={`w-full px-4 py-3 border ${passwordError ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} rounded-lg shadow-sm focus:ring-[#387637] focus:border-[#387637] transition duration-150 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100`} placeholder="Enter your password" required />
+            {passwordError && <p className="mt-1 text-sm text-red-600">{passwordError}</p>}
+          </div>
+
 
           <div className="flex justify-between items-center text-sm">
             <div className="flex items-center">
-              <input id="remember-me" type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} className="h-4 w-4 text-[#387637] border-gray-300 rounded focus:ring-[#387637]" />
-              <label htmlFor="remember-me" className="ml-2 text-gray-600 select-none">Remember me</label>
+              <input id="remember-me" type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} className="h-4 w-4 text-[#387637] border-gray-300 dark:border-gray-600 rounded focus:ring-[#387637]" />
+              <label htmlFor="remember-me" className="ml-2 text-gray-600 dark:text-gray-400 select-none">Remember me</label>
             </div>
             <a href="/forgot-password" className="font-medium text-sm text-[#387637] hover:text-green-700 transition duration-150">Forgot password?</a>
           </div>
@@ -123,8 +123,8 @@ const Login = () => {
         </form>
 
         <div className="mt-8 text-center text-sm">
-          <div>
-            Don't have an account? <Link to="/register" className="font-medium text-[#387637] hover:text-green-700">Create account</Link>
+          <div className="text-gray-600 dark:text-gray-400">
+            Don't have an account? <Link to="/register" className="font-medium text-[#387637] dark:text-green-400 hover:text-green-700 dark:hover:text-green-300">Create account</Link>
           </div>
         </div>
       </div>
