@@ -83,7 +83,7 @@ export default function VerifyEmail() {
       <div className="absolute top-4 left-4">
         <button
           onClick={() => navigate(-1)}
-          className="p-2 text-gray-600 hover:text-[#387637] transition-colors rounded-full hover:bg-gray-100"
+          className="p-2 text-gray-600 dark:text-gray-400 hover:text-[#387637] dark:hover:text-[#4CAF50] transition-colors rounded-full hover:bg-gray-100 dark:hover:bg-gray-800"
           title="Go back"
         >
           <ArrowLeft size={24} />
@@ -94,8 +94,8 @@ export default function VerifyEmail() {
         <>
           <CodeInput length={6} value={code} onChange={setCode} />
           <div className="flex gap-3 mt-6">
-            <button onClick={doVerify} disabled={loading} className="flex-1 bg-[#387637] text-white p-3 rounded">{loading ? 'Verifying...' : 'Verify'}</button>
-            <button onClick={doResend} className="flex-1 bg-gray-200 p-3 rounded">Resend</button>
+            <button onClick={doVerify} disabled={loading} className="flex-1 bg-[#387637] hover:bg-[#2d602c] text-white p-3 rounded font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed">{loading ? 'Verifying...' : 'Verify'}</button>
+            <button onClick={doResend} className="flex-1 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 p-3 rounded font-medium transition-colors">Resend</button>
           </div>
         </>
       )}
