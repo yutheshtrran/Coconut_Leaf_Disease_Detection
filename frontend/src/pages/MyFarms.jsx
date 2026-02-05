@@ -9,12 +9,13 @@ const initialFarms = [
   { id: 'D', name: 'Farm D', subtitle: 'Tropical Gardens', location: '7.80° N, 80.10° E', area: '30 Ha', admin: 'Admin' },
 ];
 
+const currentYear = new Date().getFullYear();
 const initialPlots = [
-  { id: 1, farmId: 'A', area: 2.5, lastAnalyzed: '2023-10-26', status: 'LOW_RISK' },
-  { id: 2, farmId: 'A', area: 3.2, lastAnalyzed: '2023-10-25', status: 'LOW_RISK' },
-  { id: 3, farmId: 'A', area: 1.8, lastAnalyzed: '2023-10-26', status: 'CRITICAL' },
-  { id: 4, farmId: 'A', area: 4.0, lastAnalyzed: '2023-10-24', status: 'MODERATE' },
-  { id: 5, farmId: 'B', area: 5.0, lastAnalyzed: '2023-10-20', status: 'LOW_RISK' },
+  { id: 1, farmId: 'A', area: 2.5, lastAnalyzed: `${currentYear}-10-26`, status: 'LOW_RISK' },
+  { id: 2, farmId: 'A', area: 3.2, lastAnalyzed: `${currentYear}-10-25`, status: 'LOW_RISK' },
+  { id: 3, farmId: 'A', area: 1.8, lastAnalyzed: `${currentYear}-10-26`, status: 'CRITICAL' },
+  { id: 4, farmId: 'A', area: 4.0, lastAnalyzed: `${currentYear}-10-24`, status: 'MODERATE' },
+  { id: 5, farmId: 'B', area: 5.0, lastAnalyzed: `${currentYear}-10-20`, status: 'LOW_RISK' },
 ];
 
 // --- Utility ---
@@ -81,8 +82,8 @@ const PlotsTable = ({ farm, plots }) => {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              {['Plot ID','Area (ha)','Last Analyzed','Status','Actions'].map((header, idx) => (
-                <th key={idx} className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${idx===0?'rounded-tl-xl':''} ${idx===4?'rounded-tr-xl':''}`}>
+              {['Plot ID', 'Area (ha)', 'Last Analyzed', 'Status', 'Actions'].map((header, idx) => (
+                <th key={idx} className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${idx === 0 ? 'rounded-tl-xl' : ''} ${idx === 4 ? 'rounded-tr-xl' : ''}`}>
                   {header}
                 </th>
               ))}
@@ -149,7 +150,7 @@ const MyFarms = () => {
             <div
               key={farm.id}
               onClick={() => handleSelectFarm(farm.id)}
-              className={`p-3 rounded-xl cursor-pointer transition duration-150 ${farm.id===selectedFarmId?'bg-green-50 text-green-800 border-l-4 border-green-500 shadow-inner':'hover:bg-gray-100 text-gray-700'}`}
+              className={`p-3 rounded-xl cursor-pointer transition duration-150 ${farm.id === selectedFarmId ? 'bg-green-50 text-green-800 border-l-4 border-green-500 shadow-inner' : 'hover:bg-gray-100 text-gray-700'}`}
             >
               <p className="font-semibold">{farm.name}</p>
               <p className="text-xs">{farm.subtitle}</p>
