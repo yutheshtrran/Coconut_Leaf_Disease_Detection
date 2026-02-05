@@ -1,12 +1,27 @@
+<<<<<<< HEAD
 import sys
 import os
 import tempfile
 import json
 import traceback
+=======
+from fastapi import FastAPI, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
+import os
+import sys
+
+# Ensure the ml/ directory (parent of ai_api) is on PYTHONPATH so we can import src.*
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
+from src.utils import infer
+>>>>>>> origin/main
 
 # Add src directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
+<<<<<<< HEAD
 try:
     from fastapi import FastAPI, UploadFile, File
     from fastapi.middleware.cors import CORSMiddleware
@@ -16,6 +31,11 @@ except ImportError:
     USE_FASTAPI = False
     from flask import Flask, request, jsonify
     from flask_cors import CORS
+=======
+# Resolve model/config paths relative to the ml/ folder
+MODEL_PATH = os.path.join(BASE_DIR, "weights", "best_model.pth")
+CONFIG_PATH = os.path.join(BASE_DIR, "src", "config.yaml")
+>>>>>>> origin/main
 
 # Import ML modules
 try:
