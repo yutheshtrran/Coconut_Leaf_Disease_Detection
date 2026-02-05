@@ -19,15 +19,15 @@ const criticalAlerts = initialReports.filter(r => r.severity.label === 'CRITICAL
 
 // --- Helper Components ---
 const StatsCard = ({ title, value, variant = 'default' }) => {
-  let borderClasses = 'border border-gray-100';
-  let textClasses = 'text-gray-900';
+  let borderClasses = 'border-l-4 border-gray-200 dark:border-gray-600';
+  let textClasses = 'text-gray-900 dark:text-gray-100';
 
   if (variant === 'critical') {
-    borderClasses = 'border-2 border-red-500';
-    textClasses = 'text-red-600';
+    borderClasses = 'border-l-4 border-red-500';
+    textClasses = 'text-red-600 dark:text-red-400';
   } else if (variant === 'blue') {
-    borderClasses = 'border-2 border-blue-500';
-    textClasses = 'text-blue-600';
+    borderClasses = 'border-l-4 border-blue-500';
+    textClasses = 'text-blue-600 dark:text-blue-400';
   }
 
   return (
@@ -43,14 +43,14 @@ const SeverityBadge = ({ severity }) => {
   let colorClasses = '';
   switch (severity.color) {
     case 'red':
-      colorClasses = 'bg-red-100 text-red-800';
+      colorClasses = 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300';
       break;
     case 'blue':
-      colorClasses = 'bg-blue-100 text-blue-800';
+      colorClasses = 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300';
       break;
     case 'gray':
     default:
-      colorClasses = 'bg-gray-100 text-gray-800';
+      colorClasses = 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
       break;
   }
   return (
@@ -79,15 +79,14 @@ const Reports = () => {
       onClick={() => handlePageChange(page)}
       disabled={page === currentPage}
       className={`px-4 py-2 mx-1 text-sm font-medium rounded-lg transition duration-150
-        ${page === currentPage ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50'}`}
+        ${page === currentPage ? 'bg-indigo-600 text-white shadow-md' : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50'}`}
     >
       {label}
     </button>
   );
 
   return (
-    <div className="ml-64 pt-14 p-4 sm:p-8 bg-gray-50 dark:bg-gray-900 min-h-screen font-['Inter', sans-serif] transition-colors duration-300"
-      style={{ marginTop: '1cm' }}>
+    <div className="pt-4 p-4 sm:p-6 lg:p-8 bg-gray-50 dark:bg-gray-900 min-h-screen font-['Inter', sans-serif] transition-colors duration-300">
       <div className="max-w-7xl mx-auto">
 
         {/* Title */}
@@ -106,47 +105,49 @@ const Reports = () => {
             <Filter className="w-5 h-5 mr-2 text-indigo-600" />
             Report Filters
           </h2>
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-            <input type="text" placeholder="Farm Name" className="col-span-2 lg:col-span-1 p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" />
-            <input type="text" placeholder="dd/mm/yyyy (Start)" className="p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" onFocus={(e) => e.target.type = 'date'} onBlur={(e) => e.target.type = 'text'} />
-            <input type="text" placeholder="dd/mm/yyyy (End)" className="p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" onFocus={(e) => e.target.type = 'date'} onBlur={(e) => e.target.type = 'text'} />
-            <select className="col-span-2 lg:col-span-1 p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 appearance-none bg-white">
-              <option>All Issues</option>
-              <option>Potassium Deficiency</option>
-              <option>Water Stress</option>
-              <option>Pest Infestation</option>
-            </select>
-            <button className="col-span-2 lg:col-span-1 lg:hidden p-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition duration-150">
+          <div className="flex flex-col gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <input type="text" placeholder="Farm Name" className="p-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 bg-white dark:bg-gray-700 dark:text-gray-200" />
+              <input type="text" placeholder="Start Date" className="p-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 bg-white dark:bg-gray-700 dark:text-gray-200" onFocus={(e) => e.target.type = 'date'} onBlur={(e) => e.target.type = 'text'} />
+              <input type="text" placeholder="End Date" className="p-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 bg-white dark:bg-gray-700 dark:text-gray-200" onFocus={(e) => e.target.type = 'date'} onBlur={(e) => e.target.type = 'text'} />
+              <select className="p-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 appearance-none bg-white dark:bg-gray-700 dark:text-gray-200">
+                <option>All Issues</option>
+                <option>Potassium Deficiency</option>
+                <option>Water Stress</option>
+                <option>Pest Infestation</option>
+              </select>
+            </div>
+            <button className="w-full p-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition duration-150">
               Apply Filters
             </button>
           </div>
         </div>
 
         {/* Reports Table */}
-        <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden transition-colors duration-300">
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead className="bg-gray-50 dark:bg-gray-700">
                 <tr>
                   {['Report ID', 'Farm Name', 'Date', 'Major Issue', 'Severity', 'Status', 'Actions'].map(header => (
-                    <th key={header} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">{header}</th>
+                    <th key={header} className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap">{header}</th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                 {currentReports.map(report => (
-                  <tr key={report.id} className="hover:bg-gray-50 transition duration-100">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{report.id}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{report.farm}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{report.date}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{report.issue}</td>
+                  <tr key={report.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition duration-100">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{report.id}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{report.farm}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{report.date}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{report.issue}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm"><SeverityBadge severity={report.severity} /></td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{report.status}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{report.status}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center space-x-3">
-                        <button title="View Report" className="text-gray-500 hover:text-indigo-600 p-2 rounded-full hover:bg-gray-100 transition duration-150"><Eye className="w-5 h-5" /></button>
-                        <button title="Download Report" className="text-gray-500 hover:text-indigo-600 p-2 rounded-full hover:bg-gray-100 transition duration-150"><Download className="w-5 h-5" /></button>
-                        <button title="More Actions" className="text-gray-500 hover:text-indigo-600 p-2 rounded-full hover:bg-gray-100 transition duration-150"><MoreHorizontal className="w-5 h-5" /></button>
+                        <button title="View Report" className="text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition duration-150"><Eye className="w-5 h-5" /></button>
+                        <button title="Download Report" className="text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition duration-150"><Download className="w-5 h-5" /></button>
+                        <button title="More Actions" className="text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition duration-150"><MoreHorizontal className="w-5 h-5" /></button>
                       </div>
                     </td>
                   </tr>
