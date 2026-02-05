@@ -42,7 +42,7 @@ export default function CodeInput({ length = 6, value = '', onChange }) {
           onChange={(e) => handleChange(e, i)}
           onKeyDown={(e) => handleKeyDown(e, i)}
           maxLength={1}
-          className="w-12 h-12 text-center border rounded-md text-xl font-semibold"
+          className="w-12 h-12 text-center border border-gray-300 dark:border-gray-600 rounded-md text-xl font-semibold bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition-all"
           inputMode="text"
         />
       ))}
