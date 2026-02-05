@@ -21,7 +21,7 @@ export default function AuthLayout({ children, title }) {
   );
 
   const LeftPanel = () => (
-    <div className="flex flex-col justify-between p-8 md:p-16 w-full md:w-5/12 text-white h-screen bg-[#387637] relative overflow-hidden">
+    <div className="flex flex-col justify-between p-8 md:p-16 w-full md:w-5/12 text-white min-h-[300px] md:h-screen bg-[#387637] relative overflow-hidden">
       <div className="absolute inset-0 opacity-10 pointer-events-none">
         <div
           className="absolute -right-24 -bottom-24 text-[150px] transform rotate-12 select-none"
@@ -63,12 +63,12 @@ export default function AuthLayout({ children, title }) {
         </div>
       </div>
 
-      <p className="mt-16 text-sm opacity-70 relative z-10">© 2025 CocoGuard. All rights reserved.</p>
+      <p className="mt-16 text-sm opacity-70 relative z-10">© {new Date().getFullYear()} CocoGuard. All rights reserved.</p>
     </div>
   );
 
   const RightPanel = () => (
-    <div className="w-full md:w-7/12 p-8 md:p-16 flex items-center justify-center bg-white h-screen">
+    <div className="w-full md:w-7/12 p-8 pt-16 md:p-16 md:pt-24 flex items-center justify-center bg-white h-auto md:h-screen relative overflow-y-auto">
       <div className="w-full max-w-md">
         <h2 className="text-3xl font-bold text-gray-800 mb-2">{title || 'Authenticate'}</h2>
         {children}
@@ -77,7 +77,7 @@ export default function AuthLayout({ children, title }) {
   );
 
   return (
-    <div className="min-h-screen w-full flex font-[Inter] bg-gray-100">
+    <div className="min-h-screen w-full flex flex-col md:flex-row font-[Inter] bg-gray-100">
       {LeftPanel()}
       {RightPanel()}
     </div>

@@ -14,19 +14,22 @@ const STATS_DATA = [
     { title: "Total Farms Monitored", value: "12", color: 'border-green-500' },
     { title: "Critical Alerts", value: "3", color: 'border-red-500' },
     { title: "New Reports This Week", value: "5", color: 'border-blue-500' },
-    { title: "Overall Health Trend", value: (
-        <div className="flex items-center">
-            <span className="mr-1">&uarr;</span> 
-            <span className="text-xl text-green-500">Improving</span>
-        </div>
-    ), color: 'border-yellow-500' },
+    {
+        title: "Overall Health Trend", value: (
+            <div className="flex items-center">
+                <span className="mr-1">&uarr;</span>
+                <span className="text-xl text-green-500">Improving</span>
+            </div>
+        ), color: 'border-yellow-500'
+    },
 ];
 
 // Data for latest analysis reports
+const currentYear = new Date().getFullYear();
 const REPORTS_DATA = [
-    { farm: "Farm A - Plot 3", issue: "Major Issue", date: "2023-10-26", color: COLORS.alertRed, className: 'text-red-600 font-semibold' },
-    { farm: "Farm B - Plot 1", issue: "Nutrient Deficiency", date: "2023-10-25", color: COLORS.trendYellow, className: 'text-yellow-500' },
-    { farm: "Farm C - Plot 5", issue: "Minor Issue", date: "2023-10-24", color: COLORS.primaryGreen, className: 'text-green-500' },
+    { farm: "Farm A - Plot 3", issue: "Major Issue", date: `${currentYear}-10-26`, color: COLORS.alertRed, className: 'text-red-600 font-semibold' },
+    { farm: "Farm B - Plot 1", issue: "Nutrient Deficiency", date: `${currentYear}-10-25`, color: COLORS.trendYellow, className: 'text-yellow-500' },
+    { farm: "Farm C - Plot 5", issue: "Minor Issue", date: `${currentYear}-10-24`, color: COLORS.primaryGreen, className: 'text-green-500' },
 ];
 
 // Status Circle component
@@ -39,7 +42,7 @@ const StatusCircle = ({ color }) => (
 const Dashboard = () => {
     return (
         <div className="ml-64 pt-16 p-4 sm:p-8 bg-gray-100 min-h-screen"
-        style={{ marginTop: '1cm' }}>
+            style={{ marginTop: '1cm' }}>
             <div className="max-w-7xl mx-auto">
 
                 {/* Header Section */}
@@ -60,8 +63,8 @@ const Dashboard = () => {
                 {/* Stats Cards Grid */}
                 <section className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
                     {STATS_DATA.map((stat, index) => (
-                        <div 
-                            key={index} 
+                        <div
+                            key={index}
                             className={`bg-white p-5 rounded-xl shadow-lg border-b-4 ${stat.color} transition duration-300 hover:shadow-xl`}
                         >
                             <p className="text-sm font-medium text-gray-500 mb-1">{stat.title}</p>

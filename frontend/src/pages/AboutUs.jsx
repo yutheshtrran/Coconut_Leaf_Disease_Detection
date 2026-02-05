@@ -137,7 +137,7 @@ const AboutUs = () => {
       {/* Footer */}
       <div className="mt-16 text-center text-gray-600 border-t pt-6">
         <p className="text-sm font-medium">
-          © 2025 CocoGuard. All rights reserved. | Making agriculture smarter,
+          © {new Date().getFullYear()} CocoGuard. All rights reserved. | Making agriculture smarter,
           one farm at a time.
         </p>
       </div>
