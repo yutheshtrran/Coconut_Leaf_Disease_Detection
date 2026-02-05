@@ -1,130 +1,241 @@
 #!/usr/bin/env python
 """
-Quick diagnostics for the video analysis feature
-Run from ml/ directory: python check_video_api.py
+Quick setup, run, and API server for Coconut Leaf Disease Analysis
+Run from ml/ directory: python quick_start.py
 """
 
-import sys
 import os
+import sys
+import subprocess
+import argparse
+import traceback
 import json
 
-# Setup path
-ml_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, ml_dir)
-os.chdir(ml_dir)
+# -----------------------------
+# Helper Functions
+# -----------------------------
+def print_header(text):
+    print("\n" + "=" * 70)
+    print(f"  {text}")
+    print("=" * 70)
 
-print("=" * 70)
-print("COCONUT LEAF DISEASE API - DIAGNOSTIC CHECK")
-print("=" * 70)
-
-# 1. Check file structure
-print("\n1. Checking file structure...")
-required_files = [
-    "ai_api/predict_api.py",
-    "ai_api/requirements.txt",
-    "src/segmentation.py",
-    "src/video_service.py",
-    "src/inference.py",
-    "src/utils.py",
-    "config.yaml",
-]
-
-for f in required_files:
-    path = os.path.join(ml_dir, f)
-    status = "✓" if os.path.exists(path) else "✗"
-    print(f"   {status} {f}")
-
-# 2. Check Python packages
-print("\n2. Checking Python packages...")
-packages = [
-    ("cv2", "OpenCV"),
-    ("torch", "PyTorch"),
-    ("numpy", "NumPy"),
-    ("PIL", "Pillow"),
-    ("yaml", "PyYAML"),
-    ("flask", "Flask"),
-    ("flask_cors", "Flask-CORS"),
-]
-
-missing_packages = []
-for pkg_import, pkg_name in packages:
+def run_check():
+    """Run pre-flight diagnostic check"""
+    print_header("Running Diagnostic Check")
     try:
-        __import__(pkg_import)
-        print(f"   ✓ {pkg_name}")
-    except ImportError:
-        print(f"   ✗ {pkg_name} - MISSING")
-        missing_packages.append(pkg_name)
+        # Ensure ML paths are importable
+        BASE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src")
+        ML_DIR = os.path.dirname(BASE_DIR)
+        sys.path.insert(0, ML_DIR)
 
-# 3. Check ML modules
-print("\n3. Checking ML modules...")
-try:
-    from src.segmentation import TreeSegmenter
-    print("   ✓ TreeSegmenter")
-except Exception as e:
-    print(f"   ✗ TreeSegmenter - ERROR: {str(e)[:60]}")
+        # Check imports
+        from inference import predict, load_config, load_class_names
+        from reports.report_generator import generate_dummy_report
 
-try:
-    from src.video_service import VideoAnalyzer
-    print("   ✓ VideoAnalyzer")
-except Exception as e:
-    print(f"   ✗ VideoAnalyzer - ERROR: {str(e)[:60]}")
+        print("✓ All ML modules loaded successfully")
 
-try:
-    from src.utils import infer
-    print("   ✓ infer function")
-except Exception as e:
-    print(f"   ✗ infer - ERROR: {str(e)[:60]}")
-
-# 4. Check weights and config
-print("\n4. Checking model files...")
-files_to_check = [
-    ("weights/best_model.pth", "Model weights"),
-    ("config.yaml", "Configuration"),
-    ("logs/disease_info.json", "Disease info"),
-]
-
-for filepath, desc in files_to_check:
-    full_path = os.path.join(ml_dir, filepath)
-    if os.path.exists(full_path):
-        size = os.path.getsize(full_path)
-        if size > 1024*1024:
-            size_str = f"{size/(1024*1024):.1f}MB"
+        # Check model existence
+        MODEL_PATH = os.path.join(ML_DIR, "weights", "best_model.pth")
+        if os.path.exists(MODEL_PATH):
+            print("✓ Model file exists")
+            model_available = True
         else:
-            size_str = f"{size/1024:.1f}KB"
-        print(f"   ✓ {desc} ({size_str})")
+            print("⚠ Model file NOT found")
+            model_available = False
+
+        return model_available
+
+    except Exception as e:
+        print(f"✗ Check failed: {e}")
+        traceback.print_exc()
+        return False
+
+def install_deps():
+    """Install dependencies from requirements.txt"""
+    print_header("Installing Dependencies")
+    try:
+        pip_cmd = [sys.executable, "-m", "pip", "install", "-r", "ai_api/requirements.txt"]
+        print("Running: pip install -r ai_api/requirements.txt")
+        result = subprocess.run(pip_cmd)
+        if result.returncode == 0:
+            print("\n✓ Dependencies installed successfully")
+            return True
+        else:
+            print("\n✗ Failed to install dependencies")
+            return False
+    except Exception as e:
+        print(f"✗ Installation failed: {e}")
+        return False
+
+# -----------------------------
+# Flask API Setup
+# -----------------------------
+def start_api():
+    print_header("Starting Video Analysis API (Flask)")
+
+    from flask import Flask, request, jsonify, send_file
+    from flask_cors import CORS
+    import shutil
+
+    BASE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src")
+    ML_DIR = os.path.dirname(BASE_DIR)
+
+    sys.path.insert(0, ML_DIR)
+
+    from inference import predict, load_config, load_class_names
+    from reports.report_generator import generate_dummy_report
+
+    app = Flask(__name__)
+    CORS(app)
+
+    # Paths
+    MODEL_PATH = os.path.join(ML_DIR, "weights", "best_model.pth")
+    CONFIG_PATH = os.path.join(BASE_DIR, "config.yaml")
+    DISEASE_INFO_PATH = os.path.join(ML_DIR, "logs", "disease_info.json")
+
+    # Load config & class names
+    cfg = load_config(CONFIG_PATH)
+    CLASS_NAMES = load_class_names(cfg)
+
+    # Load disease info
+    DISEASE_INFO = {}
+    if os.path.exists(DISEASE_INFO_PATH):
+        try:
+            with open(DISEASE_INFO_PATH, "r") as f:
+                DISEASE_INFO = json.load(f)
+        except Exception as e:
+            print(f"[WARNING] Could not load disease_info.json: {e}")
+
+    # -----------------------------
+    # Health endpoint
+    # -----------------------------
+    @app.route("/health")
+    def health():
+        return jsonify({"status": "ok"})
+
+    # -----------------------------
+    # Prediction endpoint
+    # -----------------------------
+    @app.route("/predict", methods=["POST"])
+    def predict_api():
+        try:
+            if "file" not in request.files:
+                return jsonify({"error": "No file uploaded"}), 400
+            file = request.files["file"]
+            if file.filename == "":
+                return jsonify({"error": "Empty filename"}), 400
+
+            # Save temporary upload
+            upload_dir = os.path.join(ML_DIR, "uploads")
+            os.makedirs(upload_dir, exist_ok=True)
+            img_path = os.path.join(upload_dir, file.filename)
+            file.save(img_path)
+
+            # Run inference
+            output = predict(img_path)
+            os.remove(img_path)
+
+            confidence = float(output.get("confidence", 0.0))
+            percentage = round(confidence * 100, 2)
+            disease = output.get("disease", "Unknown")
+            disease_key = disease.lower()
+            disease_info = DISEASE_INFO.get(disease_key, {})
+
+            return jsonify({
+                "success": True,
+                "prediction": {
+                    "disease": disease,
+                    "confidence": confidence,
+                    "percentage": percentage,
+                    "description": disease_info.get("description", ""),
+                    "impact": disease_info.get("impact", ""),
+                    "remedy": disease_info.get("remedy", "No remedy available")
+                },
+                "all_diseases": CLASS_NAMES
+            })
+
+        except Exception as e:
+            print("❌ Exception during /predict")
+            traceback.print_exc()
+            return jsonify({"success": False, "error": str(e)}), 500
+
+    # -----------------------------
+    # Report endpoints
+    # -----------------------------
+    @app.route("/report/view/<report_id>")
+    def view_report(report_id):
+        pdf_path = generate_dummy_report(report_id)
+        return send_file(pdf_path, mimetype="application/pdf")
+
+    @app.route("/report/download/<report_id>")
+    def download_report(report_id):
+        pdf_path = generate_dummy_report(report_id)
+        return send_file(pdf_path, as_attachment=True)
+
+    print("🚀 API Server running at http://127.0.0.1:5000")
+    app.run(host="0.0.0.0", port=5000, debug=True)
+
+# -----------------------------
+# Endpoint Test
+# -----------------------------
+def test_endpoints():
+    import requests
+    import time
+
+    print_header("Testing Endpoints")
+    print("Make sure the API is running on http://127.0.0.1:5000")
+    print("Starting tests in 3 seconds...")
+    time.sleep(3)
+
+    try:
+        r = requests.get("http://127.0.0.1:5000/")
+        print("GET / status:", r.status_code)
+    except:
+        print("GET / failed")
+
+    try:
+        r = requests.get("http://127.0.0.1:5000/health")
+        print("GET /health status:", r.status_code)
+        print("Response:", r.json())
+    except Exception as e:
+        print("GET /health failed:", e)
+
+# -----------------------------
+# Main
+# -----------------------------
+def main():
+    parser = argparse.ArgumentParser(description="Quick Start for Video Analysis API")
+    parser.add_argument('action', nargs='?', choices=['check', 'install', 'run', 'test'],
+                        help='Action to perform')
+    args = parser.parse_args()
+
+    if args.action == 'check':
+        run_check()
+    elif args.action == 'install':
+        install_deps()
+    elif args.action == 'run':
+        if not run_check():
+            print("\n✗ Pre-flight check failed!")
+            sys.exit(1)
+        start_api()
+    elif args.action == 'test':
+        test_endpoints()
     else:
-        print(f"   ✗ {desc} - NOT FOUND")
+        # Interactive default
+        if run_check():
+            response = input("\n✓ All checks passed! Start API server? (y/n): ").lower()
+            if response == 'y':
+                start_api()
+            else:
+                print("Exiting.")
 
-# 5. API startup test
-print("\n5. Testing API startup...")
-try:
-    from ai_api.predict_api import app, USE_FASTAPI, VIDEO_AVAILABLE, INFER_AVAILABLE
-    
-    framework = "FastAPI" if USE_FASTAPI else "Flask"
-    print(f"   ✓ API initialized with {framework}")
-    print(f"   ✓ Video analysis available: {VIDEO_AVAILABLE}")
-    print(f"   ✓ Inference available: {INFER_AVAILABLE}")
-    
-    if not (VIDEO_AVAILABLE and INFER_AVAILABLE):
-        print("\n   ⚠ WARNING: Not all features available!")
-        if not VIDEO_AVAILABLE:
-            print("      - Video analysis will not work")
-        if not INFER_AVAILABLE:
-            print("      - Image prediction will not work")
-
-except Exception as e:
-    print(f"   ✗ API startup failed: {e}")
-    import traceback
-    print("\n" + traceback.format_exc())
-
-# 6. Summary
-print("\n" + "=" * 70)
-if missing_packages:
-    print(f"⚠ Missing packages: {', '.join(missing_packages)}")
-    print(f"   Install with: pip install -r ai_api/requirements.txt")
-else:
-    print("✓ All checks passed! API should be ready to run.")
-
-print("\n📝 To start the API, run:")
-print("   cd ml && python ai_api/run_server.py")
-print("=" * 70)
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nShutdown requested.")
+        sys.exit(0)
+    except Exception as e:
+        print(f"Error: {e}")
+        traceback.print_exc()
+        sys.exit(1)

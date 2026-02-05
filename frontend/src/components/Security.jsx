@@ -64,15 +64,14 @@ const Security = () => {
   return (
     // Adopted the modern, centered background layout from Profile.jsx
     <div className="bg-gray-50 min-h-screen flex flex-col items-center p-4 sm:p-8 pt-16">
-      
+
       {/* Dynamic Notification Component */}
       {notification && (
-        <div 
-          className={`fixed top-4 right-4 z-50 p-4 rounded-xl shadow-2xl flex items-center gap-3 transition-opacity duration-300 transform ${
-            notification.type === 'success' 
-              ? 'bg-green-600 text-white animate-pulse-once' 
+        <div
+          className={`fixed top-4 right-4 z-50 p-4 rounded-xl shadow-2xl flex items-center gap-3 transition-opacity duration-300 transform ${notification.type === 'success'
+              ? 'bg-green-600 text-white animate-pulse-once'
               : 'bg-red-600 text-white animate-pulse-once'
-          }`}
+            }`}
         >
           {notification.type === 'success' ? <CheckCircle size={20} /> : <AlertCircle size={20} />}
           <p className="font-semibold">{notification.message}</p>
@@ -85,13 +84,11 @@ const Security = () => {
 
       {/* Enhanced Card Styling */}
       <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8 w-full max-w-4xl">
-        
         <h2 className="text-2xl font-semibold text-gray-800 mb-6 pb-4 border-b border-gray-200">
           Change Password
         </h2>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          
           {/* Current Password */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1 flex items-center gap-2">
@@ -132,7 +129,6 @@ const Security = () => {
               />
             </div>
           </div>
-          
           <div className="text-sm text-gray-500 pt-2">
             Tip: Use a mix of upper/lowercase letters, numbers, and symbols for a strong password.
           </div>
@@ -144,24 +140,24 @@ const Security = () => {
           {/* Two-Factor Authentication Toggle (Enhanced UI) */}
           <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
             <div className="flex items-start gap-3">
-                <ShieldCheck size={24} className={twoFA ? "text-green-600" : "text-gray-400"} />
-                <div>
-                    <p className="font-semibold text-gray-800">Enable 2FA</p>
-                    <p className="text-sm text-gray-500 mt-0.5">
-                        Add an extra layer of security requiring a code from your phone.
-                    </p>
-                </div>
+              <ShieldCheck size={24} className={twoFA ? "text-green-600" : "text-gray-400"} />
+              <div>
+                <p className="font-semibold text-gray-800">Enable 2FA</p>
+                <p className="text-sm text-gray-500 mt-0.5">
+                  Add an extra layer of security requiring a code from your phone.
+                </p>
+              </div>
             </div>
-            
+
             {/* Custom Toggle Switch */}
             <label className="relative inline-flex items-center cursor-pointer">
-              <input 
-                type="checkbox" 
+              <input
+                type="checkbox"
                 checked={twoFA}
                 onChange={() => setTwoFA(!twoFA)}
                 className="sr-only peer"
               />
-              <div 
+              <div
                 className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"
               ></div>
             </label>

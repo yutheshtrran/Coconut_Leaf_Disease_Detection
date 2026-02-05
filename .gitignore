@@ -31,5 +31,8 @@ __pycache__/
 *.pyo
 *.pyd
 
-backend/env
-.env
+# ML data & artifacts
+ml/data/original/
+ml/data/processed/
+ml/models/
+ml/experiments/  
