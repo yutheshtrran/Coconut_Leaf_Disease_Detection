@@ -6,7 +6,7 @@ import { ThemeProvider } from "./context/ThemeContext.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Upload from "./pages/Upload.jsx";
 import Reports from "./pages/Reports.jsx";
-import Alerts from "./pages/Alerts.jsx";
+import AnalyseImages from "./pages/AnalyseImages.jsx";
 import Login from "./pages/Login.jsx";
 import Register from "./pages/Register.jsx";
 import VerifyEmail from "./pages/VerifyEmail.jsx";
@@ -80,10 +80,10 @@ function AppWrapper() {
               }
             />
             <Route
-              path="/alerts"
+              path="/analyse-images"
               element={
                 <ProtectedRoute>
-                  <Alerts />
+                  <AnalyseImages />
                 </ProtectedRoute>
               }
             />

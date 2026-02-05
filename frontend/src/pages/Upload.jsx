@@ -86,12 +86,14 @@ const Upload = () => {
         <div className="flex-1 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="relative">
-              <label className="block text-sm font-medium text-gray-800 mb-1">Farm</label>
-              <select value={farm} onChange={handleFarmChange} className="w-full pl-4 pr-10 py-2 border border-gray-300 rounded-lg shadow-sm focus:border-emerald-600 focus:ring-emerald-500 appearance-none bg-white text-gray-900">
-                <option value="" disabled>Select farm</option>
-                {farms.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-              </select>
-              <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-emerald-400 pointer-events-none" />
+              <label className="block text-sm font-medium text-gray-800 dark:text-gray-200 mb-1">Farm</label>
+              <div className="relative">
+                <select value={farm} onChange={handleFarmChange} className="w-full pl-4 pr-10 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:border-emerald-600 focus:ring-emerald-500 appearance-none bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                  <option value="" disabled>Select farm</option>
+                  {farms.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-emerald-400 pointer-events-none" />
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-800 mb-1">
