@@ -17,6 +17,7 @@ import UserManagement from "./pages/UserManagement.jsx";
 import AboutUs from "./pages/AboutUs.jsx";
 import MyFarms from "./pages/MyFarms.jsx";
 import Admin from "./pages/Admin.jsx";
+import ManageDiseases from "./pages/ManageDiseases.jsx";
 
 // Components
 import Sidebar from "./components/Sidebar.jsx";
@@ -53,6 +54,7 @@ function AppWrapper() {
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/resend-verification" element={<ResendVerification />} />
             <Route path="/about" element={<AboutUs />} />
+            <Route path="/diseases" element={<ProtectedRoute><ManageDiseases /></ProtectedRoute>} />
 
             {/* Protected routes - require login */}
             <Route

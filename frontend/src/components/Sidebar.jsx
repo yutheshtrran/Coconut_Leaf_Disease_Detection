@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { LayoutDashboard, FileText, Map, Users, TrendingUp, Info, LogOut, Menu, X, Leaf } from "lucide-react";
+import { LayoutDashboard, FileText, Map, Users, TrendingUp, Info, LogOut, Menu, X, Leaf, Bell } from "lucide-react";
 import NavLink from "./NavLink.jsx";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -11,6 +11,7 @@ const navItems = [
   { name: "Analyse Images", icon: Leaf, to: "/analyse-images" },
   { name: "Reports", icon: FileText, to: "/reports" },
   { name: "My Farms", icon: Map, to: "/MyFarms" },
+  { name: "Diseases", icon: FileText, to: "/diseases", adminOnly: true },
   { name: "User Management", icon: Users, to: "/users", adminOnly: true },
 ];
 

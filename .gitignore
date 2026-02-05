@@ -1,5 +1,8 @@
 # Ignore environment variables
 .env
+venv/
+.env/
+.venv/
 
 # Ignore dependency directories
 node_modules/
@@ -21,3 +24,9 @@ pnpm-debug.log*
 # VSCode and local config
 .vscode/
 *.local
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
