@@ -1,6 +1,8 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route, useLocation } from "react-router-dom";
 import { ThemeProvider } from "./context/ThemeContext.jsx";
+import "leaflet/dist/leaflet.css";
+
 
 // Pages
 import Dashboard from "./pages/Dashboard.jsx";

@@ -1,5 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import "leaflet/dist/leaflet.css";
+
 // During diagnosis we load a minimal app to confirm React mounts.
 // Swap back to ./App.jsx after verifying.
 import App from "./App.jsx";
