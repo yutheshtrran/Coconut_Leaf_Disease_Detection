@@ -129,11 +129,10 @@ const MyFarms = () => {
   const handleEditDetails = () => alert(`Action: Edit Details for ${selectedFarm.name}`);
 
   return (
-    <div className="flex bg-gray-100 dark:bg-gray-900 transition-colors duration-300" style={{ marginTop: '1cm' }}>
-      {/* Sidebar shifted right by 6cm */}
+    <div className="flex bg-gray-100 dark:bg-gray-900 transition-colors duration-300 pt-4 min-h-screen">
+      {/* Sidebar for farms list */}
       <aside
         className="w-72 bg-white dark:bg-gray-800 border-r border-gray-100 dark:border-gray-700 p-6 overflow-y-auto h-screen sticky top-0 transition-colors duration-300"
-        style={{ marginLeft: '6cm' }}
       >
         <div className="relative mb-6">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />

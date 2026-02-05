@@ -41,62 +41,60 @@ function DeleteConfirmModal({ user, onConfirm, onCancel, isLoading }) {
 }
 
 // Table component
+// Table component
 const UserTable = ({ users, onChangeRole, onDeactivate, onActivate, onDelete }) => (
-  <div className="overflow-x-auto">
-    <table className="min-w-full table-auto border-separate border-spacing-y-2">
-      <thead className="text-gray-500 text-sm uppercase bg-white border-b-2 border-gray-100">
-        <tr>
-          <th className="py-3 px-6 text-left">User ID</th>
-          <th className="py-3 px-6 text-left">Name</th>
-          <th className="py-3 px-6 text-left">Phone</th>
-          <th className="py-3 px-6 text-left">Email</th>
-          <th className="py-3 px-6 text-left">Role</th>
-          <th className="py-3 px-6 text-left">Status</th>
-          <th className="py-3 px-6 text-center">Actions</th>
-        </tr>
-      </thead>
-      <tbody className="bg-white">
-        {users.length === 0 ? (
-          <tr><td colSpan="7" className="py-4 px-6 text-center text-gray-500">No users found</td></tr>
-        ) : (
-          users.map((user, idx) => (
-            <tr key={user._id} className="shadow-sm hover:shadow-lg transition-shadow duration-200 border-b border-gray-100">
-              <td className="py-3 px-6 whitespace-nowrap text-sm font-medium text-gray-900">{user._id.slice(-6).toUpperCase()}</td>
-              <td className="py-3 px-6 whitespace-nowrap text-sm text-gray-700">{user.username}</td>
-              <td className="py-3 px-6 whitespace-nowrap text-sm text-gray-700">{user.phoneNumber || '-'}</td>
-              <td className="py-3 px-6 whitespace-nowrap text-sm text-gray-700">{user.email}</td>
-              <td className="py-3 px-6 whitespace-nowrap">
-                <div className="flex items-center gap-2">
-                  <span className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full ${getRoleStyle(user.role)}`}>
-                    {user.role && user.role.charAt(0).toUpperCase() + user.role.slice(1)}
-                  </span>
-                  <select value={user.role} onChange={(e) => onChangeRole(user, e.target.value)} className="border rounded px-2 py-1 text-xs">
+  <div className="overflow-x-auto -mx-4 sm:-mx-6">
+    <div className="inline-block min-w-full align-middle px-4 sm:px-6">
+      <table className="min-w-full table-auto text-sm">
+        <thead className="text-gray-500 dark:text-gray-400 text-xs uppercase bg-gray-50 dark:bg-gray-700">
+          <tr>
+            <th className="py-4 px-3 text-left">ID</th>
+            <th className="py-4 px-3 text-left">Name</th>
+            <th className="py-4 px-3 text-left hidden sm:table-cell">Phone</th>
+            <th className="py-4 px-3 text-left">Email</th>
+            <th className="py-4 px-3 text-left">Role</th>
+            <th className="py-4 px-3 text-left">Status</th>
+            <th className="py-4 px-3 text-center">Actions</th>
+          </tr>
+        </thead>
+        <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-700">
+          {users.length === 0 ? (
+            <tr><td colSpan="7" className="py-6 px-3 text-center text-gray-500 dark:text-gray-400">No users found</td></tr>
+          ) : (
+            users.map((user) => (
+              <tr key={user._id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition duration-150">
+                <td className="py-4 px-3 whitespace-nowrap font-medium text-gray-900 dark:text-gray-100">{user._id.slice(-6).toUpperCase()}</td>
+                <td className="py-4 px-3 whitespace-nowrap text-gray-700 dark:text-gray-300">{user.username}</td>
+                <td className="py-4 px-3 whitespace-nowrap text-gray-700 dark:text-gray-300 hidden sm:table-cell">{user.phoneNumber || '-'}</td>
+                <td className="py-4 px-3 whitespace-nowrap text-gray-700 dark:text-gray-300 max-w-[150px] truncate">{user.email}</td>
+                <td className="py-4 px-3 whitespace-nowrap">
+                  <select value={user.role} onChange={(e) => onChangeRole(user, e.target.value)} className="border dark:border-gray-600 rounded px-2 py-1 text-xs bg-white dark:bg-gray-700 dark:text-gray-200">
                     {['admin', 'farmer', 'agronomist', 'general'].map(r => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
                   </select>
-                </div>
-              </td>
-              <td className="py-3 px-6 whitespace-nowrap">
-                <span className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full ${getStatusStyle(user.status)}`}>
-                  {user.status && user.status.charAt(0).toUpperCase() + user.status.slice(1)}
-                </span>
-              </td>
-              <td className="py-3 px-6 whitespace-nowrap text-sm">
-                <div className="flex items-center justify-center gap-2">
-                  {user.status === 'active' ? (
-                    <button onClick={() => onDeactivate(user)} className="px-3 py-1 text-red-500 border border-red-500 rounded-lg hover:bg-red-50 text-xs font-medium">Deactivate</button>
-                  ) : (
-                    <button onClick={() => onActivate(user)} className="px-3 py-1 text-green-600 border border-green-600 rounded-lg hover:bg-green-50 text-xs font-medium">Activate</button>
-                  )}
-                  <button onClick={() => onDelete(user)} className="px-2 py-1 text-red-600 hover:bg-red-50 rounded">
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))
-        )}
-      </tbody>
-    </table>
+                </td>
+                <td className="py-4 px-3 whitespace-nowrap">
+                  <span className={`inline-flex items-center px-2.5 py-1 text-xs font-semibold rounded-full ${getStatusStyle(user.status)}`}>
+                    {user.status && user.status.charAt(0).toUpperCase() + user.status.slice(1)}
+                  </span>
+                </td>
+                <td className="py-4 px-3 whitespace-nowrap">
+                  <div className="flex items-center justify-center gap-2">
+                    {user.status === 'active' ? (
+                      <button onClick={() => onDeactivate(user)} className="px-3 py-1 text-red-500 border border-red-500 rounded text-xs font-medium hover:bg-red-50 dark:hover:bg-red-900/30 transition">Deactivate</button>
+                    ) : (
+                      <button onClick={() => onActivate(user)} className="px-3 py-1 text-green-600 border border-green-600 rounded text-xs font-medium hover:bg-green-50 dark:hover:bg-green-900/30 transition">Activate</button>
+                    )}
+                    <button onClick={() => onDelete(user)} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
   </div>
 );
 
@@ -142,9 +140,8 @@ const Pagination = ({ currentPage, setCurrentPage, totalPages }) => {
         <button
           key={page}
           onClick={() => setCurrentPage(page)}
-          className={`px-3 py-2 text-sm font-semibold rounded-lg ${
-            currentPage === page ? 'bg-black text-white' : 'text-gray-700 hover:bg-gray-100'
-          }`}
+          className={`px-3 py-2 text-sm font-semibold rounded-lg ${currentPage === page ? 'bg-black text-white' : 'text-gray-700 hover:bg-gray-100'
+            }`}
         >
           {page}
         </button>
@@ -257,9 +254,9 @@ const UserManagement = () => {
     return users.filter(u => {
       const roleOk = selectedRole === 'All Roles' || u.role === selected;
       const q = searchQuery.trim().toLowerCase();
-      const searchOk = !q || 
+      const searchOk = !q ||
         (u._id && u._id.toLowerCase().includes(q)) ||
-        (u.username && u.username.toLowerCase().includes(q)) || 
+        (u.username && u.username.toLowerCase().includes(q)) ||
         (u.email && u.email.toLowerCase().includes(q)) ||
         (u.phoneNumber && u.phoneNumber.toLowerCase().includes(q));
       return roleOk && searchOk;
@@ -270,45 +267,43 @@ const UserManagement = () => {
   const paginatedUsers = filtered.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 sm:p-8 font-sans">
-      <div style={{ marginLeft: '5cm' }}>
-        <div className="max-w-7xl mx-auto bg-white rounded-xl shadow-lg p-6 sm:p-8">
-          {/* Header */}
-          <div className="flex justify-between items-center mb-6 border-b pb-4">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">User Access and Roles</h1>
-            <div className="flex items-center gap-2">
-              <input value={promoteEmail} onChange={(e) => setPromoteEmail(e.target.value)} placeholder="Promote by email" className="px-3 py-2 border rounded-lg" />
-              <button onClick={async () => {
-                if (!promoteEmail.trim()) return;
-                try {
-                  const { data } = await API.put('/users/promote', { email: promoteEmail.trim() });
-                  setUsers(prev => prev.map(u => u.email === promoteEmail.trim() ? data.user : u));
-                  setPromoteEmail('');
-                  show('success', 'Promoted to admin');
-                } catch (err) {
-                  show('error', err?.response?.data?.message || 'Promotion failed');
-                }
-              }} className="px-4 py-2 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition duration-150">Promote</button>
-            </div>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 font-sans">
+      <div className="max-w-full bg-white dark:bg-gray-800 rounded-xl shadow-lg p-4 sm:p-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 pb-3 border-b border-gray-200 dark:border-gray-700 gap-3">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">User Access and Roles</h1>
+          <div className="flex items-center gap-2">
+            <input value={promoteEmail} onChange={(e) => setPromoteEmail(e.target.value)} placeholder="Promote by email" className="px-2 py-1.5 border dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-gray-200 w-40" />
+            <button onClick={async () => {
+              if (!promoteEmail.trim()) return;
+              try {
+                const { data } = await API.put('/users/promote', { email: promoteEmail.trim() });
+                setUsers(prev => prev.map(u => u.email === promoteEmail.trim() ? data.user : u));
+                setPromoteEmail('');
+                show('success', 'Promoted to admin');
+              } catch (err) {
+                show('error', err?.response?.data?.message || 'Promotion failed');
+              }
+            }} className="px-4 py-2 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition duration-150">Promote</button>
           </div>
-
-          {!isAdmin ? (
-            <div className="p-4 mb-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">You do not have permission to view this page.</div>
-          ) : (
-            <>
-              <Filters selectedRole={selectedRole} setSelectedRole={setSelectedRole} searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
-              {notif && <div className={`mb-4 p-3 rounded ${notif.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{notif.message}</div>}
-              {loading ? (
-                <div className="text-center py-8">Loading...</div>
-              ) : (
-                <>
-                  <UserTable users={paginatedUsers} onChangeRole={onChangeRole} onDeactivate={onDeactivate} onActivate={onActivate} onDelete={onDelete} />
-                  <Pagination currentPage={currentPage} setCurrentPage={setCurrentPage} totalPages={totalPages} />
-                </>
-              )}
-            </>
-          )}
         </div>
+
+        {!isAdmin ? (
+          <div className="p-4 mb-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">You do not have permission to view this page.</div>
+        ) : (
+          <>
+            <Filters selectedRole={selectedRole} setSelectedRole={setSelectedRole} searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
+            {notif && <div className={`mb-4 p-3 rounded ${notif.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{notif.message}</div>}
+            {loading ? (
+              <div className="text-center py-8">Loading...</div>
+            ) : (
+              <>
+                <UserTable users={paginatedUsers} onChangeRole={onChangeRole} onDeactivate={onDeactivate} onActivate={onActivate} onDelete={onDelete} />
+                <Pagination currentPage={currentPage} setCurrentPage={setCurrentPage} totalPages={totalPages} />
+              </>
+            )}
+          </>
+        )}
       </div>
 
       {deleteTarget && (

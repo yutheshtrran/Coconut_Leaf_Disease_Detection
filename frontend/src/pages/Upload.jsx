@@ -74,7 +74,7 @@ const Upload = () => {
   };
 
   return (
-    <div className="ml-64 pt-16 p-8 bg-gray-50 min-h-screen">
+    <div className="pt-4 p-4 sm:p-6 lg:p-8 bg-gray-50 dark:bg-gray-900 min-h-screen">
       <h1 className="text-3xl font-bold text-emerald-800 mb-6">Upload Drone Images</h1>
       <p className="text-gray-700 mb-6">
         Upload leaf or drone images for automated plantation health analysis.

@@ -41,8 +41,7 @@ const StatusCircle = ({ color }) => (
 
 const Dashboard = () => {
     return (
-        <div className="ml-64 pt-16 p-4 sm:p-8 bg-gray-100 dark:bg-gray-900 min-h-screen transition-colors duration-300"
-            style={{ marginTop: '1cm' }}>
+        <div className="pt-4 p-4 sm:p-6 lg:p-8 bg-gray-100 dark:bg-gray-900 min-h-screen transition-colors duration-300">
             <div className="max-w-7xl mx-auto">
 
                 {/* Header Section */}
