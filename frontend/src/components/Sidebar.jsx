@@ -11,7 +11,7 @@ const navItems = [
   { name: "Analyse Images", icon: Leaf, to: "/analyse-images" },
   { name: "Reports", icon: FileText, to: "/reports" },
   { name: "My Farms", icon: Map, to: "/MyFarms" },
-  { name: "Diseases", icon: FileText, to: "/diseases", adminOnly: true },
+  { name: "Add New Disease", icon: FileText, to: "/diseases", adminOnly: true },
   { name: "User Management", icon: Users, to: "/users", adminOnly: true },
 ];
 
