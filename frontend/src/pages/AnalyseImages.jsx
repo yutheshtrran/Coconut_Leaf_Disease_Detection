@@ -2,11 +2,11 @@ import React, { useState, useRef } from "react";
 import { Upload, Image as ImageIcon, Loader2, AlertCircle, CheckCircle, Leaf, RefreshCw, Trash2 } from "lucide-react";
 
 const AnalyseImages = () => {
-    const [selectedFiles, setSelectedFiles] = useState([]); // For multiple files
-    const [previewUrls, setPreviewUrls] = useState([]); // For multiple previews
+    const [selectedFiles, setSelectedFiles] = useState([]);
+    const [previewUrls, setPreviewUrls] = useState([]);
     const [isDragActive, setIsDragActive] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [results, setResults] = useState([]); // Array of results
+    const [results, setResults] = useState([]);
     const [error, setError] = useState(null);
     const fileInputRef = useRef(null);
 
@@ -58,25 +58,37 @@ const AnalyseImages = () => {
         setError(null);
         setResults([]);
 
-        const formData = new FormData();
-        selectedFiles.forEach((file, idx) => formData.append(`file_${idx}`, file));
-
         try {
-            const response = await fetch("http://127.0.0.1:5000/predict", {
-                method: "POST",
-                body: formData,
-            });
+            for (const file of selectedFiles) {
+                const formData = new FormData();
+                formData.append("file", file); // Ensure backend expects 'file'
 
-            if (!response.ok) {
-                throw new Error("Failed to analyse images. Please try again.");
+                const response = await fetch("http://127.0.0.1:5000/predict", {
+                    method: "POST",
+                    body: formData,
+                });
+
+                if (!response.ok) {
+                    const msg = `Prediction failed for ${file.name} (status ${response.status})`;
+                    console.error(msg);
+                    setError(msg);
+                    continue;
+                }
+
+                const data = await response.json();
+
+                // Handle different shapes of backend response
+                const pred = data?.prediction || data;
+                const diseaseName = pred?.disease || pred?.predicted_class || 'Unknown';
+                const confidence = pred?.confidence ?? pred?.percentage ?? 0;
+                const severity = pred?.severity_level ?? null;
+                const remedy = pred?.remedy ?? null;
+
+                setResults(prev => [...prev, { disease: diseaseName, confidence, severity, remedy }]);
             }
-
-            const data = await response.json();
-            // Ensure results array matches number of selected files
-            setResults(Array.isArray(data) ? data : [data]);
         } catch (err) {
             console.error("Prediction error:", err);
-            setError(err.message || "Failed to analyse images. Please ensure the ML server is running.");
+            setError(err.message || "Failed to analyse images. Make sure the ML server is running.");
         } finally {
             setLoading(false);
         }
@@ -87,9 +99,7 @@ const AnalyseImages = () => {
         setPreviewUrls([]);
         setResults([]);
         setError(null);
-        if (fileInputRef.current) {
-            fileInputRef.current.value = "";
-        }
+        if (fileInputRef.current) fileInputRef.current.value = "";
     };
 
     const getSeverityColor = (severity) => {
@@ -115,14 +125,13 @@ const AnalyseImages = () => {
             </p>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-6xl">
-                {/* Left: Upload Section */}
+                {/* Upload Section */}
                 <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 p-6 transition-colors duration-300">
                     <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-100 mb-4 flex items-center gap-2">
                         <Upload size={20} className="text-green-600 dark:text-green-400" />
                         Upload Images
                     </h2>
 
-                    {/* Drag & Drop Zone */}
                     <div
                         onDragEnter={handleDragEnter}
                         onDragLeave={handleDragLeave}
@@ -142,16 +151,11 @@ const AnalyseImages = () => {
                             onChange={handleFileSelect}
                             className="hidden"
                         />
-
                         {previewUrls.length > 0 ? (
                             <div className="space-y-4">
                                 {previewUrls.map((url, idx) => (
                                     <div key={idx} className="space-y-1">
-                                        <img
-                                            src={url}
-                                            alt={`Preview ${idx + 1}`}
-                                            className="max-h-64 mx-auto rounded-lg shadow-md object-contain"
-                                        />
+                                        <img src={url} alt={`Preview ${idx + 1}`} className="max-h-64 mx-auto rounded-lg shadow-md object-contain" />
                                         <p className="text-sm text-gray-600 dark:text-gray-400">{selectedFiles[idx]?.name}</p>
                                     </div>
                                 ))}
@@ -174,7 +178,6 @@ const AnalyseImages = () => {
                         )}
                     </div>
 
-                    {/* Action Buttons */}
                     <div className="flex gap-3 mt-6">
                         <button
                             onClick={handleAnalyse}
@@ -204,7 +207,6 @@ const AnalyseImages = () => {
                         )}
                     </div>
 
-                    {/* Error Message */}
                     {error && (
                         <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start gap-3">
                             <AlertCircle size={20} className="text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
@@ -213,7 +215,7 @@ const AnalyseImages = () => {
                     )}
                 </div>
 
-                {/* Right: Results Section */}
+                {/* Results Section */}
                 <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 p-6 transition-colors duration-300">
                     <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-100 mb-4 flex items-center gap-2">
                         <CheckCircle size={20} className="text-green-600 dark:text-green-400" />
@@ -222,45 +224,45 @@ const AnalyseImages = () => {
 
                     {results.length > 0 ? (
                         <div className="space-y-6">
-                            {results.map((result, idx) => (
+                            {results.map((res, idx) => (
                                 <div key={idx} className="space-y-4 border-b border-gray-200 dark:border-gray-600 pb-4">
-                                    {/* Disease Detected */}
                                     <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-5 border border-gray-200 dark:border-gray-600">
                                         <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Detected Disease</p>
                                         <p className="text-2xl font-bold text-gray-800 dark:text-gray-100 capitalize">
-                                            {result.predicted_class?.replace(/_/g, ' ') || result.disease?.replace(/_/g, ' ') || 'Unknown'}
+                                            {res.disease.replace(/_/g, ' ')}
                                         </p>
                                     </div>
 
-                                    {/* Confidence */}
                                     <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-5 border border-gray-200 dark:border-gray-600">
                                         <div className="flex justify-between items-center mb-2">
                                             <p className="text-sm text-gray-500 dark:text-gray-400">Confidence Level</p>
                                             <span className="text-lg font-bold text-gray-800 dark:text-gray-100">
-                                                {((result.confidence || 0) * 100).toFixed(1)}%
+                                                {(res.confidence * 100).toFixed(1)}%
                                             </span>
                                         </div>
                                         <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-3">
-                                            <div
-                                                className={`h-3 rounded-full transition-all duration-500 ${getConfidenceColor(result.confidence)}`}
-                                                style={{ width: `${(result.confidence || 0) * 100}%` }}
-                                            />
+                                            <div className={`h-3 rounded-full transition-all duration-500 ${getConfidenceColor(res.confidence)}`} style={{ width: `${res.confidence * 100}%` }} />
                                         </div>
                                     </div>
 
-                                    {/* Severity */}
-                                    {result.severity_level && (
+                                    {res.severity && (
                                         <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-5 border border-gray-200 dark:border-gray-600">
                                             <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">Severity Level</p>
-                                            <span className={`inline-block px-4 py-2 rounded-full font-semibold ${getSeverityColor(result.severity_level)}`}>
-                                                {result.severity_level}
+                                            <span className={`inline-block px-4 py-2 rounded-full font-semibold ${getSeverityColor(res.severity)}`}>
+                                                {res.severity}
                                             </span>
+                                        </div>
+                                    )}
+
+                                    {res.remedy && (
+                                        <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-5 border border-gray-200 dark:border-gray-600">
+                                            <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">Suggested Remedy</p>
+                                            <p className="text-gray-800 dark:text-gray-100">{res.remedy}</p>
                                         </div>
                                     )}
                                 </div>
                             ))}
 
-                            {/* Analyse Again Button */}
                             <button
                                 onClick={handleReset}
                                 className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-medium rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition duration-200"
