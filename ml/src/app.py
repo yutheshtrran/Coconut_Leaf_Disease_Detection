@@ -15,6 +15,16 @@ import uuid
 import time
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
+import cv2
+import numpy as np
+
+# Try to import ultralytics for YOLO
+try:
+    from ultralytics import YOLO
+    YOLO_AVAILABLE = True
+except ImportError:
+    YOLO_AVAILABLE = False
+    print("[WARNING] Ultralytics not available for drone processing")
 
 # ------------------------------------------------------------------
 # Fix Python path so ml/ and ml/reports/ are importable
@@ -154,8 +164,155 @@ def analyze_video():
         return jsonify({"success": False, "error": str(e)}), 500
 
 # ------------------------------------------------------------------
-# Report routes
+# Drone Image Processing API
 # ------------------------------------------------------------------
+@app.route("/process-drone-images", methods=["POST"])
+def process_drone_images():
+    if not YOLO_AVAILABLE:
+        return jsonify({"success": False, "error": "YOLO not available for drone processing"}), 500
+    
+    try:
+        if "files" not in request.files:
+            return jsonify({"error": "No files uploaded"}), 400
+        
+        files = request.files.getlist("files")
+        if len(files) < 2:
+            return jsonify({"error": "Need at least 2 images for stitching"}), 400
+        
+        # Save uploaded images temporarily
+        image_paths = []
+        for file in files:
+            if file.filename == "":
+                continue
+            img_path = os.path.join(UPLOAD_DIR, f"{uuid.uuid4()}_{file.filename}")
+            file.save(img_path)
+            image_paths.append(img_path)
+        
+        if len(image_paths) < 2:
+            return jsonify({"error": "Not enough valid images"}), 400
+        
+        try:
+            # Import required modules
+            from drone_pipeline import stitch_images, detect_trees_yolo, annotate_image
+            from segmentation import TreeSegmenter
+            
+            # Stitch images using drone_pipeline
+            images = []
+            for path in image_paths:
+                img = cv2.imread(path)
+                if img is not None:
+                    images.append(img)
+            
+            if len(images) < 2:
+                return jsonify({"error": "Failed to load images"}), 400
+            
+            panorama = stitch_images(image_paths)
+            
+            if panorama is None:
+                return jsonify({"error": "Failed to create panorama"}), 400
+            
+            # Save panorama temporarily
+            panorama_path = os.path.join(UPLOAD_DIR, f"panorama_{uuid.uuid4()}.jpg")
+            cv2.imwrite(panorama_path, panorama)
+            
+            # Use TreeSegmenter for initial tree detection
+            segmenter = TreeSegmenter()
+            segmentation_result = segmenter.process_frame(panorama)
+            
+            # Use YOLO for additional object detection
+            yolo_results = detect_trees_yolo(panorama, 'yolov8n-seg.pt')
+            
+            # Combine results: Use TreeSegmenter results as primary, enhance with YOLO if needed
+            annotated = panorama.copy()
+            tree_data = []
+            
+            # Process TreeSegmenter results
+            for idx, region in enumerate(segmentation_result['tree_regions']):
+                x, y, w, h = region['bbox']
+                cx, cy = region['centroid']
+                
+                # Draw red circle
+                radius = min(w, h) // 2
+                cv2.circle(annotated, (cx, cy), radius, (0, 0, 255), 2)
+                
+                # Add tree ID
+                tree_id = f"Tree_{idx+1}"
+                cv2.putText(annotated, tree_id, (cx - radius, cy - radius - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
+                
+                # Classify tree health if possible
+                disease, confidence = segmenter.classify_tree_health(panorama, region)
+                health_percent = segmenter.calculate_health_percentage(disease, confidence)
+                
+                tree_data.append({
+                    'id': tree_id,
+                    'bbox': [x, y, x+w, y+h],
+                    'centroid': [cx, cy],
+                    'area': region['area'],
+                    'disease': disease,
+                    'confidence': confidence,
+                    'health_percentage': health_percent
+                })
+            
+            # If no trees found with TreeSegmenter, try YOLO results
+            if len(tree_data) == 0 and yolo_results and len(yolo_results) > 0:
+                boxes = yolo_results[0].boxes
+                for i, box in enumerate(boxes):
+                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                    x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+                    
+                    # Draw red circle
+                    cx = (x1 + x2) // 2
+                    cy = (y1 + y2) // 2
+                    radius = min(x2 - x1, y2 - y1) // 2
+                    cv2.circle(annotated, (cx, cy), radius, (0, 0, 255), 2)
+                    
+                    # Add tree ID
+                    tree_id = f"Tree_{i+1}"
+                    cv2.putText(annotated, tree_id, (cx - radius, cy - radius - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
+                    
+                    tree_data.append({
+                        'id': tree_id,
+                        'bbox': [x1, y1, x2, y2],
+                        'confidence': float(box.conf[0].cpu().numpy()),
+                        'source': 'yolo'
+                    })
+            
+            # Save annotated image
+            annotated_path = os.path.join(UPLOAD_DIR, f"annotated_{uuid.uuid4()}.jpg")
+            cv2.imwrite(annotated_path, annotated)
+            
+            # Convert annotated image to base64 for frontend
+            import base64
+            with open(annotated_path, "rb") as img_file:
+                annotated_b64 = base64.b64encode(img_file.read()).decode('utf-8')
+            
+            # Prepare response data
+            response_data = {
+                "success": True,
+                "panorama_path": panorama_path,
+                "annotated_image": f"data:image/jpeg;base64,{annotated_b64}",
+                "tree_data": tree_data,
+                "num_trees": len(tree_data),
+                "segmentation_stats": {
+                    "total_trees_segmented": segmentation_result['num_trees'],
+                    "healthy_trees": segmentation_result['healthy_count'],
+                    "diseased_trees": segmentation_result['diseased_count'],
+                    "health_percentage": segmentation_result['health_percentage'],
+                    "estimated_farm_size": segmentation_result['farm_size']
+                }
+            }
+            
+            return jsonify(response_data)
+        
+        finally:
+            # Clean up temporary files
+            for path in image_paths:
+                if os.path.exists(path):
+                    os.remove(path)
+    
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
 @app.route("/report/view/<report_id>")
 def view_report(report_id):
     try:
@@ -180,6 +337,7 @@ def root():
     endpoints = [
         "/predict",
         "/analyze-video",
+        "/process-drone-images",
         "/report/view/<id>",
         "/report/download/<id>"
     ]
@@ -187,7 +345,7 @@ def root():
 
 @app.route("/health", methods=["GET"])
 def health():
-    return jsonify({"status": "ok", "ML_modules": ML_MODULES_OK, "video_available": VIDEO_AVAILABLE})
+    return jsonify({"status": "ok", "ML_modules": ML_MODULES_OK, "video_available": VIDEO_AVAILABLE, "yolo_available": YOLO_AVAILABLE})
 
 # ------------------------------------------------------------------
 # Quickstart / helper functions

@@ -38,11 +38,11 @@ class TreeSegmenter:
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.image_size = self.config.get('image_size', 224)
         
-        # Load disease model for leaf classification
-        self.disease_model = self._load_disease_model()
-        
         # Load class names
         self.class_names = self._load_class_names()
+        
+        # Load disease model for leaf classification
+        self.disease_model = self._load_disease_model()
         
         # Transformation pipeline
         self.transform = transforms.Compose([
@@ -63,6 +63,19 @@ class TreeSegmenter:
             if os.path.exists(weights_path):
                 checkpoint = torch.load(weights_path, map_location=self.device)
                 if isinstance(checkpoint, dict):
+                    # Check if checkpoint has fc layer and adjust class_names accordingly
+                    if 'fc.weight' in checkpoint:
+                        num_classes_in_checkpoint = checkpoint['fc.weight'].shape[0]
+                        if num_classes_in_checkpoint != len(self.class_names):
+                            print(f"Warning: Checkpoint has {num_classes_in_checkpoint} classes, but config has {len(self.class_names)}. Using checkpoint's class count.")
+                            # Adjust class_names to match checkpoint
+                            if len(self.class_names) > num_classes_in_checkpoint:
+                                self.class_names = self.class_names[:num_classes_in_checkpoint]
+                            else:
+                                # Pad with generic names if needed
+                                while len(self.class_names) < num_classes_in_checkpoint:
+                                    self.class_names.append(f"Class_{len(self.class_names)}")
+                    
                     model.fc = torch.nn.Linear(model.fc.in_features, len(self.class_names))
                     model.load_state_dict({k.replace('module.', ''): v for k, v in checkpoint.items()}, strict=False)
                 else:
