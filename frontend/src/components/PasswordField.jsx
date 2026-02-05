@@ -12,12 +12,12 @@ export default function PasswordField({ value, onChange, placeholder, id, name, 
         onChange={onChange}
         placeholder={placeholder}
         required={required}
-        className={`${className || 'w-full px-4 py-3 border border-gray-300 rounded-lg'} pr-10`}
+        className={`${className || 'w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'} pr-10`}
       />
       <button
         type="button"
         onClick={() => setShow(!show)}
-        className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+        className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
         aria-label={show ? 'Hide password' : 'Show password'}
       >
         {show ? (
@@ -34,3 +34,4 @@ export default function PasswordField({ value, onChange, placeholder, id, name, 
     </div>
   );
 }
+

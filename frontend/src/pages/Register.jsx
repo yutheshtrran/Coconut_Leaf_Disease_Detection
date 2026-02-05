@@ -91,15 +91,15 @@ const Register = () => {
       {/* Single Toast for notifications */}
       <Toast type={toastType} message={message} onClose={() => setMessage('')} />
       <div className="w-full max-w-md">
-        <p className="text-gray-500 mb-8">Register to start protecting your coconut farms.</p>
+        <p className="text-gray-500 dark:text-gray-400 mb-8">Register to start protecting your coconut farms.</p>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">User Type</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">User Type</label>
             <select
               value={role}
               onChange={(e) => setRole(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-[#387637] focus:border-[#387637] transition duration-150"
+              className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:ring-[#387637] focus:border-[#387637] transition duration-150 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
             >
               <option value="farmer">Farmer</option>
               <option value="agronomist">Agronomist</option>
@@ -108,24 +108,24 @@ const Register = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Username</label>
             <input
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-[#387637] focus:border-[#387637] transition duration-150"
+              className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:ring-[#387637] focus:border-[#387637] transition duration-150 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
               placeholder="Your username"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className={`w-full px-4 py-3 border ${emailError ? 'border-red-500' : 'border-gray-300'} rounded-lg shadow-sm focus:ring-[#387637] focus:border-[#387637] transition duration-150`}
+              className={`w-full px-4 py-3 border ${emailError ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} rounded-lg shadow-sm focus:ring-[#387637] focus:border-[#387637] transition duration-150 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100`}
               placeholder="you@example.com"
               required
             />
@@ -133,22 +133,22 @@ const Register = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Password</label>
             <PasswordField
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className={`w-full px-4 py-3 border ${passwordError ? 'border-red-500' : 'border-gray-300'} rounded-lg shadow-sm focus:ring-[#387637] focus:border-[#387637] transition duration-150`}
+              className={`w-full px-4 py-3 border ${passwordError ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} rounded-lg shadow-sm focus:ring-[#387637] focus:border-[#387637] transition duration-150 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100`}
               placeholder="Create a password"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Confirm password</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Confirm password</label>
             <PasswordField
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className={`w-full px-4 py-3 border ${passwordError ? 'border-red-500' : 'border-gray-300'} rounded-lg shadow-sm focus:ring-[#387637] focus:border-[#387637] transition duration-150`}
+              className={`w-full px-4 py-3 border ${passwordError ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} rounded-lg shadow-sm focus:ring-[#387637] focus:border-[#387637] transition duration-150 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100`}
               placeholder="Confirm your password"
               required
             />
@@ -195,8 +195,8 @@ const Register = () => {
             {/* Resend removed — registration flow requires initial verification code only */}
           </div>
         ) : (
-          <div className="mt-6 text-sm text-center">
-            Already have an account? <Link to="/login" className="text-[#387637] font-medium">Sign in</Link>
+          <div className="mt-6 text-sm text-center text-gray-600 dark:text-gray-400">
+            Already have an account? <Link to="/login" className="text-[#387637] dark:text-green-400 font-medium">Sign in</Link>
           </div>
         )}
       </div>

@@ -3,6 +3,7 @@ const User = require('../models/User');
 require('dotenv').config();
 const crypto = require('crypto');
 const { sendMail } = require('../services/emailService');
+const { getVerificationEmailTemplate } = require('../utils/emailTemplates');
 const PendingUser = require('../models/PendingUser');
 const bcrypt = require('bcrypt');
 
@@ -14,7 +15,7 @@ const signRefreshToken = (userId) => jwt.sign({ id: userId }, process.env.JWT_SE
 
 // generate alphanumeric code of given length
 function generateCode(length = 6) {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  const chars = '0123456789';
   let ret = '';
   for (let i = 0; i < length; i++) {
     const idx = crypto.randomInt(0, chars.length);
@@ -55,9 +56,10 @@ exports.startRegister = async (req, res) => {
 
     // send code via email
     try {
-      const subject = 'Your registration verification code';
+      const subject = 'Coco Guard Verification Code';
       const text = `Your verification code is: ${code}. It expires in 15 minutes.`;
-      await sendMail({ to: email, subject, text });
+      const html = getVerificationEmailTemplate(code, 'Registration');
+      await sendMail({ to: email, subject, text, html });
     } catch (mailErr) {
       console.error('Error sending registration code', mailErr);
     }
@@ -123,9 +125,10 @@ exports.resendPendingCode = async (req, res) => {
     await pending.save();
 
     try {
-      const subject = 'Your registration verification code';
+      const subject = 'Coco Guard Verification Code';
       const text = `Your verification code is: ${code}. It expires in 15 minutes.`;
-      await sendMail({ to: email, subject, text });
+      const html = getVerificationEmailTemplate(code, 'Registration');
+      await sendMail({ to: email, subject, text, html });
     } catch (mailErr) {
       console.error('Error sending registration code', mailErr);
     }
@@ -286,10 +289,11 @@ exports.forgotPassword = async (req, res) => {
     await user.save();
 
     // send code via email
-    const subject = 'Your password reset code';
+    const subject = 'Coco Guard Verification Code';
     const text = `Your password reset code is: ${code}. It expires in 1 hour.`;
+    const html = getVerificationEmailTemplate(code, 'Password Reset');
     try {
-      await sendMail({ to: user.email, subject, text });
+      await sendMail({ to: user.email, subject, text, html });
     } catch (mailErr) {
       console.error('Error sending reset code email', mailErr);
     }
@@ -336,10 +340,12 @@ exports.resendVerification = async (req, res) => {
     user.verifyCodeExpires = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
     await user.save();
 
-    const subject = 'Your verification code';
+
+    const subject = 'Coco Guard Verification Code';
     const text = `Your verification code is: ${code}. It expires in 24 hours.`;
+    const html = getVerificationEmailTemplate(code, 'Verification');
     try {
-      await sendMail({ to: user.email, subject, text });
+      await sendMail({ to: user.email, subject, text, html });
     } catch (mailErr) {
       console.error('Verification resend email error:', mailErr);
     }
