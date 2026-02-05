@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { LogOut } from 'lucide-react';
+import ThemeToggle from './ThemeToggle';
 
 // Inline SVG icons
 const MenuIcon = (props) => (
@@ -26,7 +27,6 @@ const Navbar = () => {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const navItems = [
-    { name: 'Dashboard', path: '/' },
     { name: 'About Us', path: '/about' },
   ];
 
@@ -64,6 +64,7 @@ const Navbar = () => {
             )}
             {user && (
               <div className="flex items-center space-x-3">
+                <ThemeToggle />
                 <button
                   onClick={() => setShowLogoutConfirm(true)}
                   className="p-2 rounded-full bg-red-600 text-white hover:bg-red-700 transition"
@@ -109,12 +110,18 @@ const Navbar = () => {
             </Link>
           ))}
           {user && (
-            <button
-              onClick={() => { setIsMenuOpen(false); setShowLogoutConfirm(true); }}
-              className="flex items-center gap-2 w-full text-left px-3 py-2 rounded-lg text-base font-medium bg-red-600 text-white hover:bg-red-700"
-            >
-              <LogOut size={18} /> Logout
-            </button>
+            <>
+              <div className="flex items-center justify-between px-3 py-2">
+                <span className="text-green-800 font-medium">Theme</span>
+                <ThemeToggle />
+              </div>
+              <button
+                onClick={() => { setIsMenuOpen(false); setShowLogoutConfirm(true); }}
+                className="flex items-center gap-2 w-full text-left px-3 py-2 rounded-lg text-base font-medium bg-red-600 text-white hover:bg-red-700"
+              >
+                <LogOut size={18} /> Logout
+              </button>
+            </>
           )}
         </div>
       </div>

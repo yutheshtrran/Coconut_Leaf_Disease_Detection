@@ -9,12 +9,13 @@ const initialFarms = [
   { id: 'D', name: 'Farm D', subtitle: 'Tropical Gardens', location: '7.80° N, 80.10° E', area: '30 Ha', admin: 'Admin' },
 ];
 
+const currentYear = new Date().getFullYear();
 const initialPlots = [
-  { id: 1, farmId: 'A', area: 2.5, lastAnalyzed: '2023-10-26', status: 'LOW_RISK' },
-  { id: 2, farmId: 'A', area: 3.2, lastAnalyzed: '2023-10-25', status: 'LOW_RISK' },
-  { id: 3, farmId: 'A', area: 1.8, lastAnalyzed: '2023-10-26', status: 'CRITICAL' },
-  { id: 4, farmId: 'A', area: 4.0, lastAnalyzed: '2023-10-24', status: 'MODERATE' },
-  { id: 5, farmId: 'B', area: 5.0, lastAnalyzed: '2023-10-20', status: 'LOW_RISK' },
+  { id: 1, farmId: 'A', area: 2.5, lastAnalyzed: `${currentYear}-10-26`, status: 'LOW_RISK' },
+  { id: 2, farmId: 'A', area: 3.2, lastAnalyzed: `${currentYear}-10-25`, status: 'LOW_RISK' },
+  { id: 3, farmId: 'A', area: 1.8, lastAnalyzed: `${currentYear}-10-26`, status: 'CRITICAL' },
+  { id: 4, farmId: 'A', area: 4.0, lastAnalyzed: `${currentYear}-10-24`, status: 'MODERATE' },
+  { id: 5, farmId: 'B', area: 5.0, lastAnalyzed: `${currentYear}-10-20`, status: 'LOW_RISK' },
 ];
 
 // --- Utility ---
@@ -58,27 +59,27 @@ const AddFarmForm = ({ onAdd, onCancel }) => {
     <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100 animate-in fade-in zoom-in duration-200">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-bold text-gray-800">Add New Farm</h2>
-        <button onClick={onCancel} className="text-gray-400 hover:text-gray-600"><X size={20}/></button>
+        <button onClick={onCancel} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
       </div>
       <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-1">
           <label className="text-xs font-bold text-gray-500 uppercase tracking-tight">Farm Name</label>
-          <input required type="text" className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-green-500" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+          <input required type="text" className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-green-500" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
         </div>
         <div className="space-y-1">
           <label className="text-xs font-bold text-gray-500 uppercase tracking-tight">Subtitle/Region</label>
-          <input type="text" className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-green-500" value={formData.subtitle} onChange={e => setFormData({...formData, subtitle: e.target.value})} />
+          <input type="text" className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-green-500" value={formData.subtitle} onChange={e => setFormData({ ...formData, subtitle: e.target.value })} />
         </div>
         <div className="space-y-1">
           <label className="text-xs font-bold text-gray-500 uppercase tracking-tight">Location (Lat/Long)</label>
-          <input placeholder="0.00° N, 0.00° E" type="text" className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-green-500" value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})} />
+          <input placeholder="0.00° N, 0.00° E" type="text" className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-green-500" value={formData.location} onChange={e => setFormData({ ...formData, location: e.target.value })} />
         </div>
         <div className="space-y-1">
           <label className="text-xs font-bold text-gray-500 uppercase tracking-tight">Total Area (Ha)</label>
-          <input required type="text" placeholder="e.g. 25 Ha" className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-green-500" value={formData.area} onChange={e => setFormData({...formData, area: e.target.value})} />
+          <input required type="text" placeholder="e.g. 25 Ha" className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-green-500" value={formData.area} onChange={e => setFormData({ ...formData, area: e.target.value })} />
         </div>
         <div className="md:col-span-2 flex gap-3 pt-4 border-t">
-          <button type="submit" className="bg-green-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-green-700 flex items-center gap-2"><Check size={18}/> Save Farm</button>
+          <button type="submit" className="bg-green-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-green-700 flex items-center gap-2"><Check size={18} /> Save Farm</button>
           <button type="button" onClick={onCancel} className="bg-gray-100 text-gray-600 px-6 py-2 rounded-lg font-semibold hover:bg-gray-200">Cancel</button>
         </div>
       </form>
@@ -103,11 +104,11 @@ const AddPlotForm = ({ farmId, onAdd, onCancel }) => {
       <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="space-y-1">
           <label className="text-xs font-bold text-gray-500 uppercase">Area (ha)</label>
-          <input required step="0.1" type="number" className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" value={formData.area} onChange={e => setFormData({...formData, area: e.target.value})} />
+          <input required step="0.1" type="number" className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" value={formData.area} onChange={e => setFormData({ ...formData, area: e.target.value })} />
         </div>
         <div className="space-y-1">
           <label className="text-xs font-bold text-gray-500 uppercase">Status</label>
-          <select className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 bg-white" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})}>
+          <select className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 bg-white" value={formData.status} onChange={e => setFormData({ ...formData, status: e.target.value })}>
             <option value="LOW_RISK">LOW RISK</option>
             <option value="MODERATE">MODERATE</option>
             <option value="CRITICAL">CRITICAL</option>
@@ -115,7 +116,7 @@ const AddPlotForm = ({ farmId, onAdd, onCancel }) => {
         </div>
         <div className="flex items-end gap-2">
           <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-indigo-700 flex-1">Add Plot</button>
-          <button type="button" onClick={onCancel} className="bg-gray-100 p-2 rounded-lg text-gray-500 hover:text-gray-700"><X size={20}/></button>
+          <button type="button" onClick={onCancel} className="bg-gray-100 p-2 rounded-lg text-gray-500 hover:text-gray-700"><X size={20} /></button>
         </div>
       </form>
     </div>
@@ -124,10 +125,10 @@ const AddPlotForm = ({ farmId, onAdd, onCancel }) => {
 
 // --- Main Components ---
 const FarmDetailsCard = ({ farm, onEdit }) => (
-  <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100 relative group">
+  <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700 transition-colors duration-300">
     <div className="flex justify-between items-center mb-4">
-      <h2 className="text-xl font-semibold text-gray-800">{farm.name}</h2>
-      <button onClick={onEdit} className="inline-flex items-center gap-1 text-sm font-medium text-gray-400 hover:text-indigo-600 transition">
+      <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-100">{farm.name}</h2>
+      <button onClick={onEdit} className="inline-flex items-center gap-1 text-sm font-medium text-gray-600 hover:text-indigo-600 transition">
         <Pencil className="w-4 h-4" /> Edit Details
       </button>
     </div>
@@ -157,19 +158,19 @@ const PlotsTable = ({ farm, plots, onAddPlotRequest }) => {
     <div className="mt-8">
       <div className="flex justify-between items-end mb-4">
         <h3 className="text-lg font-semibold text-gray-800">Plots in {farm.name}</h3>
-        <button 
+        <button
           onClick={onAddPlotRequest}
           className="text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1"
         >
-          <Plus size={14}/> Add Plot
+          <Plus size={14} /> Add Plot
         </button>
       </div>
       <div className="overflow-x-auto bg-white rounded-xl shadow-lg border border-gray-100">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              {['Plot ID','Area (ha)','Last Analyzed','Status','Actions'].map((header, idx) => (
-                <th key={idx} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              {['Plot ID', 'Area (ha)', 'Last Analyzed', 'Status', 'Actions'].map((header, idx) => (
+                <th key={idx} className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${idx === 0 ? 'rounded-tl-xl' : ''} ${idx === 4 ? 'rounded-tr-xl' : ''}`}>
                   {header}
                 </th>
               ))}
@@ -200,7 +201,7 @@ const MyFarms = () => {
   const [farms, setFarms] = useState(initialFarms);
   const [plots, setPlots] = useState(initialPlots);
   const [search, setSearch] = useState('');
-  
+
   // View states
   const [showFarmForm, setShowFarmForm] = useState(false);
   const [showPlotForm, setShowPlotForm] = useState(false);
@@ -211,6 +212,12 @@ const MyFarms = () => {
   );
 
   const selectedFarm = useMemo(() => farms.find(f => f.id === selectedFarmId), [farms, selectedFarmId]);
+
+  const handleSelectFarm = (id) => {
+    setSelectedFarmId(id);
+    setShowFarmForm(false);
+    setShowPlotForm(false);
+  };
 
   const handleAddFarm = (newFarm) => {
     setFarms([...farms, newFarm]);
@@ -224,11 +231,10 @@ const MyFarms = () => {
   };
 
   return (
-    <div className="flex" style={{ marginTop: '1cm' }}>
-      {/* Sidebar */}
+    <div className="flex bg-gray-100 dark:bg-gray-900 transition-colors duration-300 pt-4 min-h-screen">
+      {/* Sidebar for farms list */}
       <aside
-        className="w-72 bg-white border-r border-gray-100 p-6 overflow-y-auto h-screen sticky top-0"
-        style={{ marginLeft: '6cm' }}
+        className="w-72 bg-white dark:bg-gray-800 border-r border-gray-100 dark:border-gray-700 p-6 overflow-y-auto h-screen sticky top-0 transition-colors duration-300"
       >
         <div className="relative mb-6">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -237,19 +243,15 @@ const MyFarms = () => {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Find a farm..."
-            className="w-full py-2 pl-10 pr-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none transition"
+            className="w-full py-2 pl-10 pr-4 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition bg-white dark:bg-gray-700 dark:text-gray-100"
           />
         </div>
         <nav className="space-y-2">
           {filteredFarms.map(farm => (
             <div
               key={farm.id}
-              onClick={() => {
-                setSelectedFarmId(farm.id);
-                setShowFarmForm(false);
-                setShowPlotForm(false);
-              }}
-              className={`p-3 rounded-xl cursor-pointer transition duration-150 ${farm.id===selectedFarmId?'bg-green-50 text-green-800 border-l-4 border-green-500 shadow-inner':'hover:bg-gray-100 text-gray-700'}`}
+              onClick={() => handleSelectFarm(farm.id)}
+              className={`p-3 rounded-xl cursor-pointer transition duration-150 ${farm.id === selectedFarmId ? 'bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-400 border-l-4 border-green-500 shadow-inner' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'}`}
             >
               <p className="font-semibold">{farm.name}</p>
               <p className="text-xs opacity-70">{farm.subtitle}</p>
@@ -258,15 +260,12 @@ const MyFarms = () => {
         </nav>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 p-6 sm:p-8 lg:p-10 bg-gray-50 min-h-screen overflow-y-auto">
+      {/* Main Content stays in place */}
+      <main className="flex-1 p-6 sm:p-8 lg:p-10 bg-gray-50 dark:bg-gray-900 min-h-screen overflow-y-auto transition-colors duration-300">
         <header className="flex justify-between items-center mb-8">
-          <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Farm & Plot Management</h1>
+          <h1 className="text-xl font-bold text-gray-800 dark:text-gray-100">Farm & Plot Management</h1>
           {!showFarmForm && (
-            <button 
-              onClick={() => setShowFarmForm(true)} 
-              className="inline-flex items-center rounded-full bg-green-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-green-200 hover:bg-green-700 transition active:scale-95"
-            >
+            <button onClick={() => setShowFarmForm(true)} className="inline-flex items-center rounded-full bg-green-600 px-4 py-2 text-sm font-semibold text-white shadow-md hover:bg-green-700 transition duration-200">
               <Plus className="w-5 h-5 mr-1" /> Add New Farm
             </button>
           )}
@@ -277,18 +276,18 @@ const MyFarms = () => {
         ) : selectedFarm ? (
           <div className="space-y-8 max-w-5xl">
             <FarmDetailsCard farm={selectedFarm} onEdit={() => alert('Edit triggered')} />
-            
+
             {showPlotForm ? (
-              <AddPlotForm 
-                farmId={selectedFarm.id} 
-                onAdd={handleAddPlot} 
-                onCancel={() => setShowPlotForm(false)} 
+              <AddPlotForm
+                farmId={selectedFarm.id}
+                onAdd={handleAddPlot}
+                onCancel={() => setShowPlotForm(false)}
               />
             ) : (
-              <PlotsTable 
-                farm={selectedFarm} 
-                plots={plots} 
-                onAddPlotRequest={() => setShowPlotForm(true)} 
+              <PlotsTable
+                farm={selectedFarm}
+                plots={plots}
+                onAddPlotRequest={() => setShowPlotForm(true)}
               />
             )}
           </div>

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import AuthLayout from '../components/AuthLayout';
 import CodeInput from '../components/CodeInput';
@@ -78,6 +79,17 @@ export default function VerifyEmail() {
   const content = (
     <>
       <Toast type={status && status.toLowerCase().includes('verified') ? 'success' : (status && status.toLowerCase().includes('fail') ? 'error' : 'info')} message={status} onClose={() => setStatus('')} />
+
+      <div className="absolute top-4 left-4">
+        <button
+          onClick={() => navigate(-1)}
+          className="p-2 text-gray-600 hover:text-[#387637] transition-colors rounded-full hover:bg-gray-100"
+          title="Go back"
+        >
+          <ArrowLeft size={24} />
+        </button>
+      </div>
+
       {email && (
         <>
           <CodeInput length={6} value={code} onChange={setCode} />

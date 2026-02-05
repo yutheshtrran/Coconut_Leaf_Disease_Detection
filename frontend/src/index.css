@@ -1,4 +1,334 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-/* Custom styles can be added here */
+
+@layer base {
+  body {
+    @apply bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-300;
+  }
+}
+
+
+/* Mobile sidebar slide-in animation */
+@keyframes slide-in {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in 0.2s ease-out forwards;
+}
+
+/* ========================================
+   DARK MODE - Form Inputs
+   ======================================== */
+html.dark input,
+html.dark textarea,
+html.dark select {
+  background-color: rgb(31 41 55) !important;
+  /* gray-800 */
+  border-color: rgb(75 85 99) !important;
+  /* gray-600 */
+  color: rgb(243 244 246) !important;
+  /* gray-100 */
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: rgb(156 163 175) !important;
+  /* gray-400 */
+}
+
+html.dark input:focus,
+html.dark textarea:focus,
+html.dark select:focus {
+  border-color: #387637 !important;
+  outline-color: #387637 !important;
+}
+
+/* ========================================
+   DARK MODE - Backgrounds
+   ======================================== */
+html.dark .bg-white {
+  background-color: rgb(31 41 55) !important;
+  /* gray-800 */
+}
+
+html.dark .bg-gray-50 {
+  background-color: rgb(17 24 39) !important;
+  /* gray-900 */
+}
+
+html.dark .bg-gray-100 {
+  background-color: rgb(17 24 39) !important;
+  /* gray-900 */
+}
+
+html.dark .bg-green-50,
+html.dark .bg-green-100 {
+  background-color: rgba(34, 197, 94, 0.15) !important;
+  /* green with low opacity */
+}
+
+/* Navbar in dark mode */
+html.dark nav {
+  background-color: rgba(31, 41, 55, 0.9) !important;
+  /* gray-800 with transparency */
+  border-color: rgb(55 65 81) !important;
+  /* gray-700 */
+}
+
+html.dark .backdrop-blur-lg {
+  background-color: rgba(17, 24, 39, 0.85) !important;
+}
+
+/* ========================================
+   DARK MODE - Text Colors
+   ======================================== */
+html.dark .text-gray-900 {
+  color: rgb(243 244 246) !important;
+  /* gray-100 */
+}
+
+html.dark .text-gray-800 {
+  color: rgb(243 244 246) !important;
+  /* gray-100 */
+}
+
+html.dark .text-gray-700 {
+  color: rgb(209 213 219) !important;
+  /* gray-300 */
+}
+
+html.dark .text-gray-600 {
+  color: rgb(156 163 175) !important;
+  /* gray-400 */
+}
+
+html.dark .text-gray-500 {
+  color: rgb(156 163 175) !important;
+  /* gray-400 */
+}
+
+html.dark .text-gray-400 {
+  color: rgb(156 163 175) !important;
+  /* gray-400 */
+}
+
+/* ========================================
+   DARK MODE - Green Colors (Dark to Light)
+   ======================================== */
+/* Text colors */
+html.dark .text-green-900 {
+  color: rgb(134 239 172) !important;
+  /* green-300 */
+}
+
+html.dark .text-green-800 {
+  color: rgb(134 239 172) !important;
+  /* green-300 */
+}
+
+html.dark .text-green-700 {
+  color: rgb(74 222 128) !important;
+  /* green-400 */
+}
+
+html.dark .text-green-600 {
+  color: rgb(74 222 128) !important;
+  /* green-400 */
+}
+
+html.dark .text-green-500 {
+  color: rgb(34 197 94) !important;
+  /* green-500 - stays same */
+}
+
+/* Inline style green colors - use CSS variable approach */
+html.dark [style*="color: rgb(56, 118, 55)"],
+html.dark [style*="color:#387637"],
+html.dark [style*="color: #387637"] {
+  color: rgb(74 222 128) !important;
+  /* green-400 */
+}
+
+/* Border colors */
+html.dark .border-green-600,
+html.dark .border-green-700,
+html.dark .border-green-800 {
+  border-color: rgb(74 222 128) !important;
+  /* green-400 */
+}
+
+/* Focus ring colors */
+html.dark .focus\:ring-green-600:focus,
+html.dark .focus\:ring-green-700:focus {
+  --tw-ring-color: rgb(74 222 128) !important;
+  /* green-400 */
+}
+
+/* SVG stroke and fill for green */
+html.dark svg.text-green-600,
+html.dark svg.text-green-700,
+html.dark svg.text-green-800 {
+  color: rgb(74 222 128) !important;
+  /* green-400 */
+}
+
+/* Lucide icons inside green containers */
+html.dark .text-green-600 svg,
+html.dark .text-green-700 svg,
+html.dark .text-green-800 svg {
+  color: inherit !important;
+}
+
+/* ========================================
+   DARK MODE - Emerald Colors (Dark to Light)
+   ======================================== */
+html.dark .text-emerald-900 {
+  color: rgb(110 231 183) !important;
+  /* emerald-300 */
+}
+
+html.dark .text-emerald-800 {
+  color: rgb(110 231 183) !important;
+  /* emerald-300 */
+}
+
+html.dark .text-emerald-700 {
+  color: rgb(52 211 153) !important;
+  /* emerald-400 */
+}
+
+html.dark .text-emerald-600 {
+  color: rgb(52 211 153) !important;
+  /* emerald-400 */
+}
+
+/* Tailwind arbitrary green text-[#387637] */
+html.dark .text-\[\#387637\] {
+  color: rgb(74 222 128) !important;
+  /* green-400 */
+}
+
+/* ========================================
+   DARK MODE - Inline Style Color Overrides
+   ======================================== */
+/* Override inline style colors for primary green (#4CAF50) */
+html.dark [style*="color: rgb(76, 175, 80)"],
+html.dark [style*="color:#4CAF50"],
+html.dark [style*="color: #4CAF50"] {
+  color: rgb(74 222 128) !important;
+  /* green-400 - light green for dark mode */
+}
+
+/* Override inline style colors for dark green (#387637) */
+html.dark [style*="color: rgb(56, 118, 55)"],
+html.dark [style*="color:#387637"],
+html.dark [style*="color: #387637"] {
+  color: rgb(74 222 128) !important;
+  /* green-400 */
+}
+
+/* SVGs with inline green styles */
+html.dark svg[style*="color: rgb(76, 175, 80)"],
+html.dark svg[style*="color:#4CAF50"],
+html.dark svg[style*="color: #4CAF50"] {
+  color: rgb(74 222 128) !important;
+  /* green-400 */
+}
+
+/* ========================================
+   Colors that STAY THE SAME in Dark Mode
+   ======================================== */
+/* Status/Accent border colors - DO NOT OVERRIDE */
+/* border-green-500, border-red-500, border-yellow-500, border-blue-500 */
+/* These are purposely kept the same for visual consistency */
+
+
+
+/* ========================================
+   DARK MODE - Tables
+   ======================================== */
+html.dark table {
+  background-color: rgb(31 41 55) !important;
+  /* gray-800 */
+}
+
+html.dark thead {
+  background-color: rgb(55 65 81) !important;
+  /* gray-700 */
+}
+
+html.dark th {
+  color: rgb(209 213 219) !important;
+  /* gray-300 */
+  background-color: rgb(55 65 81) !important;
+  /* gray-700 */
+}
+
+html.dark td {
+  color: rgb(209 213 219) !important;
+  /* gray-300 */
+  border-color: rgb(75 85 99) !important;
+  /* gray-600 */
+}
+
+html.dark tbody tr {
+  background-color: rgb(31 41 55) !important;
+  /* gray-800 */
+}
+
+html.dark tbody tr:hover {
+  background-color: rgb(55 65 81) !important;
+  /* gray-700 */
+}
+
+/* ========================================
+   DARK MODE - Borders
+   ======================================== */
+html.dark .border-gray-100,
+html.dark .border-gray-200,
+html.dark .border-gray-300 {
+  border-color: rgb(75 85 99) !important;
+  /* gray-600 */
+}
+
+html.dark .divide-gray-200>*+* {
+  border-color: rgb(75 85 99) !important;
+  /* gray-600 */
+}
+
+/* ========================================
+   DARK MODE - Cards and Panels
+   ======================================== */
+html.dark .shadow-lg,
+html.dark .shadow-md,
+html.dark .shadow-xl {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Note: Removed border-color override from rounded-xl/rounded-lg */
+/* This was interfering with status border colors on dashboard stat boxes */
+
+
+/* ========================================
+   LIGHT MODE - Explicit overrides
+   ======================================== */
+html:not(.dark) input,
+html:not(.dark) textarea,
+html:not(.dark) select {
+  background-color: rgb(255 255 255) !important;
+  border-color: rgb(209 213 219) !important;
+  color: rgb(17 24 39) !important;
+}
+
+html:not(.dark) input::placeholder,
+html:not(.dark) textarea::placeholder {
+  color: rgb(156 163 175) !important;
+}
