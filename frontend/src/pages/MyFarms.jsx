@@ -47,9 +47,9 @@ const getStatusBadge = (status) => {
 
 // --- Components ---
 const FarmDetailsCard = ({ farm, onEdit }) => (
-  <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+  <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700 transition-colors duration-300">
     <div className="flex justify-between items-center mb-4">
-      <h2 className="text-xl font-semibold text-gray-800">{farm.name}</h2>
+      <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-100">{farm.name}</h2>
       <button onClick={onEdit} className="inline-flex items-center gap-1 text-sm font-medium text-gray-600 hover:text-indigo-600 transition">
         <Pencil className="w-4 h-4" /> Edit Details
       </button>
@@ -129,10 +129,10 @@ const MyFarms = () => {
   const handleEditDetails = () => alert(`Action: Edit Details for ${selectedFarm.name}`);
 
   return (
-    <div className="flex" style={{ marginTop: '1cm' }}>
+    <div className="flex bg-gray-100 dark:bg-gray-900 transition-colors duration-300" style={{ marginTop: '1cm' }}>
       {/* Sidebar shifted right by 6cm */}
       <aside
-        className="w-72 bg-white border-r border-gray-100 p-6 overflow-y-auto h-screen sticky top-0"
+        className="w-72 bg-white dark:bg-gray-800 border-r border-gray-100 dark:border-gray-700 p-6 overflow-y-auto h-screen sticky top-0 transition-colors duration-300"
         style={{ marginLeft: '6cm' }}
       >
         <div className="relative mb-6">
@@ -142,7 +142,7 @@ const MyFarms = () => {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Find a farm..."
-            className="w-full py-2 pl-10 pr-4 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition"
+            className="w-full py-2 pl-10 pr-4 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition bg-white dark:bg-gray-700 dark:text-gray-100"
           />
         </div>
         <nav className="space-y-2">
@@ -150,7 +150,7 @@ const MyFarms = () => {
             <div
               key={farm.id}
               onClick={() => handleSelectFarm(farm.id)}
-              className={`p-3 rounded-xl cursor-pointer transition duration-150 ${farm.id === selectedFarmId ? 'bg-green-50 text-green-800 border-l-4 border-green-500 shadow-inner' : 'hover:bg-gray-100 text-gray-700'}`}
+              className={`p-3 rounded-xl cursor-pointer transition duration-150 ${farm.id === selectedFarmId ? 'bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-400 border-l-4 border-green-500 shadow-inner' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'}`}
             >
               <p className="font-semibold">{farm.name}</p>
               <p className="text-xs">{farm.subtitle}</p>
@@ -161,9 +161,9 @@ const MyFarms = () => {
       </aside>
 
       {/* Main Content stays in place */}
-      <main className="flex-1 p-6 sm:p-8 lg:p-10 bg-gray-50 min-h-screen overflow-y-auto">
+      <main className="flex-1 p-6 sm:p-8 lg:p-10 bg-gray-50 dark:bg-gray-900 min-h-screen overflow-y-auto transition-colors duration-300">
         <header className="flex justify-between items-center mb-8">
-          <h1 className="text-xl font-bold text-gray-800">Farm & Plot Management</h1>
+          <h1 className="text-xl font-bold text-gray-800 dark:text-gray-100">Farm & Plot Management</h1>
           <button onClick={handleAddFarm} className="inline-flex items-center rounded-full bg-green-600 px-4 py-2 text-sm font-semibold text-white shadow-md hover:bg-green-700 transition duration-200">
             <Plus className="w-5 h-5 mr-1" /> Add New Farm
           </button>
