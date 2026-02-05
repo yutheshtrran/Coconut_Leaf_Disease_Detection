@@ -1,0 +1,12 @@
+[
+  {
+    "report_id": "REP-005",
+    "date": "2025-01-01",
+    "total_images": 10,
+    "healthy_percent": 60,
+    "diseases": {
+      "Leaf Rot": 3,
+      "Bud Rot": 1
+    }
+  }
+]

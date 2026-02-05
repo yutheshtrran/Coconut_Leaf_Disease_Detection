@@ -14,6 +14,8 @@ const Upload = () => {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [isDragActive, setIsDragActive] = useState(false);
   const [diseaseLevels, setDiseaseLevels] = useState([]); // aggregated results
+  const [diseaseRemedies, setDiseaseRemedies] = useState({}); // map of disease -> remedy
+  const [healthyPercent, setHealthyPercent] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const handleFarmChange = (e) => setFarm(e.target.value);
@@ -55,9 +57,19 @@ const Upload = () => {
         });
         const data = await response.json();
 
-        const diseaseName = data.disease;
+        // Support responses shaped like { prediction: { disease, confidence, percentage }, ... }
+        const pred = data && (data.prediction || data);
+        const diseaseName = (pred && (pred.disease || pred.class)) || 'Unknown';
+        const confidenceVal = pred && (pred.percentage ?? (pred.confidence != null ? Math.round(pred.confidence * 100) : null));
+        const remedy = pred && pred.remedy;
+
         if (!counts[diseaseName]) counts[diseaseName] = 0;
         counts[diseaseName] += 1;
+        // Store remedy for this disease
+        if (remedy) {
+          setDiseaseRemedies(prev => ({ ...prev, [diseaseName]: remedy }));
+        }
+        // optionally we could store per-image confidences for later use
       } catch (err) {
         console.error("Prediction error:", err);
       }
@@ -68,6 +80,12 @@ const Upload = () => {
       name,
       level: Math.round((counts[name] / totalImages) * 100),
     }));
+
+    // Compute healthy percentage (case-insensitive key match)
+    const healthyCount = Object.keys(counts).reduce((acc, n) => acc + ((n && n.toLowerCase() === 'healthy') ? counts[n] : 0), 0);
+    const healthyPct = totalImages > 0 ? Math.round((healthyCount / totalImages) * 100) : 0;
+
+    setHealthyPercent(healthyPct);
 
     setDiseaseLevels(aggregatedResults);
     setLoading(false);
@@ -132,6 +150,10 @@ const Upload = () => {
         <div className="mt-6 md:mt-0 w-full md:w-1/3 bg-gray-100 p-5 rounded-xl shadow-inner border border-gray-200 flex flex-col space-y-6">
           <div>
             <h3 className="text-emerald-800 font-semibold mb-4 text-center">Disease Levels</h3>
+            <div className="text-center mb-4">
+              <span className="text-sm text-gray-600">Healthy:</span>
+              <div className="text-2xl font-semibold text-emerald-700">{healthyPercent != null ? `${healthyPercent}%` : '--'}</div>
+            </div>
             {diseaseLevels.length > 0 ? (
               diseaseLevels.map((disease, idx) => (
                 <div key={idx} className="mb-4">
@@ -142,6 +164,11 @@ const Upload = () => {
                   <div className="w-full bg-gray-200 rounded-full h-4">
                     <div className="bg-emerald-600 h-4 rounded-full" style={{ width: `${disease.level}%` }} />
                   </div>
+                  {diseaseRemedies[disease.name] && (
+                    <p className="text-xs text-gray-600 mt-2 italic">
+                      <strong>Remedy:</strong> {diseaseRemedies[disease.name]}
+                    </p>
+                  )}
                 </div>
               ))
             ) : (

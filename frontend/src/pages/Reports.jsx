@@ -85,6 +85,24 @@ const Reports = () => {
     </button>
   );
 
+  const API_BASE = "http://127.0.0.1:5000";
+  // Open PDF in a new tab
+  const handleView = (reportId) => {
+    window.open(`${API_BASE}/report/view/${reportId}`, "_blank");
+  };
+
+  // Download PDF
+  const handleDownload = (reportId) => {
+    const link = document.createElement("a");
+    link.href = `${API_BASE}/report/download/${reportId}`;
+    link.download = `${reportId}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+
+
   return (
     <div className="pt-4 p-4 sm:p-6 lg:p-8 bg-gray-50 dark:bg-gray-900 min-h-screen font-['Inter', sans-serif] transition-colors duration-300">
       <div className="max-w-7xl mx-auto">
@@ -145,9 +163,29 @@ const Reports = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{report.status}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center space-x-3">
+<<<<<<< HEAD
                         <button title="View Report" className="text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition duration-150"><Eye className="w-5 h-5" /></button>
                         <button title="Download Report" className="text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition duration-150"><Download className="w-5 h-5" /></button>
                         <button title="More Actions" className="text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition duration-150"><MoreHorizontal className="w-5 h-5" /></button>
+=======
+                        {/* <button title="View Report" className="text-gray-500 hover:text-indigo-600 p-2 rounded-full hover:bg-gray-100 transition duration-150"><Eye className="w-5 h-5" /></button>
+                        <button title="Download Report" className="text-gray-500 hover:text-indigo-600 p-2 rounded-full hover:bg-gray-100 transition duration-150"><Download className="w-5 h-5" /></button> */}
+                        <button 
+                          title="View Report" 
+                          onClick={() => handleView(report.id)}  
+                        >
+                          <Eye className="w-5 h-5" />
+                        </button>
+
+                        <button 
+                          title="Download Report" 
+                          onClick={() => handleDownload(report.id)} 
+                        >
+                          <Download className="w-5 h-5" />
+                        </button>
+
+                        <button title="More Actions" className="text-gray-500 hover:text-indigo-600 p-2 rounded-full hover:bg-gray-100 transition duration-150"><MoreHorizontal className="w-5 h-5" /></button>
+>>>>>>> main
                       </div>
                     </td>
                   </tr>
