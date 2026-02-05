@@ -1,4 +1,5 @@
 import React from 'react';
+import FarmMap from "./Farmmap.jsx";
 
 // Define the custom colors
 const COLORS = {
@@ -45,7 +46,7 @@ const Dashboard = () => {
             <div className="max-w-7xl mx-auto">
 
                 {/* Header Section */}
-                <header className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md mb-8 transition-colors duration-300" style={{ backgroundColor: undefined }}>
+                <header className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md mb-8 transition-colors duration-300">
                     <h1 className="text-xl sm:text-2xl font-semibold flex items-center" style={{ color: COLORS.primaryGreen }}>
                         <svg className="w-8 h-8 mr-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: COLORS.primaryGreen }}>
                             <path d="M17 19c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"></path>
@@ -79,13 +80,8 @@ const Dashboard = () => {
                     <div className="lg:col-span-2 bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg h-96 flex flex-col transition-colors duration-300">
                         <h2 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-4">Farm Overview Map</h2>
                         <div className="flex-grow relative bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden flex items-center justify-center">
-                            <p className="text-gray-400 text-lg">Map Placeholder</p>
-                            <div className="absolute top-1/4 left-1/4 w-4 h-4 rounded-full border-2 border-white shadow-xl cursor-pointer" style={{ backgroundColor: COLORS.primaryGreen }} title="Farm A - Healthy"></div>
-                            <div className="absolute bottom-1/3 right-1/4 w-4 h-4 rounded-full border-2 border-white shadow-xl cursor-pointer" style={{ backgroundColor: COLORS.trendYellow }} title="Farm B - Warning"></div>
-                            <div className="absolute bottom-1/4 left-1/2 w-4 h-4 rounded-full border-2 border-white shadow-xl cursor-pointer group" style={{ backgroundColor: COLORS.alertRed }}>
-                                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 p-2 text-white text-sm rounded-lg whitespace-nowrap shadow-xl opacity-100 transition-opacity" style={{ backgroundColor: COLORS.alertRed }}>
-                                    Plot 3 (CRITICAL)
-                                </div>
+                            <div className="flex-grow h-96">
+                                <FarmMap />
                             </div>
                         </div>
                     </div>
