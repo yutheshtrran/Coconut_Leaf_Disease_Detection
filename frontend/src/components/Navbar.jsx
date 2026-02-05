@@ -27,7 +27,6 @@ const Navbar = () => {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const navItems = [
-    { name: 'Dashboard', path: '/' },
     { name: 'About Us', path: '/about' },
   ];
 

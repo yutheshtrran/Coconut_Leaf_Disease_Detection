@@ -23,10 +23,10 @@ const Admin = () => {
   };
 
   return (
-    <div className="flex min-h-screen bg-green-50 mt-[2cm]">
+    <div className="flex min-h-screen bg-gray-100 dark:bg-gray-900 transition-colors duration-300">
       {/* Sidebar */}
-      <aside className="w-64 bg-white shadow-lg border-r border-green-200 p-6 ml-60">
-        <h2 className="text-2xl font-bold text-green-800 mb-6 text-center">
+      <aside className="w-64 bg-white dark:bg-gray-800 shadow-lg border-r border-gray-200 dark:border-gray-700 p-6 flex-shrink-0">
+        <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-6 text-center">
           Profile
         </h2>
 
@@ -35,11 +35,10 @@ const Admin = () => {
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`w-full text-left px-4 py-2 rounded-lg font-medium transition-colors duration-200 ${
-                activeTab === tab
-                  ? "bg-green-600 text-white shadow-md"
-                  : "text-green-800 hover:bg-green-100"
-              }`}
+              className={`w-full text-left px-4 py-2 rounded-lg font-medium transition-colors duration-200 ${activeTab === tab
+                ? "bg-green-600 text-white shadow-md"
+                : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                }`}
             >
               {tab}
             </button>
@@ -48,7 +47,7 @@ const Admin = () => {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto">{renderSection()}</main>
+      <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900">{renderSection()}</main>
     </div>
   );
 };

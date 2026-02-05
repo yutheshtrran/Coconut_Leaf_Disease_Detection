@@ -6,7 +6,7 @@ import { ThemeProvider } from "./context/ThemeContext.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Upload from "./pages/Upload.jsx";
 import Reports from "./pages/Reports.jsx";
-import Alerts from "./pages/Alerts.jsx";
+import AnalyseImages from "./pages/AnalyseImages.jsx";
 import Login from "./pages/Login.jsx";
 import Register from "./pages/Register.jsx";
 import VerifyEmail from "./pages/VerifyEmail.jsx";
@@ -20,7 +20,6 @@ import Admin from "./pages/Admin.jsx";
 import ManageDiseases from "./pages/ManageDiseases.jsx";
 
 // Components
-import Navbar from "./components/Navbar.jsx";
 import Sidebar from "./components/Sidebar.jsx";
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 
@@ -44,13 +43,7 @@ function AppWrapper() {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
-        {showLayout && (
-          <div>
-            <Navbar />
-          </div>
-        )}
-
-        <main className={`flex-1 p-0 ${showLayout ? 'p-4' : ''}`}>
+        <main className={`flex-1 p-0 ${showLayout ? 'p-4 md:ml-64' : ''} transition-all duration-300`}>
           <Routes>
             {/* Public routes */}
             <Route path="/" element={<Login />} />
@@ -89,10 +82,10 @@ function AppWrapper() {
               }
             />
             <Route
-              path="/alerts"
+              path="/analyse-images"
               element={
                 <ProtectedRoute>
-                  <Alerts />
+                  <AnalyseImages />
                 </ProtectedRoute>
               }
             />
