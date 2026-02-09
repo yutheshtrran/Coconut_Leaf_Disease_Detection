@@ -103,6 +103,75 @@ const AddFarmForm = ({ onAdd, onCancel, isLoading }) => {
   );
 };
 
+const EditFarmForm = ({ farm, onUpdate, onCancel, isLoading }) => {
+  const [formData, setFormData] = useState({
+    name: farm.name || '',
+    subtitle: farm.subtitle || '',
+    location: farm.location || '',
+    area: farm.area || '',
+    description: farm.description || '',
+  });
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!formData.name || !formData.area) {
+      setError('Farm name and area are required');
+      return;
+    }
+    
+    try {
+      setError('');
+      await onUpdate(farm._id, formData);
+    } catch (err) {
+      setError(err.message || 'Failed to update farm');
+    }
+  };
+
+  return (
+    <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100 animate-in fade-in zoom-in duration-200">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-xl font-bold text-gray-800">Edit Farm Details</h2>
+        <button onClick={onCancel} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+      </div>
+      {error && (
+        <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">
+          {error}
+        </div>
+      )}
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-1">
+          <label className="text-xs font-bold text-gray-500 uppercase tracking-tight">Farm Name</label>
+          <input required type="text" className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} disabled={isLoading} />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-bold text-gray-500 uppercase tracking-tight">Subtitle/Region</label>
+          <input type="text" className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" value={formData.subtitle} onChange={e => setFormData({ ...formData, subtitle: e.target.value })} disabled={isLoading} />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-bold text-gray-500 uppercase tracking-tight">Location (Lat/Long)</label>
+          <input placeholder="0.00° N, 0.00° E" type="text" className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" value={formData.location} onChange={e => setFormData({ ...formData, location: e.target.value })} disabled={isLoading} />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-bold text-gray-500 uppercase tracking-tight">Total Area (Ha)</label>
+          <input required type="text" placeholder="e.g. 25 Ha" className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" value={formData.area} onChange={e => setFormData({ ...formData, area: e.target.value })} disabled={isLoading} />
+        </div>
+        <div className="md:col-span-2 space-y-1">
+          <label className="text-xs font-bold text-gray-500 uppercase tracking-tight">Description</label>
+          <textarea className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} disabled={isLoading} rows="3" />
+        </div>
+        <div className="md:col-span-2 flex gap-3 pt-4 border-t">
+          <button type="submit" disabled={isLoading} className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+            {isLoading ? <Loader size={18} className="animate-spin" /> : <Check size={18} />}
+            {isLoading ? 'Updating...' : 'Update Farm'}
+          </button>
+          <button type="button" onClick={onCancel} disabled={isLoading} className="bg-gray-100 text-gray-600 px-6 py-2 rounded-lg font-semibold hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed">Cancel</button>
+        </div>
+      </form>
+    </div>
+  );
+};
+
 const AddPlotForm = ({ farmId, onAdd, onCancel }) => {
   const [formData, setFormData] = useState({ area: '', status: 'LOW_RISK', lastAnalyzed: new Date().toISOString().split('T')[0] });
 
@@ -147,7 +216,7 @@ const FarmDetailsCard = ({ farm, onEdit }) => {
     <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700 transition-colors duration-300">
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-100">{farm.name}</h2>
-        <button onClick={onEdit} className="inline-flex items-center gap-1 text-sm font-medium text-gray-600 hover:text-indigo-600 transition">
+        <button onClick={() => onEdit(farm)} className="inline-flex items-center gap-1 text-sm font-medium text-gray-600 hover:text-indigo-600 transition">
           <Pencil className="w-4 h-4" /> Edit Details
         </button>
       </div>
@@ -234,6 +303,7 @@ const MyFarms = () => {
   // View states
   const [showFarmForm, setShowFarmForm] = useState(false);
   const [showPlotForm, setShowPlotForm] = useState(false);
+  const [editingFarm, setEditingFarm] = useState(null);
 
   // Load farms on component mount
   useEffect(() => {
@@ -269,6 +339,7 @@ const MyFarms = () => {
     setSelectedFarmId(id);
     setShowFarmForm(false);
     setShowPlotForm(false);
+    setEditingFarm(null);
   };
 
   const handleAddFarm = async (formData) => {
@@ -282,6 +353,22 @@ const MyFarms = () => {
     } catch (err) {
       console.error('Error adding farm:', err);
       throw new Error(err.response?.data?.message || 'Failed to add farm');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleEditFarm = async (farmId, formData) => {
+    try {
+      setIsSaving(true);
+      setError('');
+      const response = await farmService.updateFarm(farmId, formData);
+      // Update the farms list with the updated farm
+      setFarms(farms.map(f => f._id === farmId ? response.farm : f));
+      setEditingFarm(null);
+    } catch (err) {
+      console.error('Error updating farm:', err);
+      throw new Error(err.response?.data?.message || 'Failed to update farm');
     } finally {
       setIsSaving(false);
     }
@@ -341,7 +428,7 @@ const MyFarms = () => {
       <main className="flex-1 p-6 sm:p-8 lg:p-10 bg-gray-50 dark:bg-gray-900 min-h-screen overflow-y-auto transition-colors duration-300">
         <header className="flex justify-between items-center mb-8">
           <h1 className="text-xl font-bold text-gray-800 dark:text-gray-100">Farm & Plot Management</h1>
-          {!showFarmForm && (
+          {!showFarmForm && !editingFarm && (
             <button onClick={() => setShowFarmForm(true)} className="inline-flex items-center rounded-full bg-green-600 px-4 py-2 text-sm font-semibold text-white shadow-md hover:bg-green-700 transition duration-200">
               <Plus className="w-5 h-5 mr-1" /> Add New Farm
             </button>
@@ -357,9 +444,11 @@ const MyFarms = () => {
 
         {showFarmForm ? (
           <AddFarmForm onAdd={handleAddFarm} onCancel={() => setShowFarmForm(false)} isLoading={isSaving} />
+        ) : editingFarm ? (
+          <EditFarmForm farm={editingFarm} onUpdate={handleEditFarm} onCancel={() => setEditingFarm(null)} isLoading={isSaving} />
         ) : selectedFarm ? (
           <div className="space-y-8 max-w-5xl">
-            <FarmDetailsCard farm={selectedFarm} onEdit={() => alert('Edit triggered')} />
+            <FarmDetailsCard farm={selectedFarm} onEdit={() => setEditingFarm(selectedFarm)} />
 
             {showPlotForm ? (
               <AddPlotForm
