@@ -1,13 +1,6 @@
-import React, { useState, useMemo } from 'react';
-import { Search, Plus, Pencil, X, Check, Map, Calendar, AlertCircle } from 'lucide-react';
-
-// --- Mock Data ---
-const initialFarms = [
-  { id: 'A', name: 'Farm A', subtitle: 'Green Valley', location: '7.29° N, 80.64° E', area: '15 Ha', admin: 'Admin' },
-  { id: 'B', name: 'Farm B', subtitle: 'Coconut Hills', location: '5.20° N, 80.40° E', area: '22 Ha', admin: 'Admin' },
-  { id: 'C', name: 'Farm C', subtitle: 'Palm Estates', location: '6.50° N, 80.90° E', area: '10 Ha', admin: 'Admin' },
-  { id: 'D', name: 'Farm D', subtitle: 'Tropical Gardens', location: '7.80° N, 80.10° E', area: '30 Ha', admin: 'Admin' },
-];
+import React, { useState, useMemo, useEffect } from 'react';
+import { Search, Plus, Pencil, X, Check, Map, Calendar, AlertCircle, Loader } from 'lucide-react';
+import * as farmService from '../services/farmService';
 
 const currentYear = new Date().getFullYear();
 const initialPlots = [
@@ -46,13 +39,24 @@ const getStatusBadge = (status) => {
 };
 
 // --- Form Components ---
-const AddFarmForm = ({ onAdd, onCancel }) => {
-  const [formData, setFormData] = useState({ name: '', subtitle: '', location: '', area: '', admin: 'Admin' });
+const AddFarmForm = ({ onAdd, onCancel, isLoading }) => {
+  const [formData, setFormData] = useState({ name: '', subtitle: '', location: '', area: '', description: '' });
+  const [error, setError] = useState('');
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.name || !formData.area) return;
-    onAdd({ ...formData, id: Math.random().toString(36).substr(2, 9) });
+    if (!formData.name || !formData.area) {
+      setError('Farm name and area are required');
+      return;
+    }
+    
+    try {
+      setError('');
+      await onAdd(formData);
+      setFormData({ name: '', subtitle: '', location: '', area: '', description: '' });
+    } catch (err) {
+      setError(err.message || 'Failed to add farm');
+    }
   };
 
   return (
@@ -61,26 +65,38 @@ const AddFarmForm = ({ onAdd, onCancel }) => {
         <h2 className="text-xl font-bold text-gray-800">Add New Farm</h2>
         <button onClick={onCancel} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
       </div>
+      {error && (
+        <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">
+          {error}
+        </div>
+      )}
       <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-1">
           <label className="text-xs font-bold text-gray-500 uppercase tracking-tight">Farm Name</label>
-          <input required type="text" className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-green-500" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+          <input required type="text" className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-green-500" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} disabled={isLoading} />
         </div>
         <div className="space-y-1">
           <label className="text-xs font-bold text-gray-500 uppercase tracking-tight">Subtitle/Region</label>
-          <input type="text" className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-green-500" value={formData.subtitle} onChange={e => setFormData({ ...formData, subtitle: e.target.value })} />
+          <input type="text" className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-green-500" value={formData.subtitle} onChange={e => setFormData({ ...formData, subtitle: e.target.value })} disabled={isLoading} />
         </div>
         <div className="space-y-1">
           <label className="text-xs font-bold text-gray-500 uppercase tracking-tight">Location (Lat/Long)</label>
-          <input placeholder="0.00° N, 0.00° E" type="text" className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-green-500" value={formData.location} onChange={e => setFormData({ ...formData, location: e.target.value })} />
+          <input placeholder="0.00° N, 0.00° E" type="text" className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-green-500" value={formData.location} onChange={e => setFormData({ ...formData, location: e.target.value })} disabled={isLoading} />
         </div>
         <div className="space-y-1">
           <label className="text-xs font-bold text-gray-500 uppercase tracking-tight">Total Area (Ha)</label>
-          <input required type="text" placeholder="e.g. 25 Ha" className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-green-500" value={formData.area} onChange={e => setFormData({ ...formData, area: e.target.value })} />
+          <input required type="text" placeholder="e.g. 25 Ha" className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-green-500" value={formData.area} onChange={e => setFormData({ ...formData, area: e.target.value })} disabled={isLoading} />
+        </div>
+        <div className="md:col-span-2 space-y-1">
+          <label className="text-xs font-bold text-gray-500 uppercase tracking-tight">Description</label>
+          <textarea className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-green-500" value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} disabled={isLoading} rows="3" />
         </div>
         <div className="md:col-span-2 flex gap-3 pt-4 border-t">
-          <button type="submit" className="bg-green-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-green-700 flex items-center gap-2"><Check size={18} /> Save Farm</button>
-          <button type="button" onClick={onCancel} className="bg-gray-100 text-gray-600 px-6 py-2 rounded-lg font-semibold hover:bg-gray-200">Cancel</button>
+          <button type="submit" disabled={isLoading} className="bg-green-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-green-700 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+            {isLoading ? <Loader size={18} className="animate-spin" /> : <Check size={18} />}
+            {isLoading ? 'Saving...' : 'Save Farm'}
+          </button>
+          <button type="button" onClick={onCancel} disabled={isLoading} className="bg-gray-100 text-gray-600 px-6 py-2 rounded-lg font-semibold hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed">Cancel</button>
         </div>
       </form>
     </div>
@@ -124,36 +140,46 @@ const AddPlotForm = ({ farmId, onAdd, onCancel }) => {
 };
 
 // --- Main Components ---
-const FarmDetailsCard = ({ farm, onEdit }) => (
-  <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700 transition-colors duration-300">
-    <div className="flex justify-between items-center mb-4">
-      <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-100">{farm.name}</h2>
-      <button onClick={onEdit} className="inline-flex items-center gap-1 text-sm font-medium text-gray-600 hover:text-indigo-600 transition">
-        <Pencil className="w-4 h-4" /> Edit Details
-      </button>
-    </div>
-    <p className="text-sm text-gray-500 mb-6">{farm.admin}</p>
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6">
-      <div className="space-y-4">
-        <div>
-          <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Location</p>
-          <p className="text-lg font-mono text-gray-700">{farm.location || 'N/A'}</p>
+const FarmDetailsCard = ({ farm, onEdit }) => {
+  const adminName = farm.admin?.username || farm.admin || 'Unknown';
+  
+  return (
+    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700 transition-colors duration-300">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-100">{farm.name}</h2>
+        <button onClick={onEdit} className="inline-flex items-center gap-1 text-sm font-medium text-gray-600 hover:text-indigo-600 transition">
+          <Pencil className="w-4 h-4" /> Edit Details
+        </button>
+      </div>
+      <p className="text-sm text-gray-500 mb-6">Managed by: {adminName}</p>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6">
+        <div className="space-y-4">
+          <div>
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Location</p>
+            <p className="text-lg font-mono text-gray-700">{farm.location || 'N/A'}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Total Area</p>
+            <p className="text-lg font-semibold text-gray-700">{farm.area}</p>
+          </div>
+          {farm.description && (
+            <div>
+              <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Description</p>
+              <p className="text-sm text-gray-600">{farm.description}</p>
+            </div>
+          )}
         </div>
-        <div>
-          <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Total Area</p>
-          <p className="text-lg font-semibold text-gray-700">{farm.area}</p>
+        <div className="bg-gray-200 h-full min-h-[150px] rounded-lg flex flex-col items-center justify-center text-gray-400 font-medium tracking-wider shadow-inner border border-gray-300">
+          <Map size={32} className="mb-2 opacity-50" />
+          Map Preview
         </div>
       </div>
-      <div className="bg-gray-200 h-full min-h-[150px] rounded-lg flex flex-col items-center justify-center text-gray-400 font-medium tracking-wider shadow-inner border border-gray-300">
-        <Map size={32} className="mb-2 opacity-50" />
-        Map Preview
-      </div>
     </div>
-  </div>
-);
+  );
+};
 
 const PlotsTable = ({ farm, plots, onAddPlotRequest }) => {
-  const farmPlots = useMemo(() => plots.filter(p => p.farmId === farm.id), [farm.id, plots]);
+  const farmPlots = useMemo(() => plots.filter(p => p.farmId === farm._id), [farm._id, plots]);
   return (
     <div className="mt-8">
       <div className="flex justify-between items-end mb-4">
@@ -197,21 +223,47 @@ const PlotsTable = ({ farm, plots, onAddPlotRequest }) => {
 
 // --- Main Application ---
 const MyFarms = () => {
-  const [selectedFarmId, setSelectedFarmId] = useState('A');
-  const [farms, setFarms] = useState(initialFarms);
+  const [selectedFarmId, setSelectedFarmId] = useState(null);
+  const [farms, setFarms] = useState([]);
   const [plots, setPlots] = useState(initialPlots);
   const [search, setSearch] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState('');
 
   // View states
   const [showFarmForm, setShowFarmForm] = useState(false);
   const [showPlotForm, setShowPlotForm] = useState(false);
+
+  // Load farms on component mount
+  useEffect(() => {
+    const loadFarms = async () => {
+      try {
+        setIsLoading(true);
+        setError('');
+        const response = await farmService.getUserFarms();
+        setFarms(response.farms || []);
+        // Auto-select first farm if available
+        if (response.farms && response.farms.length > 0) {
+          setSelectedFarmId(response.farms[0]._id);
+        }
+      } catch (err) {
+        console.error('Error loading farms:', err);
+        setError('Failed to load farms. Please try again.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadFarms();
+  }, []);
 
   const filteredFarms = useMemo(() =>
     farms.filter(f => f.name.toLowerCase().includes(search.toLowerCase())),
     [search, farms]
   );
 
-  const selectedFarm = useMemo(() => farms.find(f => f.id === selectedFarmId), [farms, selectedFarmId]);
+  const selectedFarm = useMemo(() => farms.find(f => f._id === selectedFarmId), [farms, selectedFarmId]);
 
   const handleSelectFarm = (id) => {
     setSelectedFarmId(id);
@@ -219,16 +271,37 @@ const MyFarms = () => {
     setShowPlotForm(false);
   };
 
-  const handleAddFarm = (newFarm) => {
-    setFarms([...farms, newFarm]);
-    setSelectedFarmId(newFarm.id);
-    setShowFarmForm(false);
+  const handleAddFarm = async (formData) => {
+    try {
+      setIsSaving(true);
+      setError('');
+      const response = await farmService.addFarm(formData);
+      setFarms([...farms, response.farm]);
+      setSelectedFarmId(response.farm._id);
+      setShowFarmForm(false);
+    } catch (err) {
+      console.error('Error adding farm:', err);
+      throw new Error(err.response?.data?.message || 'Failed to add farm');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleAddPlot = (newPlot) => {
     setPlots([...plots, newPlot]);
     setShowPlotForm(false);
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900">
+        <div className="text-center">
+          <Loader size={48} className="animate-spin mx-auto mb-4 text-green-600" />
+          <p className="text-gray-600 dark:text-gray-300">Loading your farms...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex bg-gray-100 dark:bg-gray-900 transition-colors duration-300 pt-4 min-h-screen">
@@ -247,16 +320,20 @@ const MyFarms = () => {
           />
         </div>
         <nav className="space-y-2">
-          {filteredFarms.map(farm => (
-            <div
-              key={farm.id}
-              onClick={() => handleSelectFarm(farm.id)}
-              className={`p-3 rounded-xl cursor-pointer transition duration-150 ${farm.id === selectedFarmId ? 'bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-400 border-l-4 border-green-500 shadow-inner' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'}`}
-            >
-              <p className="font-semibold">{farm.name}</p>
-              <p className="text-xs opacity-70">{farm.subtitle}</p>
-            </div>
-          ))}
+          {filteredFarms.length > 0 ? (
+            filteredFarms.map(farm => (
+              <div
+                key={farm._id}
+                onClick={() => handleSelectFarm(farm._id)}
+                className={`p-3 rounded-xl cursor-pointer transition duration-150 ${farm._id === selectedFarmId ? 'bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-400 border-l-4 border-green-500 shadow-inner' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'}`}
+              >
+                <p className="font-semibold">{farm.name}</p>
+                <p className="text-xs opacity-70">{farm.subtitle || 'No subtitle'}</p>
+              </div>
+            ))
+          ) : (
+            <p className="text-sm text-gray-500 p-3">No farms found</p>
+          )}
         </nav>
       </aside>
 
@@ -271,15 +348,22 @@ const MyFarms = () => {
           )}
         </header>
 
+        {error && (
+          <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg flex items-center gap-3">
+            <AlertCircle size={20} />
+            {error}
+          </div>
+        )}
+
         {showFarmForm ? (
-          <AddFarmForm onAdd={handleAddFarm} onCancel={() => setShowFarmForm(false)} />
+          <AddFarmForm onAdd={handleAddFarm} onCancel={() => setShowFarmForm(false)} isLoading={isSaving} />
         ) : selectedFarm ? (
           <div className="space-y-8 max-w-5xl">
             <FarmDetailsCard farm={selectedFarm} onEdit={() => alert('Edit triggered')} />
 
             {showPlotForm ? (
               <AddPlotForm
-                farmId={selectedFarm.id}
+                farmId={selectedFarm._id}
                 onAdd={handleAddPlot}
                 onCancel={() => setShowPlotForm(false)}
               />
@@ -293,7 +377,9 @@ const MyFarms = () => {
           </div>
         ) : (
           <div className="text-center py-20 text-gray-500">
-            <p className="text-lg font-medium">Select a farm from the sidebar to view details</p>
+            <p className="text-lg font-medium">
+              {farms.length === 0 ? 'No farms yet. Click "Add New Farm" to get started!' : 'Select a farm from the sidebar to view details'}
+            </p>
           </div>
         )}
       </main>
