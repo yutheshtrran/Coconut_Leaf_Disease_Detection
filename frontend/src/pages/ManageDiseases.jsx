@@ -50,6 +50,8 @@ export default function ManageDiseases() {
   const [message, setMessage] = useState({ text: '', type: '' });
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedDisease, setSelectedDisease] = useState(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [diseaseToDelete, setDiseaseToDelete] = useState(null);
 
   useEffect(() => { fetchDiseases(); }, []);
 
@@ -104,14 +106,25 @@ export default function ManageDiseases() {
   };
 
   const deleteDisease = async (id) => {
-    if (!window.confirm('Are you sure to delete this record?')) return;
     try {
       await api.delete(`/diseases/${id}`);
       setMessage({ text: 'Record deleted!', type: 'success' });
       fetchDiseases();
+      setDeleteConfirmOpen(false);
+      setDiseaseToDelete(null);
     } catch {
       setMessage({ text: 'Failed to delete', type: 'error' });
     }
+  };
+
+  const openDeleteConfirm = (disease) => {
+    setDiseaseToDelete(disease);
+    setDeleteConfirmOpen(true);
+  };
+
+  const closeDeleteConfirm = () => {
+    setDeleteConfirmOpen(false);
+    setDiseaseToDelete(null);
   };
 
   const openModal = (disease) => { setSelectedDisease(disease); setModalOpen(true); };
@@ -216,7 +229,7 @@ export default function ManageDiseases() {
                     <button onClick={() => openModal(disease)} className="text-green-600 dark:text-green-400 font-bold text-sm hover:text-green-700 dark:hover:text-green-300 flex items-center gap-1.5 transition-colors"><Eye size={16} /> Details</button>
                     <div className="flex gap-4">
                       <button onClick={() => startEdit(disease)} className="p-2 text-blue-500 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-all"><Edit2 size={18} /></button>
-                      <button onClick={() => deleteDisease(disease._id)} className="p-2 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all"><Trash2 size={18} /></button>
+                      <button onClick={() => openDeleteConfirm(disease)} className="p-2 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all"><Trash2 size={18} /></button>
                     </div>
                   </div>
                 </div>
@@ -255,6 +268,30 @@ export default function ManageDiseases() {
               </div>
               <div className="px-8 py-4 bg-gray-50 dark:bg-gray-700/50 border-t border-gray-100 dark:border-gray-700 flex justify-end">
                 <button onClick={() => setModalOpen(false)} className="px-6 py-2 bg-gray-800 dark:bg-gray-600 text-white font-bold rounded-xl hover:bg-gray-900 dark:hover:bg-gray-500 transition-colors">Close Viewer</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {deleteConfirmOpen && diseaseToDelete && (
+          <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full">
+              <div className="px-8 py-6 border-b border-gray-100 dark:border-gray-700">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400">
+                    <AlertCircle size={24} />
+                  </div>
+                  <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">Delete Record?</h2>
+                </div>
+              </div>
+              <div className="px-8 py-6">
+                <p className="text-gray-700 dark:text-gray-300 mb-2">Are you sure you want to delete <span className="font-bold text-gray-900 dark:text-gray-100">"{diseaseToDelete.name}"</span>?</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">This action cannot be undone.</p>
+              </div>
+              <div className="px-8 py-4 bg-gray-50 dark:bg-gray-700/50 border-t border-gray-100 dark:border-gray-700 flex gap-3 justify-end">
+                <button onClick={closeDeleteConfirm} className="px-6 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 font-bold rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">Cancel</button>
+                <button onClick={() => deleteDisease(diseaseToDelete._id)} className="px-6 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 active:scale-95 transition-all flex items-center gap-2"><Trash2 size={18} /> Delete</button>
               </div>
             </div>
           </div>

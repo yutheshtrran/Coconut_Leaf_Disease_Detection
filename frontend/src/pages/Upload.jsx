@@ -19,6 +19,8 @@ const Upload = () => {
   const [loading, setLoading] = useState(false);
   const [videoAnalysis, setVideoAnalysis] = useState(null); // Video analysis results
   const [uploadType, setUploadType] = useState(null); // 'image' or 'video'
+  const [droneResult, setDroneResult] = useState(null); // Drone processing results
+  const [showDroneModal, setShowDroneModal] = useState(false); // Modal for drone results
 
   const handleFarmChange = (e) => setFarm(e.target.value);
   const handlePlotChange = (e) => setPlot(e.target.value);
@@ -170,6 +172,46 @@ const Upload = () => {
     setLoading(false);
   };
 
+  const handleDroneProcessing = async () => {
+    if (selectedFiles.length < 2) {
+      alert("Please select at least 2 images for drone processing");
+      return;
+    }
+
+    setLoading(true);
+    setVideoAnalysis(null);
+    setHealthyPercent(null);
+    setDiseaseLevels([]);
+
+    const formData = new FormData();
+    selectedFiles.forEach(file => {
+      formData.append("files", file);
+    });
+
+    try {
+      const response = await fetch("http://127.0.0.1:5000/process-drone-images", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        alert(`Drone processing failed: ${data.error || 'Unknown error'}`);
+        setLoading(false);
+        return;
+      }
+
+      setDroneResult(data);
+      setShowDroneModal(true);
+    } catch (err) {
+      console.error("Drone processing error:", err);
+      alert("Error processing drone images. Make sure the backend supports drone processing.");
+    }
+
+    setLoading(false);
+  };
+
   return (
     <div className="pt-4 p-4 sm:p-6 lg:p-8 bg-gray-50 dark:bg-gray-900 min-h-screen">
       <h1 className="text-3xl font-bold text-emerald-800 mb-6">Upload Drone Images</h1>
@@ -218,9 +260,12 @@ const Upload = () => {
             <textarea value={notes} onChange={handleNotesChange} rows={4} placeholder="Add any observations or context about this flight..." className="w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:border-emerald-600 focus:ring-emerald-500 text-gray-900 placeholder-gray-400" />
           </div>
 
-          <div className="mt-6 text-right">
+          <div className="mt-6 text-right space-x-4">
             <button type="button" onClick={handleStartAnalysis} disabled={loading} className="inline-flex items-center justify-center px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-xl shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition duration-150">
               {loading ? "Analyzing..." : "Start Analysis"}
+            </button>
+            <button type="button" onClick={handleDroneProcessing} disabled={loading || selectedFiles.length < 2} className="inline-flex items-center justify-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150 disabled:opacity-50">
+              {loading ? "Processing..." : "Process Drone Images"}
             </button>
           </div>
         </div>
@@ -351,6 +396,141 @@ const Upload = () => {
           </div>
         </div>
       </div>
+
+      {/* Drone Processing Modal */}
+      {showDroneModal && droneResult && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-2xl font-bold text-emerald-800">Drone Image Analysis Results</h2>
+                <button
+                  onClick={() => setShowDroneModal(false)}
+                  className="text-gray-500 hover:text-gray-700 text-2xl"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                {/* Statistics */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="bg-emerald-50 p-4 rounded-lg border border-emerald-200">
+                  <p className="text-sm text-emerald-600 mb-1">Trees Detected</p>
+                  <div className="text-3xl font-bold text-emerald-700">{droneResult.num_trees}</div>
+                </div>
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                  <p className="text-sm text-blue-600 mb-1">Images Processed</p>
+                  <div className="text-3xl font-bold text-blue-700">{selectedFiles.length}</div>
+                </div>
+                <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                  <p className="text-sm text-green-600 mb-1">Healthy Trees</p>
+                  <div className="text-3xl font-bold text-green-700">
+                    {droneResult.segmentation_stats?.healthy_trees || 0}
+                  </div>
+                </div>
+                <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+                  <p className="text-sm text-red-600 mb-1">Diseased Trees</p>
+                  <div className="text-3xl font-bold text-red-700">
+                    {droneResult.segmentation_stats?.diseased_trees || 0}
+                  </div>
+                </div>
+              </div>
+
+              {/* Health Percentage */}
+              {droneResult.segmentation_stats && (
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-300">
+                  <div className="flex justify-between mb-2">
+                    <p className="text-sm text-gray-600">Overall Farm Health</p>
+                    <span className="font-semibold text-emerald-700">
+                      {droneResult.segmentation_stats.health_percentage?.toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div
+                      className="bg-emerald-600 h-3 rounded-full"
+                      style={{ width: `${droneResult.segmentation_stats.health_percentage}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Estimated Farm Size: {droneResult.segmentation_stats.estimated_farm_size?.toFixed(1)} hectares
+                  </p>
+                </div>
+              )}
+                {/* Annotated Image */}
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-3">Annotated Panorama</h3>
+                  <div className="flex justify-center">
+                    <img
+                      src={droneResult.annotated_image}
+                      alt="Annotated panorama with tree detections"
+                      className="max-w-full h-auto rounded-lg shadow-lg border border-gray-300"
+                    />
+                  </div>
+                  <p className="text-sm text-gray-600 mt-2 text-center">
+                    Red circles show detected coconut trees with unique IDs
+                  </p>
+                </div>
+
+                {/* Tree Data Table */}
+                {droneResult.tree_data && droneResult.tree_data.length > 0 && (
+                  <div className="bg-white p-4 rounded-lg border border-gray-300">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-3">Detected Trees</h3>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full table-auto">
+                        <thead>
+                          <tr className="bg-gray-50">
+                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Tree ID</th>
+                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Bounding Box</th>
+                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Disease Status</th>
+                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Health %</th>
+                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Confidence</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {droneResult.tree_data.map((tree, idx) => (
+                            <tr key={idx} className="border-t border-gray-200">
+                              <td className="px-4 py-2 text-sm text-gray-900">{tree.id}</td>
+                              <td className="px-4 py-2 text-sm text-gray-600">
+                                [{tree.bbox.join(', ')}]
+                              </td>
+                              <td className="px-4 py-2 text-sm">
+                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                  tree.disease?.toLowerCase() === 'healthy'
+                                    ? 'bg-green-100 text-green-800'
+                                    : 'bg-red-100 text-red-800'
+                                }`}>
+                                  {tree.disease || 'Unknown'}
+                                </span>
+                              </td>
+                              <td className="px-4 py-2 text-sm text-gray-600">
+                                {tree.health_percentage ? `${tree.health_percentage.toFixed(1)}%` : 'N/A'}
+                              </td>
+                              <td className="px-4 py-2 text-sm text-gray-600">
+                                {tree.confidence ? `${(tree.confidence * 100).toFixed(1)}%` : 'N/A'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Close Button */}
+                <div className="text-center">
+                  <button
+                    onClick={() => setShowDroneModal(false)}
+                    className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg shadow-md transition duration-150"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
