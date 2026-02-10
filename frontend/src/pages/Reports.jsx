@@ -523,6 +523,25 @@ const Reports = () => {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{report.status}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <div className="flex items-center space-x-2">
+                          {/* View Report */}
+                          <button
+                            title="View Report"
+                            onClick={() => handleView(report.reportId)}
+                            className="text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition duration-150"
+                          >
+                            <Eye className="w-5 h-5" />
+                          </button>
+
+                          {/* Download Report */}
+                          <button
+                            title="Download Report"
+                            onClick={() => handleDownload(report.reportId)}
+                            className="text-gray-500 dark:text-gray-400 hover:text-green-600 dark:hover:text-green-400 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition duration-150"
+                          >
+                            <Download className="w-5 h-5" />
+                          </button>
+
+                          {/* Edit Report */}
                           <button 
                             title="Edit Report" 
                             onClick={() => handleEditReport(report)} 
@@ -530,6 +549,8 @@ const Reports = () => {
                           >
                             <Edit2 className="w-5 h-5" />
                           </button>
+
+                          {/* Delete Report */}
                           <button 
                             title="Delete Report" 
                             onClick={() => handleDeleteReport(report.id)} 
