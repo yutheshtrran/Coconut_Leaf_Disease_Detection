@@ -1,4 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import API from '../services/api';
 import FarmMap from "./Farmmap.jsx";
 
 // Define the custom colors
@@ -27,13 +30,19 @@ const STATS_DATA = [
     },
 ];
 
-// Data for latest analysis reports
-const currentYear = new Date().getFullYear();
-const REPORTS_DATA = [
-    { farm: "Farm A - Plot 3", issue: "Major Issue", date: `${currentYear}-10-26`, color: COLORS.alertRed, className: 'text-red-600 font-semibold' },
-    { farm: "Farm B - Plot 1", issue: "Nutrient Deficiency", date: `${currentYear}-10-25`, color: COLORS.trendYellow, className: 'text-yellow-500' },
-    { farm: "Farm C - Plot 5", issue: "Minor Issue", date: `${currentYear}-10-24`, color: COLORS.primaryGreen, className: 'text-green-500' },
-];
+// Helper function to get severity color and class
+const getSeverityStyles = (label) => {
+    switch (label) {
+        case 'CRITICAL':
+        case 'HIGH':
+            return { color: COLORS.alertRed, className: 'text-red-600 font-semibold' };
+        case 'MODERATE':
+            return { color: COLORS.trendYellow, className: 'text-yellow-500' };
+        case 'LOW':
+        default:
+            return { color: COLORS.primaryGreen, className: 'text-green-500' };
+    }
+};
 
 // Status Circle component
 const StatusCircle = ({ color }) => (
@@ -43,6 +52,52 @@ const StatusCircle = ({ color }) => (
 );
 
 const Dashboard = () => {
+    const navigate = useNavigate();
+    const { user, loading: authLoading } = useAuth();
+    const [reports, setReports] = useState([]);
+    const [reportsLoading, setReportsLoading] = useState(true);
+    const [reportsError, setReportsError] = useState(null);
+
+    // Fetch latest reports from backend
+    useEffect(() => {
+        if (!user || authLoading) return;
+
+        const fetchLatestReports = async () => {
+            try {
+                setReportsLoading(true);
+                setReportsError(null);
+                const response = await API.get('/reports');
+                
+                // Get the latest 3 reports
+                const latestReports = response.data.data
+                    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+                    .slice(0, 3)
+                    .map(report => {
+                        const severityStyles = getSeverityStyles(report.severity.label);
+                        return {
+                            farm: report.farm,
+                            issue: report.issue,
+                            date: new Date(report.date).toISOString().split('T')[0],
+                            color: severityStyles.color,
+                            className: severityStyles.className,
+                            severity: report.severity.label
+                        };
+                    });
+
+                setReports(latestReports);
+            } catch (err) {
+                console.error('Error fetching reports:', err);
+                if (err.response?.status !== 401) {
+                    setReportsError('Failed to fetch latest reports');
+                }
+                setReports([]);
+            } finally {
+                setReportsLoading(false);
+            }
+        };
+
+        fetchLatestReports();
+    }, [user, authLoading]);
     return (
         <div className="pt-4 p-4 sm:p-6 lg:p-8 bg-gray-100 dark:bg-gray-900 min-h-screen transition-colors duration-300">
             <div className="max-w-7xl mx-auto">
@@ -111,39 +166,49 @@ const Dashboard = () => {
                             Latest Analysis Reports
                         </h2>
 
-                        <ul className="space-y-4">
-                            {REPORTS_DATA.map((report, index) => (
-                                <li
-                                    key={index}
-                                    className={`pb-4 ${index < REPORTS_DATA.length - 1 ? 'border-b' : ''}`}
-                                >
-                                    <div className="flex items-start">
-                                        <span className="mr-2 mt-1">
-                                            <StatusCircle color={report.color} />
-                                        </span>
+                        {reportsError && (
+                            <p className="text-red-500 text-sm mb-4">{reportsError}</p>
+                        )}
 
-                                        <div>
-                                            <p className="font-medium text-gray-800 dark:text-gray-200">
-                                                {report.farm}:{' '}
-                                                <span className={report.className}>
-                                                    {report.issue}
-                                                </span>
-                                            </p>
-                                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                                                {report.date}
-                                            </p>
-                                            <a
-                                                href="#"
-                                                className="text-sm font-medium flex items-center"
-                                                style={{ color: COLORS.infoBlue }}
-                                            >
-                                                View Report →
-                                            </a>
+                        {reportsLoading ? (
+                            <p className="text-gray-500 dark:text-gray-400 text-sm">Loading reports...</p>
+                        ) : reports.length > 0 ? (
+                            <ul className="space-y-4">
+                                {reports.map((report, index) => (
+                                    <li
+                                        key={index}
+                                        className={`pb-4 ${index < reports.length - 1 ? 'border-b' : ''}`}
+                                    >
+                                        <div className="flex items-start">
+                                            <span className="mr-2 mt-1">
+                                                <StatusCircle color={report.color} />
+                                            </span>
+
+                                            <div>
+                                                <p className="font-medium text-gray-800 dark:text-gray-200">
+                                                    {report.farm}:{' '}
+                                                    <span className={report.className}>
+                                                        {report.issue}
+                                                    </span>
+                                                </p>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                                                    {report.date}
+                                                </p>
+                                                <a
+                                                    href="/reports"
+                                                    className="text-sm font-medium flex items-center"
+                                                    style={{ color: COLORS.infoBlue }}
+                                                >
+                                                    View Report →
+                                                </a>
+                                            </div>
                                         </div>
-                                    </div>
-                                </li>
-                            ))}
-                        </ul>
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <p className="text-gray-500 dark:text-gray-400 text-sm">No reports available. Create one to get started!</p>
+                        )}
                     </div>
 
                 </main>
