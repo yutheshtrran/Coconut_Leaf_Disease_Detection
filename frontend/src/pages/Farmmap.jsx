@@ -2,6 +2,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import { useState, useEffect } from "react";
 import { Loader, AlertCircle } from "lucide-react";
+import { useTheme } from "../context/ThemeContext";
 import * as farmService from "../services/farmService";
 
 // Fix default marker icon issue in Vite
@@ -76,11 +77,28 @@ const FitBounds = ({ locations }) => {
 };
 
 const FarmMap = () => {
+  const { theme, setTheme } = useTheme();
   const [farms, setFarms] = useState([]);
   const [selectedFarm, setSelectedFarm] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [validLocations, setValidLocations] = useState([]);
+
+  // Sync with system theme changes
+  useEffect(() => {
+    const darkModeQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
+    const handleThemeChange = (e) => {
+      const newTheme = e.matches ? "dark" : "light";
+      setTheme(newTheme);
+    };
+
+    darkModeQuery.addEventListener("change", handleThemeChange);
+
+    return () => {
+      darkModeQuery.removeEventListener("change", handleThemeChange);
+    };
+  }, [setTheme]);
 
   useEffect(() => {
     const loadFarms = async () => {
@@ -128,17 +146,29 @@ const FarmMap = () => {
     <div style={{ width: "100%", height: "100%", position: "relative" }}>
       {/* Loading Overlay */}
       {isLoading && (
-        <div className="absolute top-0 left-0 right-0 bottom-0 flex items-center justify-center bg-gray-100/80 z-50">
+        <div
+          className="absolute top-0 left-0 right-0 bottom-0 flex items-center justify-center z-50"
+          style={{
+            backgroundColor: theme === "dark" ? "rgba(20, 20, 20, 0.8)" : "rgba(243, 244, 246, 0.8)",
+          }}
+        >
           <div className="text-center">
-            <Loader size={48} className="animate-spin mx-auto mb-4 text-green-600" />
-            <p className="text-gray-700">Loading farms...</p>
+            <Loader size={48} className="animate-spin mx-auto mb-4 text-green-500" />
+            <p style={{ color: theme === "dark" ? "#d0d0d0" : "#374151" }}>Loading farms...</p>
           </div>
         </div>
       )}
 
       {/* Error Overlay */}
       {error && (
-        <div className="absolute top-4 left-4 right-4 bg-red-100 border border-red-400 text-red-700 p-4 rounded-lg flex items-center gap-3 z-50">
+        <div
+          className="absolute top-4 left-4 right-4 p-4 rounded-lg flex items-center gap-3 z-50"
+          style={{
+            backgroundColor: theme === "dark" ? "#7f1d1d" : "#fee2e2",
+            border: `1px solid ${theme === "dark" ? "#991b1b" : "#fecaca"}`,
+            color: theme === "dark" ? "#fca5a5" : "#dc2626",
+          }}
+        >
           <AlertCircle size={20} />
           {error}
         </div>
@@ -146,10 +176,23 @@ const FarmMap = () => {
 
       {/* Empty State */}
       {validLocations.length === 0 && !isLoading && !error && (
-        <div className="absolute top-0 left-0 right-0 bottom-0 flex items-center justify-center bg-gray-50 z-10">
+        <div
+          className="absolute top-0 left-0 right-0 bottom-0 flex items-center justify-center z-10"
+          style={{
+            backgroundColor: theme === "dark" ? "rgba(20, 20, 20, 0.5)" : "rgba(249, 250, 251, 0.5)",
+          }}
+        >
           <div className="text-center">
-            <p className="text-gray-600 text-lg">No farms with location data</p>
-            <p className="text-gray-500 text-sm mt-2">
+            <p
+              className="text-lg"
+              style={{ color: theme === "dark" ? "#a0a0a0" : "#4b5563" }}
+            >
+              No farms with location data
+            </p>
+            <p
+              className="text-sm mt-2"
+              style={{ color: theme === "dark" ? "#808080" : "#6b7280" }}
+            >
               Add farms with location information to see them on the map
             </p>
           </div>
@@ -164,10 +207,15 @@ const FarmMap = () => {
         maxZoom={18}
         style={{ width: "100%", height: "100%" }}
       >
-        {/* Tile Layer */}
+        {/* Tile Layer - Dynamic based on theme */}
         <TileLayer
-          attribution="Tiles © Esri"
-          url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}"
+          key={`tile-${theme}`}
+          attribution={theme === "dark" ? '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors & <a href="https://carto.com/aboutcarto/">CARTO</a>' : 'Tiles © Esri'}
+          url={
+            theme === "dark"
+              ? "https://cartodb-basemaps-{s}.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png"
+              : "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}"
+          }
         />
 
         {/* Markers */}
@@ -198,19 +246,32 @@ const FarmMap = () => {
             position={[selectedFarm.lat, selectedFarm.lng]}
             onClose={() => setSelectedFarm(null)}
           >
-            <div className="text-sm max-w-xs">
-              <p className="font-semibold text-gray-900">{selectedFarm.name}</p>
+            <div
+              className="text-sm max-w-xs"
+              style={{
+                backgroundColor: theme === "dark" ? "#2a2a2a" : "#ffffff",
+                color: theme === "dark" ? "#e0e0e0" : "#1a1a1a",
+              }}
+            >
+              <p
+                className="font-semibold"
+                style={{ color: theme === "dark" ? "#22c55e" : "#000000" }}
+              >
+                {selectedFarm.name}
+              </p>
               {selectedFarm.subtitle && (
-                <p className="text-gray-600 text-xs mt-1">{selectedFarm.subtitle}</p>
+                <p className="text-xs mt-1" style={{ color: theme === "dark" ? "#b0b0b0" : "#666666" }}>
+                  {selectedFarm.subtitle}
+                </p>
               )}
-              <p className="mt-2 text-gray-700">
+              <p className="mt-2" style={{ color: theme === "dark" ? "#e0e0e0" : "#1a1a1a" }}>
                 <span className="font-medium">Area:</span> {selectedFarm.area}
               </p>
-              <p className="mt-1 capitalize text-gray-700">
+              <p className="mt-1 capitalize" style={{ color: theme === "dark" ? "#e0e0e0" : "#1a1a1a" }}>
                 <span className="font-medium">Status:</span>{" "}
                 <span
                   style={{
-                    color: markerColor[selectedFarm.status] || "blue",
+                    color: markerColor[selectedFarm.status] === "active" ? "#22c55e" : "#9ca3af",
                     fontWeight: 600,
                   }}
                 >
@@ -218,7 +279,9 @@ const FarmMap = () => {
                 </span>
               </p>
               {selectedFarm.description && (
-                <p className="mt-2 text-gray-600 text-xs">{selectedFarm.description}</p>
+                <p className="mt-2 text-xs" style={{ color: theme === "dark" ? "#a0a0a0" : "#666666" }}>
+                  {selectedFarm.description}
+                </p>
               )}
             </div>
           </Popup>
