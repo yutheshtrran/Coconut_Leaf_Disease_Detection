@@ -13,17 +13,17 @@ const COLORS = {
     bgHeader: '#E8F5E9',
 };
 
-// Data for the top statistics cards
+// Placeholder data - will be replaced with real data
 const STATS_DATA = [
-    { title: "Total Farms Monitored", value: "12", color: 'border-green-500' },
-    { title: "Critical Alerts", value: "3", color: 'border-red-500' },
-    { title: "New Reports This Week", value: "5", color: 'border-blue-500' },
+    { title: "Total Farms Monitored", value: "0", color: 'border-green-500' },
+    { title: "Critical Alerts", value: "0", color: 'border-red-500' },
+    { title: "New Reports This Week", value: "0", color: 'border-blue-500' },
     {
         title: "Overall Health Trend",
         value: (
             <div className="flex items-center">
                 <span className="mr-1">↑</span>
-                <span className="text-xl text-green-500">Improving</span>
+                <span className="text-xl text-green-500">Loading...</span>
             </div>
         ),
         color: 'border-yellow-500'
@@ -57,6 +57,76 @@ const Dashboard = () => {
     const [reports, setReports] = useState([]);
     const [reportsLoading, setReportsLoading] = useState(true);
     const [reportsError, setReportsError] = useState(null);
+    
+    // Stats state
+    const [stats, setStats] = useState({
+        totalFarms: 0,
+        criticalAlerts: 0,
+        reportsThisWeek: 0,
+        healthTrend: 'Neutral',
+        trendDirection: '→'
+    });
+    const [statsLoading, setStatsLoading] = useState(true);
+
+    // Fetch latest reports from backend
+    useEffect(() => {
+        if (!user || authLoading) return;
+
+        const fetchDashboardData = async () => {
+            try {
+                setStatsLoading(true);
+                
+                // Fetch all reports
+                const reportsResponse = await API.get('/reports');
+                const allReports = reportsResponse.data.data || [];
+
+                // Calculate stats
+                const totalFarms = new Set(allReports.map(r => r.farm)).size || 0;
+                
+                const criticalAlerts = allReports.filter(r => 
+                    r.severity?.label === 'CRITICAL' || r.severity?.label === 'HIGH'
+                ).length;
+
+                // Get reports from this week
+                const today = new Date();
+                const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+                const reportsThisWeek = allReports.filter(r => 
+                    new Date(r.createdAt) >= weekAgo
+                ).length;
+
+                // Calculate health trend
+                const criticalCount = allReports.filter(r => r.severity?.label === 'CRITICAL').length;
+                const highCount = allReports.filter(r => r.severity?.label === 'HIGH').length;
+                const moderateCount = allReports.filter(r => r.severity?.label === 'MODERATE').length;
+                const lowCount = allReports.filter(r => r.severity?.label === 'LOW').length;
+
+                let healthTrend = 'Neutral';
+                let trendDirection = '→';
+                
+                if (lowCount + moderateCount > criticalCount + highCount) {
+                    healthTrend = 'Improving';
+                    trendDirection = '↑';
+                } else if (criticalCount + highCount > lowCount + moderateCount) {
+                    healthTrend = 'Declining';
+                    trendDirection = '↓';
+                }
+
+                setStats({
+                    totalFarms,
+                    criticalAlerts,
+                    reportsThisWeek,
+                    healthTrend,
+                    trendDirection
+                });
+            } catch (err) {
+                console.error('Error fetching dashboard data:', err);
+            } finally {
+                setStatsLoading(false);
+            }
+        };
+
+        fetchDashboardData();
+    }, [user, authLoading]);
 
     // Fetch latest reports from backend
     useEffect(() => {
@@ -130,19 +200,45 @@ const Dashboard = () => {
 
                 {/* Stats */}
                 <section className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                    {STATS_DATA.map((stat, index) => (
-                        <div
-                            key={index}
-                            className={`bg-white dark:bg-gray-800 p-5 rounded-xl shadow-lg border-b-4 ${stat.color}`}
-                        >
-                            <p className="text-sm text-gray-500 dark:text-gray-400">
-                                {stat.title}
-                            </p>
-                            <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">
-                                {stat.value}
-                            </p>
+                    <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-lg border-b-4 border-green-500">
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                            Total Farms Monitored
+                        </p>
+                        <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+                            {statsLoading ? '...' : stats.totalFarms}
+                        </p>
+                    </div>
+                    <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-lg border-b-4 border-red-500">
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                            Critical Alerts
+                        </p>
+                        <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+                            {statsLoading ? '...' : stats.criticalAlerts}
+                        </p>
+                    </div>
+                    <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-lg border-b-4 border-blue-500">
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                            New Reports This Week
+                        </p>
+                        <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+                            {statsLoading ? '...' : stats.reportsThisWeek}
+                        </p>
+                    </div>
+                    <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-lg border-b-4 border-yellow-500">
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                            Overall Health Trend
+                        </p>
+                        <div className="flex items-center">
+                            <span className="mr-1 text-2xl">{statsLoading ? '...' : stats.trendDirection}</span>
+                            <span className={`text-xl font-semibold ${
+                                stats.healthTrend === 'Improving' ? 'text-green-500' :
+                                stats.healthTrend === 'Declining' ? 'text-red-500' :
+                                'text-yellow-500'
+                            }`}>
+                                {statsLoading ? 'Loading...' : stats.healthTrend}
+                            </span>
                         </div>
-                    ))}
+                    </div>
                 </section>
 
                 {/* Main Content */}
