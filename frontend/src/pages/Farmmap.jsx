@@ -18,25 +18,20 @@ L.Icon.Default.mergeOptions({
 // Utility function to parse location string "lat° N/S, lng° E/W"
 const parseLocation = (locationString) => {
   if (!locationString) return null;
-  
   try {
-    // Match pattern like "7.29° N, 80.64° E"
     const regex = /(-?\d+\.?\d*)\s*°\s*([NS]),\s*(-?\d+\.?\d*)\s*°\s*([EW])/;
     const match = locationString.match(regex);
-    
     if (!match) return null;
-    
+
     let lat = parseFloat(match[1]);
     let lng = parseFloat(match[3]);
-    
-    // Adjust for South latitude
-    if (match[2] === 'S') lat = -lat;
-    // Adjust for West longitude
-    if (match[4] === 'W') lng = -lng;
-    
+
+    if (match[2] === "S") lat = -lat;
+    if (match[4] === "W") lng = -lng;
+
     return { lat, lng };
   } catch (error) {
-    console.error('Error parsing location:', error);
+    console.error("Error parsing location:", error);
     return null;
   }
 };
@@ -47,14 +42,34 @@ const markerColor = {
   inactive: "gray",
 };
 
-// Component to auto-fit map bounds
+// Component to auto-fit map bounds safely
 const FitBounds = ({ locations }) => {
   const map = useMap();
 
   useEffect(() => {
-    if (locations.length === 0) return;
-    const bounds = L.latLngBounds(locations.map((loc) => [loc.lat, loc.lng]));
-    map.fitBounds(bounds, { padding: [50, 50] });
+    if (!locations || locations.length === 0) return;
+
+    try {
+      const latLngs = locations
+        .filter(
+          (loc) => Number.isFinite(loc.lat) && Number.isFinite(loc.lng)
+        )
+        .map((loc) => [loc.lat, loc.lng]);
+
+      if (latLngs.length === 0) return;
+
+      const bounds = L.latLngBounds(latLngs);
+
+      if (bounds.isValid()) {
+        map.fitBounds(bounds, {
+          padding: [50, 50],
+          maxZoom: 13, // Prevent over-zoom for close farms
+          animate: true,
+        });
+      }
+    } catch (err) {
+      console.error("Error fitting map bounds:", err);
+    }
   }, [locations, map]);
 
   return null;
@@ -72,27 +87,27 @@ const FarmMap = () => {
       try {
         setIsLoading(true);
         setError(null);
+
         const response = await farmService.getUserFarms();
-        
+
         if (response.farms && response.farms.length > 0) {
           setFarms(response.farms);
-          
-          // Parse and filter farms with valid coordinates
+
           const validLocs = response.farms
-            .map(farm => {
+            .map((farm) => {
               const coords = parseLocation(farm.location);
               return coords ? { ...farm, ...coords } : null;
             })
-            .filter(farm => farm !== null);
-          
+            .filter((farm) => farm !== null);
+
           setValidLocations(validLocs);
         } else {
           setFarms([]);
           setValidLocations([]);
         }
       } catch (err) {
-        console.error('Error loading farms:', err);
-        setError('Failed to load farms. Please try again.');
+        console.error("Error loading farms:", err);
+        setError("Failed to load farms. Please try again.");
       } finally {
         setIsLoading(false);
       }
@@ -101,13 +116,17 @@ const FarmMap = () => {
     loadFarms();
   }, []);
 
-  // Default center for map (Sri Lanka's approximate center)
-  const defaultCenter = validLocations.length > 0 
-    ? [validLocations[0].lat, validLocations[0].lng]
-    : [7.8731, 80.7718];
+  // Safe default center
+  const defaultCenter =
+    validLocations.length > 0 &&
+    Number.isFinite(validLocations[0].lat) &&
+    Number.isFinite(validLocations[0].lng)
+      ? [validLocations[0].lat, validLocations[0].lng]
+      : [7.8731, 80.7718]; // Sri Lanka center
 
   return (
     <div style={{ width: "100%", height: "100%", position: "relative" }}>
+      {/* Loading Overlay */}
       {isLoading && (
         <div className="absolute top-0 left-0 right-0 bottom-0 flex items-center justify-center bg-gray-100/80 z-50">
           <div className="text-center">
@@ -117,6 +136,7 @@ const FarmMap = () => {
         </div>
       )}
 
+      {/* Error Overlay */}
       {error && (
         <div className="absolute top-4 left-4 right-4 bg-red-100 border border-red-400 text-red-700 p-4 rounded-lg flex items-center gap-3 z-50">
           <AlertCircle size={20} />
@@ -124,26 +144,33 @@ const FarmMap = () => {
         </div>
       )}
 
+      {/* Empty State */}
       {validLocations.length === 0 && !isLoading && !error && (
         <div className="absolute top-0 left-0 right-0 bottom-0 flex items-center justify-center bg-gray-50 z-10">
           <div className="text-center">
             <p className="text-gray-600 text-lg">No farms with location data</p>
-            <p className="text-gray-500 text-sm mt-2">Add farms with location information to see them on the map</p>
+            <p className="text-gray-500 text-sm mt-2">
+              Add farms with location information to see them on the map
+            </p>
           </div>
         </div>
       )}
 
+      {/* Map */}
       <MapContainer
         center={defaultCenter}
-        zoom={12}
+        zoom={10}
+        minZoom={6} // Prevent zooming out too far
+        maxZoom={18}
         style={{ width: "100%", height: "100%" }}
       >
-        {/* Free vegetation-friendly ESRI map */}
+        {/* Tile Layer */}
         <TileLayer
           attribution="Tiles © Esri"
           url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}"
         />
 
+        {/* Markers */}
         {validLocations.map((farm) => (
           <Marker
             key={farm._id}
@@ -165,6 +192,7 @@ const FarmMap = () => {
           />
         ))}
 
+        {/* Popup */}
         {selectedFarm && (
           <Popup
             position={[selectedFarm.lat, selectedFarm.lng]}
@@ -196,7 +224,7 @@ const FarmMap = () => {
           </Popup>
         )}
 
-        {/* Auto-fit map bounds to show all farms */}
+        {/* Auto-fit bounds */}
         {validLocations.length > 0 && <FitBounds locations={validLocations} />}
       </MapContainer>
     </div>
