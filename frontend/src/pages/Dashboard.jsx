@@ -16,12 +16,14 @@ const STATS_DATA = [
     { title: "Critical Alerts", value: "3", color: 'border-red-500' },
     { title: "New Reports This Week", value: "5", color: 'border-blue-500' },
     {
-        title: "Overall Health Trend", value: (
+        title: "Overall Health Trend",
+        value: (
             <div className="flex items-center">
-                <span className="mr-1">&uarr;</span>
+                <span className="mr-1">↑</span>
                 <span className="text-xl text-green-500">Improving</span>
             </div>
-        ), color: 'border-yellow-500'
+        ),
+        color: 'border-yellow-500'
     },
 ];
 
@@ -35,7 +37,7 @@ const REPORTS_DATA = [
 
 // Status Circle component
 const StatusCircle = ({ color }) => (
-    <svg className="w-3 h-3" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <svg className="w-3 h-3" viewBox="0 0 100 100">
         <circle cx="50" cy="50" r="50" fill={color} />
     </svg>
 );
@@ -45,65 +47,97 @@ const Dashboard = () => {
         <div className="pt-4 p-4 sm:p-6 lg:p-8 bg-gray-100 dark:bg-gray-900 min-h-screen transition-colors duration-300">
             <div className="max-w-7xl mx-auto">
 
-                {/* Header Section */}
-                <header className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md mb-8 transition-colors duration-300">
-                    <h1 className="text-xl sm:text-2xl font-semibold flex items-center" style={{ color: COLORS.primaryGreen }}>
-                        <svg className="w-8 h-8 mr-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: COLORS.primaryGreen }}>
-                            <path d="M17 19c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"></path>
-                            <path d="M17 9l-4-4"></path>
-                            <path d="M17 9l4 4"></path>
-                            <path d="M7 21h10"></path>
-                            <path d="M12 21v-2c0-3.31-2.69-6-6-6H3"></path>
+                {/* Header */}
+                <header className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md mb-8">
+                    <h1
+                        className="text-xl sm:text-2xl font-semibold flex items-center"
+                        style={{ color: COLORS.primaryGreen }}
+                    >
+                        <svg
+                            className="w-8 h-8 mr-3"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                        >
+                            <path d="M17 19c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z" />
+                            <path d="M17 9l-4-4" />
+                            <path d="M17 9l4 4" />
+                            <path d="M7 21h10" />
+                            <path d="M12 21v-2c0-3.31-2.69-6-6-6H3" />
                         </svg>
                         Welcome, Admin!
                     </h1>
-                    <p className="text-gray-600 dark:text-gray-400 mt-1 text-sm sm:text-base">Monitor your plantations and analyze latest flight data.</p>
+                    <p className="text-gray-600 dark:text-gray-400 mt-1">
+                        Monitor your plantations and analyze latest flight data.
+                    </p>
                 </header>
 
-                {/* Stats Cards Grid */}
+                {/* Stats */}
                 <section className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
                     {STATS_DATA.map((stat, index) => (
                         <div
                             key={index}
-                            className={`bg-white dark:bg-gray-800 p-5 rounded-xl shadow-lg border-b-4 ${stat.color} transition duration-300 hover:shadow-xl`}
+                            className={`bg-white dark:bg-gray-800 p-5 rounded-xl shadow-lg border-b-4 ${stat.color}`}
                         >
-                            <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">{stat.title}</p>
-                            <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">{stat.value}</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                                {stat.title}
+                            </p>
+                            <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+                                {stat.value}
+                            </p>
                         </div>
                     ))}
                 </section>
 
-                {/* Main Content Grid */}
+                {/* Main Content */}
                 <main className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
-                    {/* Left Side: Map Overview */}
-                    <div className="lg:col-span-2 bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg h-96 flex flex-col transition-colors duration-300">
-                        <h2 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-4">Farm Overview Map</h2>
-                        <div className="flex-grow relative bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden flex items-center justify-center">
-                            <div className="flex-grow h-96">
-                                <FarmMap />
-                            </div>
+                    {/* MAP CARD */}
+                    <div className="lg:col-span-2 bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg">
+                        <h2 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-4">
+                            Farm Overview Map
+                        </h2>
+
+                        {/* FIXED MAP CONTAINER */}
+                        <div className="relative h-96 w-full overflow-hidden rounded-lg">
+                            <FarmMap />
                         </div>
                     </div>
 
-                    {/* Right Side: Latest Reports */}
-                    <div className="lg:col-span-1 bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg transition-colors duration-300">
-                        <h2 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-4">Latest Analysis Reports</h2>
+                    {/* REPORTS */}
+                    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg">
+                        <h2 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-4">
+                            Latest Analysis Reports
+                        </h2>
+
                         <ul className="space-y-4">
                             {REPORTS_DATA.map((report, index) => (
-                                <li key={index} className={`pb-4 ${index < REPORTS_DATA.length - 1 ? 'border-b' : ''}`}>
+                                <li
+                                    key={index}
+                                    className={`pb-4 ${index < REPORTS_DATA.length - 1 ? 'border-b' : ''}`}
+                                >
                                     <div className="flex items-start">
-                                        <span className="inline-block mr-2 mt-1" style={{ color: report.color }}>
+                                        <span className="mr-2 mt-1">
                                             <StatusCircle color={report.color} />
                                         </span>
+
                                         <div>
                                             <p className="font-medium text-gray-800 dark:text-gray-200">
-                                                {report.farm}: <span className={report.className}>{report.issue}</span>
+                                                {report.farm}:{' '}
+                                                <span className={report.className}>
+                                                    {report.issue}
+                                                </span>
                                             </p>
-                                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{report.date}</p>
-                                            <a href="#" className="text-sm font-medium flex items-center" style={{ color: COLORS.infoBlue }}>
-                                                View Report
-                                                <span className="ml-1 text-base">&rarr;</span>
+                                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                                                {report.date}
+                                            </p>
+                                            <a
+                                                href="#"
+                                                className="text-sm font-medium flex items-center"
+                                                style={{ color: COLORS.infoBlue }}
+                                            >
+                                                View Report →
                                             </a>
                                         </div>
                                     </div>
@@ -113,7 +147,6 @@ const Dashboard = () => {
                     </div>
 
                 </main>
-
             </div>
         </div>
     );
