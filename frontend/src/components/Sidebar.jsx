@@ -62,7 +62,11 @@ const Sidebar = () => {
       {/* Main Navigation */}
       <nav className="flex-grow p-3 space-y-1 overflow-y-auto">
         {navItems
-          .filter((item) => !item.adminOnly || user?.role === 'admin')
+          .filter((item) => {
+            // Items marked adminOnly are visible to admin and agronomist
+            if (!item.adminOnly) return true;
+            return user?.role === 'admin' || user?.role === 'agronomist';
+          })
           .map((item) => (
             <div key={item.name} onClick={isMobile ? closeMobileMenu : undefined}>
               <NavLink name={item.name} icon={item.icon} to={item.to} />
