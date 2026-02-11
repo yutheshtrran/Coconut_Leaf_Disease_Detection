@@ -14,6 +14,11 @@ exports.createReport = async (req, res) => {
         const { farm, date, issue, severity, status = 'Pending', description = '' } = req.body;
         const userId = req.user._id;
 
+        // Only admin or agronomist may create reports
+        if (!req.user || (req.user.role !== 'admin' && req.user.role !== 'agronomist')) {
+            return res.status(403).json({ message: 'Only admin or agronomist users can create reports' });
+        }
+
         // Validation
         if (!farm || !date || !issue || !severity) {
             return res.status(400).json({ 
@@ -122,9 +127,9 @@ exports.updateReport = async (req, res) => {
 
         if (!report) return res.status(404).json({ message: 'Report not found' });
 
-        // Only agronomist role may update reports
-        if (!req.user || req.user.role !== 'agronomist') {
-            return res.status(403).json({ message: 'Only users with agronomist role can update reports' });
+        // Only admin or agronomist may update reports
+        if (!req.user || (req.user.role !== 'admin' && req.user.role !== 'agronomist')) {
+            return res.status(403).json({ message: 'Only admin or agronomist users can update reports' });
         }
 
         // Update fields
@@ -170,9 +175,9 @@ exports.deleteReport = async (req, res) => {
 
         if (!report) return res.status(404).json({ message: 'Report not found' });
 
-        // Only agronomist role may delete reports
-        if (!req.user || req.user.role !== 'agronomist') {
-            return res.status(403).json({ message: 'Only users with agronomist role can delete reports' });
+        // Only admin or agronomist may delete reports
+        if (!req.user || (req.user.role !== 'admin' && req.user.role !== 'agronomist')) {
+            return res.status(403).json({ message: 'Only admin or agronomist users can delete reports' });
         }
 
         await Report.findByIdAndDelete(report._id);

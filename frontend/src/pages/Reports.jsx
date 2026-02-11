@@ -63,6 +63,7 @@ const Reports = () => {
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
   const [previewReportId, setPreviewReportId] = useState(null);
+  const canCreate = user && (user.role === 'agronomist' || user.role === 'admin');
 
   const canModify = user && (user.role === 'agronomist' || user.role === 'admin');
 
@@ -355,12 +356,22 @@ const Reports = () => {
         {/* Title + Add Report Button */}
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Historical Analysis Reports</h1>
-          <button
-            onClick={handleOpenForm}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg shadow-md hover:bg-green-700 transition duration-150"
-          >
-            <Plus className="w-4 h-4" /> Add Report
-          </button>
+          {canCreate ? (
+            <button
+              onClick={handleOpenForm}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg shadow-md hover:bg-green-700 transition duration-150"
+            >
+              <Plus className="w-4 h-4" /> Add Report
+            </button>
+          ) : (
+            <button
+              disabled
+              title="Only admin or agronomist can add reports"
+              className="flex items-center gap-2 px-4 py-2 bg-gray-300 text-gray-600 rounded-lg shadow-sm cursor-not-allowed"
+            >
+              <Plus className="w-4 h-4" /> Add Report
+            </button>
+          )}
         </div>
 
         {/* Stats Cards */}
