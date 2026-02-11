@@ -59,11 +59,11 @@ exports.createReport = async (req, res) => {
     }
 };
 
-// Get all reports for authenticated user
+// Get all reports (visible to all authenticated users)
 exports.getReports = async (req, res) => {
     try {
-        const userId = req.user._id;
-        const reports = await Report.find({ userId })
+        // Return all reports to authenticated users (visibility for all)
+        const reports = await Report.find({})
             .sort({ createdAt: -1 })
             .populate('userId', 'name email');
         
@@ -84,25 +84,19 @@ exports.getReports = async (req, res) => {
 exports.getReportById = async (req, res) => {
     const { id } = req.params;
     try {
-        const report = await Report.findById(id).populate('userId', 'name email');
-        
+        // Support lookup by MongoDB _id or by reportId
+        let report = null;
+        if (/^[0-9a-fA-F]{24}$/.test(id)) {
+            report = await Report.findById(id).populate('userId', 'name email');
+        }
         if (!report) {
-            return res.status(404).json({ 
-                message: 'Report not found' 
-            });
+            report = await Report.findOne({ reportId: id }).populate('userId', 'name email');
         }
 
-        // Check if user owns this report
-        if (report.userId._id.toString() !== req.user._id.toString()) {
-            return res.status(403).json({ 
-                message: 'Not authorized to view this report' 
-            });
-        }
+        if (!report) return res.status(404).json({ message: 'Report not found' });
 
-        res.status(200).json({ 
-            message: 'Report retrieved successfully', 
-            data: report 
-        });
+        // Any authenticated user may view reports
+        return res.status(200).json({ message: 'Report retrieved successfully', data: report });
     } catch (error) {
         console.error('Get report error:', error);
         res.status(500).json({ 
@@ -119,19 +113,18 @@ exports.updateReport = async (req, res) => {
         const { farm, date, issue, severity, status, description } = req.body;
         
         // Find report first
-        const report = await Report.findById(id);
-        
-        if (!report) {
-            return res.status(404).json({ 
-                message: 'Report not found' 
-            });
+        // Support lookup by _id or reportId
+        let report = null;
+        if (/^[0-9a-fA-F]{24}$/.test(id)) {
+            report = await Report.findById(id);
         }
+        if (!report) report = await Report.findOne({ reportId: id });
 
-        // Check ownership
-        if (report.userId.toString() !== req.user._id.toString()) {
-            return res.status(403).json({ 
-                message: 'Not authorized to edit this report' 
-            });
+        if (!report) return res.status(404).json({ message: 'Report not found' });
+
+        // Only agronomist role may update reports
+        if (!req.user || req.user.role !== 'agronomist') {
+            return res.status(403).json({ message: 'Only users with agronomist role can update reports' });
         }
 
         // Update fields
@@ -168,27 +161,22 @@ exports.updateReport = async (req, res) => {
 exports.deleteReport = async (req, res) => {
     const { id } = req.params;
     try {
-        const report = await Report.findById(id);
-        
-        if (!report) {
-            return res.status(404).json({ 
-                message: 'Report not found' 
-            });
+        // Support lookup by _id or reportId
+        let report = null;
+        if (/^[0-9a-fA-F]{24}$/.test(id)) {
+            report = await Report.findById(id);
+        }
+        if (!report) report = await Report.findOne({ reportId: id });
+
+        if (!report) return res.status(404).json({ message: 'Report not found' });
+
+        // Only agronomist role may delete reports
+        if (!req.user || req.user.role !== 'agronomist') {
+            return res.status(403).json({ message: 'Only users with agronomist role can delete reports' });
         }
 
-        // Check ownership
-        if (report.userId.toString() !== req.user._id.toString()) {
-            return res.status(403).json({ 
-                message: 'Not authorized to delete this report' 
-            });
-        }
-
-        await Report.findByIdAndDelete(id);
-        
-        res.status(200).json({ 
-            message: 'Report deleted successfully', 
-            deletedReport: report 
-        });
+        await Report.findByIdAndDelete(report._id);
+        return res.status(200).json({ message: 'Report deleted successfully', deletedReport: report });
     } catch (error) {
         console.error('Delete report error:', error);
         res.status(500).json({ 
@@ -201,10 +189,10 @@ exports.deleteReport = async (req, res) => {
 // Get reports filtered by various criteria
 exports.getFilteredReports = async (req, res) => {
     try {
-        const userId = req.user._id;
         const { farm, startDate, endDate, issue, status } = req.query;
 
-        let filter = { userId };
+        // Allow filtering across all reports
+        let filter = {};
 
         if (farm) filter.farm = { $regex: farm, $options: 'i' };
         if (issue) filter.issue = { $regex: issue, $options: 'i' };

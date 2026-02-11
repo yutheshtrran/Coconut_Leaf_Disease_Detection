@@ -64,6 +64,8 @@ const Reports = () => {
   const [successMessage, setSuccessMessage] = useState('');
   const [previewReportId, setPreviewReportId] = useState(null);
 
+  const canModify = user && (user.role === 'agronomist' || user.role === 'admin');
+
   const [newReportData, setNewReportData] = useState({
     farm: '',
     date: '',
@@ -103,7 +105,9 @@ const Reports = () => {
     try {
       setLoading(true);
       setError(null);
+      console.log('current authenticated user (frontend):', user);
       const response = await API.get('/reports');
+      console.log('fetchReports response:', response.status, response.data);
       
       const formattedReports = response.data.data.map(report => ({
         id: report._id,
@@ -551,22 +555,27 @@ const Reports = () => {
                           </button>
 
                           {/* Edit Report */}
-                          <button 
-                            title="Edit Report" 
-                            onClick={() => handleEditReport(report)} 
-                            className="text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition duration-150"
-                          >
-                            <Edit2 className="w-5 h-5" />
-                          </button>
+                          {canModify && (
+                            <>
+                              {/* Edit Report */}
+                              <button 
+                                title="Edit Report" 
+                                onClick={() => handleEditReport(report)} 
+                                className="text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition duration-150"
+                              >
+                                <Edit2 className="w-5 h-5" />
+                              </button>
 
-                          {/* Delete Report */}
-                          <button 
-                            title="Delete Report" 
-                            onClick={() => handleDeleteReport(report.id)} 
-                            className="text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition duration-150"
-                          >
-                            <Trash2 className="w-5 h-5" />
-                          </button>
+                              {/* Delete Report */}
+                              <button 
+                                title="Delete Report" 
+                                onClick={() => handleDeleteReport(report.id)} 
+                                className="text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition duration-150"
+                              >
+                                <Trash2 className="w-5 h-5" />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
