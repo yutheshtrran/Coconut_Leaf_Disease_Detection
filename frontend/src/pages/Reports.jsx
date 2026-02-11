@@ -3,6 +3,7 @@ import { Eye, Download, MoreHorizontal, ChevronLeft, ChevronRight, Filter, Plus,
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import API from '../services/api';
+import ReportPreviewModal from '../components/ReportPreviewModal';
 
 // --- Helper Components ---
 const StatsCard = ({ title, value, variant = 'default' }) => {
@@ -61,6 +62,7 @@ const Reports = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
+  const [previewReportId, setPreviewReportId] = useState(null);
 
   const [newReportData, setNewReportData] = useState({
     farm: '',
@@ -141,13 +143,12 @@ const Reports = () => {
   };
 
   const handleView = (reportId) => {
-    window.open(`/report/view/${reportId}`, "_blank");
+    setPreviewReportId(reportId);
   };
 
   const handleDownload = (reportId) => {
-    // Create link to download endpoint
     const link = document.createElement("a");
-    link.href = `${API.defaults.baseURL}/report/download/${reportId}`;
+    link.href = `${API.defaults.baseURL}/reports/${reportId}/download`;
     link.download = `${reportId}.pdf`;
     document.body.appendChild(link);
     link.click();
@@ -323,6 +324,14 @@ const Reports = () => {
 
   return (
     <div className="pt-4 p-4 sm:p-6 lg:p-8 bg-gray-50 dark:bg-gray-900 min-h-screen font-['Inter', sans-serif] transition-colors duration-300">
+      {/* Report Preview Modal */}
+      {previewReportId && (
+        <ReportPreviewModal 
+          reportId={previewReportId} 
+          onClose={() => setPreviewReportId(null)} 
+        />
+      )}
+
       <div className="max-w-7xl mx-auto">
 
         {/* Success Message */}

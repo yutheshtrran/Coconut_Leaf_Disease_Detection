@@ -232,3 +232,137 @@ exports.getFilteredReports = async (req, res) => {
         });
     }
 };
+
+// Preview report data (JSON response)
+exports.previewReport = async (req, res) => {
+    const { id } = req.params;
+    try {
+        // Try to find by mongoDB _id first, then by reportId
+        let report = null;
+        
+        // Check if id looks like a MongoDB ObjectId (24 hex characters)
+        if (/^[0-9a-fA-F]{24}$/.test(id)) {
+            report = await Report.findById(id).populate('userId', 'name email');
+        }
+        
+        // If not found by _id, try finding by reportId
+        if (!report) {
+            report = await Report.findOne({ reportId: id }).populate('userId', 'name email');
+        }
+        
+        if (!report) {
+            return res.status(404).json({ 
+                message: 'Report not found' 
+            });
+        }
+
+        // Check if user owns this report
+        if (report.userId._id.toString() !== req.user._id.toString()) {
+            return res.status(403).json({ 
+                message: 'Not authorized to preview this report' 
+            });
+        }
+
+        res.status(200).json({ 
+            message: 'Report preview data retrieved successfully', 
+            data: report 
+        });
+    } catch (error) {
+        console.error('Preview report error:', error);
+        res.status(500).json({ 
+            message: 'Error previewing report', 
+            error: error.message 
+        });
+    }
+};
+
+// Generate and download report as PDF
+exports.downloadReport = async (req, res) => {
+    const { id } = req.params;
+    try {
+        // Try to find by mongoDB _id first, then by reportId
+        let report = null;
+        
+        // Check if id looks like a MongoDB ObjectId (24 hex characters)
+        if (/^[0-9a-fA-F]{24}$/.test(id)) {
+            report = await Report.findById(id).populate('userId', 'name email');
+        }
+        
+        // If not found by _id, try finding by reportId
+        if (!report) {
+            report = await Report.findOne({ reportId: id }).populate('userId', 'name email');
+        }
+        
+        if (!report) {
+            return res.status(404).json({ 
+                message: 'Report not found' 
+            });
+        }
+
+        // Check if user owns this report
+        if (report.userId._id.toString() !== req.user._id.toString()) {
+            return res.status(403).json({ 
+                message: 'Not authorized to download this report' 
+            });
+        }
+
+        const PDFDocument = require('pdfkit');
+        
+        // Set response headers for PDF download
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${report.reportId}.pdf"`);
+
+        // Create PDF document
+        const doc = new PDFDocument();
+        doc.pipe(res);
+
+        // Add title
+        doc.fontSize(24).font('Helvetica-Bold').text('Coconut Leaf Disease Detection Report', { align: 'center' });
+        doc.moveDown(0.5);
+        doc.fontSize(10).text('____________________________________________________________________', { align: 'center' });
+        doc.moveDown(1);
+
+        // Add report metadata
+        doc.fontSize(12).font('Helvetica-Bold').text('Report Information', { underline: true });
+        doc.moveDown(0.5);
+        doc.fontSize(10).font('Helvetica');
+
+        const reportData = [
+            { label: 'Report ID', value: report.reportId },
+            { label: 'Farm Name', value: report.farm },
+            { label: 'Date', value: new Date(report.date).toLocaleDateString() },
+            { label: 'Disease/Issue', value: report.issue },
+            { label: 'Severity Level', value: `${report.severity.label} (${report.severity.value}%)` },
+            { label: 'Status', value: report.status },
+            { label: 'Description', value: report.description || 'No additional description' },
+            { label: 'Reported By', value: report.userId.name },
+            { label: 'Email', value: report.userId.email },
+            { label: 'Created At', value: new Date(report.createdAt).toLocaleString() },
+            { label: 'Updated At', value: new Date(report.updatedAt).toLocaleString() }
+        ];
+
+        reportData.forEach(item => {
+            doc.fontSize(11).font('Helvetica-Bold').text(item.label + ':', { width: 150 });
+            doc.fontSize(10).font('Helvetica').text(item.value, { indent: 20 });
+            doc.moveDown(0.3);
+        });
+
+        doc.moveDown(1);
+        doc.fontSize(10).text('____________________________________________________________________', { align: 'center' });
+        doc.moveDown(0.5);
+
+        // Add footer
+        doc.fontSize(9).fillColor('#999999').text('This is an automatically generated report from the Coconut Leaf Disease Detection System', { align: 'center' });
+        doc.text('Report Generated on: ' + new Date().toLocaleString(), { align: 'center' });
+
+        // Finalize PDF
+        doc.end();
+
+    } catch (error) {
+        console.error('Download report error:', error);
+        res.status(500).json({ 
+            message: 'Error generating report PDF', 
+            error: error.message 
+        });
+    }
+};
