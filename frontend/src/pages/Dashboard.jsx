@@ -1,5 +1,4 @@
-import React from 'react';
-import FarmMap from "./Farmmap.jsx";
+import { Hand } from 'lucide-react';
 
 // Define the custom colors
 const COLORS = {
@@ -40,7 +39,10 @@ const StatusCircle = ({ color }) => (
     </svg>
 );
 
+import { useAuth } from '../context/AuthContext';
+
 const Dashboard = () => {
+    const { user } = useAuth();
     return (
         <div className="pt-4 p-4 sm:p-6 lg:p-8 bg-gray-100 dark:bg-gray-900 min-h-screen transition-colors duration-300">
             <div className="max-w-7xl mx-auto">
@@ -48,14 +50,7 @@ const Dashboard = () => {
                 {/* Header Section */}
                 <header className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md mb-8 transition-colors duration-300">
                     <h1 className="text-xl sm:text-2xl font-semibold flex items-center" style={{ color: COLORS.primaryGreen }}>
-                        <svg className="w-8 h-8 mr-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: COLORS.primaryGreen }}>
-                            <path d="M17 19c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"></path>
-                            <path d="M17 9l-4-4"></path>
-                            <path d="M17 9l4 4"></path>
-                            <path d="M7 21h10"></path>
-                            <path d="M12 21v-2c0-3.31-2.69-6-6-6H3"></path>
-                        </svg>
-                        Welcome, Admin!
+                        Welcome, {user?.username || user?.name || 'User'}!
                     </h1>
                     <p className="text-gray-600 dark:text-gray-400 mt-1 text-sm sm:text-base">Monitor your plantations and analyze latest flight data.</p>
                 </header>
