@@ -105,13 +105,13 @@ const ReportPreviewModal = ({ reportId, onClose }) => {
                       <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Severity Level</label>
                       <div className="flex items-center gap-2 mt-1">
                         <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                          report.severity.label === 'CRITICAL' || report.severity.label === 'HIGH'
-                            ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
-                            : report.severity.label === 'MODERATE'
-                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
-                            : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                            (report.severity?.label === 'CRITICAL' || report.severity?.label === 'HIGH')
+                              ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+                              : report.severity?.label === 'MODERATE'
+                              ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+                              : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
                         }`}>
-                          {report.severity.label} ({report.severity.value}%)
+                            {report.severity?.label || 'UNKNOWN'} ({report.severity?.value ?? 0}%)
                         </span>
                       </div>
                     </div>
@@ -121,11 +121,11 @@ const ReportPreviewModal = ({ reportId, onClose }) => {
                     </div>
                     <div>
                       <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Reported By</label>
-                      <p className="text-sm text-gray-800 dark:text-gray-200">{report.userId.name}</p>
+                      <p className="text-sm text-gray-800 dark:text-gray-200">{report.userId?.name || 'Unknown'}</p>
                     </div>
                     <div>
                       <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Email</label>
-                      <p className="text-sm text-gray-800 dark:text-gray-200">{report.userId.email}</p>
+                      <p className="text-sm text-gray-800 dark:text-gray-200">{report.userId?.email || 'Unknown'}</p>
                     </div>
                   </div>
                 </div>
