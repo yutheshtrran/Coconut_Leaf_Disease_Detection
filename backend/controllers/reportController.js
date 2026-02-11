@@ -244,16 +244,16 @@ exports.previewReport = async (req, res) => {
             });
         }
 
-        // Check if user owns this report
-        if (report.userId._id.toString() !== req.user._id.toString()) {
-            return res.status(403).json({ 
-                message: 'Not authorized to preview this report' 
-            });
+        // Ensure user info exists to avoid runtime errors in the frontend
+        let reportObj = report.toObject ? report.toObject() : report;
+        if (!reportObj.userId) {
+            reportObj.userId = { name: 'Unknown', email: 'Unknown' };
         }
 
+        // Any authenticated user may preview reports
         res.status(200).json({ 
             message: 'Report preview data retrieved successfully', 
-            data: report 
+            data: reportObj 
         });
     } catch (error) {
         console.error('Preview report error:', error);
@@ -287,13 +287,7 @@ exports.downloadReport = async (req, res) => {
             });
         }
 
-        // Check if user owns this report
-        if (report.userId._id.toString() !== req.user._id.toString()) {
-            return res.status(403).json({ 
-                message: 'Not authorized to download this report' 
-            });
-        }
-
+        // Any authenticated user may download reports
         const PDFDocument = require('pdfkit');
         
         // Set response headers for PDF download
@@ -315,6 +309,10 @@ exports.downloadReport = async (req, res) => {
         doc.moveDown(0.5);
         doc.fontSize(10).font('Helvetica');
 
+        // Prepare user fields safely
+        const reportedBy = (report.userId && report.userId.name) ? report.userId.name : 'Unknown';
+        const reportedEmail = (report.userId && report.userId.email) ? report.userId.email : 'Unknown';
+
         const reportData = [
             { label: 'Report ID', value: report.reportId },
             { label: 'Farm Name', value: report.farm },
@@ -323,8 +321,8 @@ exports.downloadReport = async (req, res) => {
             { label: 'Severity Level', value: `${report.severity.label} (${report.severity.value}%)` },
             { label: 'Status', value: report.status },
             { label: 'Description', value: report.description || 'No additional description' },
-            { label: 'Reported By', value: report.userId.name },
-            { label: 'Email', value: report.userId.email },
+            { label: 'Reported By', value: reportedBy },
+            { label: 'Email', value: reportedEmail },
             { label: 'Created At', value: new Date(report.createdAt).toLocaleString() },
             { label: 'Updated At', value: new Date(report.updatedAt).toLocaleString() }
         ];
