@@ -51,7 +51,6 @@ const StatusCircle = ({ color }) => (
     </svg>
 );
 
-import { useAuth } from '../context/AuthContext';
 
 const Dashboard = () => {
     const navigate = useNavigate();
