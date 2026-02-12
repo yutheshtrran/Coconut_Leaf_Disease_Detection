@@ -2,15 +2,6 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Search, Plus, Pencil, X, Check, Map, Calendar, AlertCircle, Loader } from 'lucide-react';
 import * as farmService from '../services/farmService';
 
-const currentYear = new Date().getFullYear();
-const initialPlots = [
-  { id: 1, farmId: 'A', area: 2.5, lastAnalyzed: `${currentYear}-10-26`, status: 'LOW_RISK' },
-  { id: 2, farmId: 'A', area: 3.2, lastAnalyzed: `${currentYear}-10-25`, status: 'LOW_RISK' },
-  { id: 3, farmId: 'A', area: 1.8, lastAnalyzed: `${currentYear}-10-26`, status: 'CRITICAL' },
-  { id: 4, farmId: 'A', area: 4.0, lastAnalyzed: `${currentYear}-10-24`, status: 'MODERATE' },
-  { id: 5, farmId: 'B', area: 5.0, lastAnalyzed: `${currentYear}-10-20`, status: 'LOW_RISK' },
-];
-
 // --- Utility ---
 const getStatusBadge = (status) => {
   let colorClass = '', text = '';
@@ -283,36 +274,60 @@ const EditFarmForm = ({ farm, onUpdate, onCancel, isLoading }) => {
   );
 };
 
-const AddPlotForm = ({ farmId, onAdd, onCancel }) => {
-  const [formData, setFormData] = useState({ area: '', status: 'LOW_RISK', lastAnalyzed: new Date().toISOString().split('T')[0] });
+const AddPlotForm = ({ farmId, onAdd, onCancel, isLoading }) => {
+  const [formData, setFormData] = useState({ name: '', area: '', status: 'LOW_RISK' });
+  const [error, setError] = useState('');
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.area) return;
-    onAdd({ ...formData, farmId, id: Math.floor(Math.random() * 10000) });
+    if (!formData.name || !formData.area) {
+      setError('Plot name and area are required');
+      return;
+    }
+
+    try {
+      setError('');
+      await onAdd(formData);
+      setFormData({ name: '', area: '', status: 'LOW_RISK' });
+    } catch (err) {
+      setError(err.message || 'Failed to add plot');
+    }
   };
 
   return (
     <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100 mt-8">
       <div className="flex justify-between items-center mb-6">
         <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2"><Plus size={18} className="text-green-600" /> New Plot Assessment</h3>
+        <button onClick={onCancel} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
       </div>
-      <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {error && (
+        <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">
+          {error}
+        </div>
+      )}
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="space-y-1">
+          <label className="text-xs font-bold text-gray-500 uppercase">Plot Name</label>
+          <input required type="text" placeholder="e.g., A1, North Section" className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} disabled={isLoading} />
+        </div>
         <div className="space-y-1">
           <label className="text-xs font-bold text-gray-500 uppercase">Area (ha)</label>
-          <input required step="0.1" type="number" className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" value={formData.area} onChange={e => setFormData({ ...formData, area: e.target.value })} />
+          <input required step="0.1" type="number" placeholder="0.0" className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" value={formData.area} onChange={e => setFormData({ ...formData, area: e.target.value })} disabled={isLoading} />
         </div>
         <div className="space-y-1">
           <label className="text-xs font-bold text-gray-500 uppercase">Status</label>
-          <select className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 bg-white" value={formData.status} onChange={e => setFormData({ ...formData, status: e.target.value })}>
+          <select className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 bg-white" value={formData.status} onChange={e => setFormData({ ...formData, status: e.target.value })} disabled={isLoading}>
             <option value="LOW_RISK">LOW RISK</option>
             <option value="MODERATE">MODERATE</option>
             <option value="CRITICAL">CRITICAL</option>
           </select>
         </div>
         <div className="flex items-end gap-2">
-          <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-indigo-700 flex-1">Add Plot</button>
-          <button type="button" onClick={onCancel} className="bg-gray-100 p-2 rounded-lg text-gray-500 hover:text-gray-700"><X size={20} /></button>
+          <button type="submit" disabled={isLoading} className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-indigo-700 flex-1 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+            {isLoading ? <Loader size={16} className="animate-spin" /> : <Check size={16} />}
+            {isLoading ? 'Saving...' : 'Add Plot'}
+          </button>
+          <button type="button" onClick={onCancel} disabled={isLoading} className="bg-gray-100 p-2 rounded-lg text-gray-500 hover:text-gray-700 disabled:opacity-50"><X size={20} /></button>
         </div>
       </form>
     </div>
@@ -359,7 +374,7 @@ const FarmDetailsCard = ({ farm, onEdit }) => {
 };
 
 const PlotsTable = ({ farm, plots, onAddPlotRequest }) => {
-  const farmPlots = useMemo(() => plots.filter(p => p.farmId === farm._id), [farm._id, plots]);
+  const farmPlots = useMemo(() => plots[farm._id] || [], [farm._id, plots]);
   return (
     <div className="mt-8">
       <div className="flex justify-between items-end mb-4">
@@ -375,7 +390,7 @@ const PlotsTable = ({ farm, plots, onAddPlotRequest }) => {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              {['Plot ID', 'Area (ha)', 'Last Analyzed', 'Status', 'Actions'].map((header, idx) => (
+              {['Plot Name', 'Area (ha)', 'Last Analyzed', 'Status', 'Actions'].map((header, idx) => (
                 <th key={idx} className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${idx === 0 ? 'rounded-tl-xl' : ''} ${idx === 4 ? 'rounded-tr-xl' : ''}`}>
                   {header}
                 </th>
@@ -383,17 +398,25 @@ const PlotsTable = ({ farm, plots, onAddPlotRequest }) => {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {farmPlots.map(plot => (
-              <tr key={plot.id} className="hover:bg-gray-50 transition duration-150">
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">Plot {plot.id}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{plot.area}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{plot.lastAnalyzed}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">{getStatusBadge(plot.status)}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
-                  <button className="text-indigo-600 hover:text-indigo-900 p-2"><Pencil className="w-4 h-4" /></button>
+            {farmPlots.length > 0 ? (
+              farmPlots.map(plot => (
+                <tr key={plot._id} className="hover:bg-gray-50 transition duration-150">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{plot.name}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{plot.area}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{plot.lastAnalyzed || 'N/A'}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">{getStatusBadge(plot.status || 'LOW_RISK')}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
+                    <button className="text-indigo-600 hover:text-indigo-900 p-2"><Pencil className="w-4 h-4" /></button>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
+                  No plots yet. Click "Add Plot" to create one.
                 </td>
               </tr>
-            ))}
+            )}
           </tbody>
         </table>
       </div>
@@ -405,7 +428,7 @@ const PlotsTable = ({ farm, plots, onAddPlotRequest }) => {
 const MyFarms = () => {
   const [selectedFarmId, setSelectedFarmId] = useState(null);
   const [farms, setFarms] = useState([]);
-  const [plots, setPlots] = useState(initialPlots);
+  const [plots, setPlots] = useState({});
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -424,6 +447,20 @@ const MyFarms = () => {
         setError('');
         const response = await farmService.getUserFarms();
         setFarms(response.farms || []);
+        
+        // Load plots for all farms
+        const plotsData = {};
+        for (const farm of (response.farms || [])) {
+          try {
+            const plotsResponse = await farmService.getFarmPlots(farm._id);
+            plotsData[farm._id] = plotsResponse.plots || [];
+          } catch (err) {
+            console.error(`Error loading plots for farm ${farm._id}:`, err);
+            plotsData[farm._id] = [];
+          }
+        }
+        setPlots(plotsData);
+        
         // Auto-select first farm if available
         if (response.farms && response.farms.length > 0) {
           setSelectedFarmId(response.farms[0]._id);
@@ -459,6 +496,8 @@ const MyFarms = () => {
       setError('');
       const response = await farmService.addFarm(formData);
       setFarms([...farms, response.farm]);
+      // Initialize empty plots array for new farm
+      setPlots({ ...plots, [response.farm._id]: [] });
       // notify other components (e.g., dashboard map) about the new farm
       try {
         window.dispatchEvent(new CustomEvent('farmsUpdated', { detail: response.farm }));
@@ -491,9 +530,22 @@ const MyFarms = () => {
     }
   };
 
-  const handleAddPlot = (newPlot) => {
-    setPlots([...plots, newPlot]);
-    setShowPlotForm(false);
+  const handleAddPlot = async (formData) => {
+    if (!selectedFarmId) return;
+    try {
+      setIsSaving(true);
+      setError('');
+      const response = await farmService.addPlot(selectedFarmId, formData);
+      // Update the plots for this farm
+      const updatedPlots = [...(plots[selectedFarmId] || []), response.plot];
+      setPlots({ ...plots, [selectedFarmId]: updatedPlots });
+      setShowPlotForm(false);
+    } catch (err) {
+      console.error('Error adding plot:', err);
+      throw new Error(err.response?.data?.message || 'Failed to add plot');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   if (isLoading) {
@@ -572,6 +624,7 @@ const MyFarms = () => {
                 farmId={selectedFarm._id}
                 onAdd={handleAddPlot}
                 onCancel={() => setShowPlotForm(false)}
+                isLoading={isSaving}
               />
             ) : (
               <PlotsTable
