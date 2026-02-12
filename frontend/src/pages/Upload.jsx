@@ -1,15 +1,14 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Upload as UploadIcon, ChevronDown } from "lucide-react";
-
-const farms = [
-  { id: 1, name: "Green Acres Farm" },
-  { id: 2, name: "Sunset Fields Co." },
-  { id: 3, name: "Riverbend Plantation" },
-];
+import * as farmService from "../services/farmService";
 
 const Upload = () => {
   const [farm, setFarm] = useState("");
   const [plot, setPlot] = useState("");
+  const [farms, setFarms] = useState([]);
+  const [plots, setPlots] = useState([]);
+  const [farmLoading, setFarmLoading] = useState(true);
+  const [plotLoading, setPlotLoading] = useState(false);
   const [notes, setNotes] = useState("");
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [isDragActive, setIsDragActive] = useState(false);
@@ -21,6 +20,46 @@ const Upload = () => {
   const [uploadType, setUploadType] = useState(null); // 'image' or 'video'
   const [droneResult, setDroneResult] = useState(null); // Drone processing results
   const [showDroneModal, setShowDroneModal] = useState(false); // Modal for drone results
+
+  // Fetch farms on component mount
+  useEffect(() => {
+    const loadFarms = async () => {
+      try {
+        setFarmLoading(true);
+        const response = await farmService.getUserFarms();
+        setFarms(response.farms || []);
+      } catch (err) {
+        console.error("Error loading farms:", err);
+      } finally {
+        setFarmLoading(false);
+      }
+    };
+
+    loadFarms();
+  }, []);
+
+  // Fetch plots when farm is selected
+  useEffect(() => {
+    if (!farm) {
+      setPlots([]);
+      return;
+    }
+
+    const loadPlots = async () => {
+      try {
+        setPlotLoading(true);
+        const response = await farmService.getFarmPlots(farm);
+        setPlots(response.plots || []);
+      } catch (err) {
+        console.error("Error loading plots:", err);
+        setPlots([]);
+      } finally {
+        setPlotLoading(false);
+      }
+    };
+
+    loadPlots();
+  }, [farm, farms]);
 
   const handleFarmChange = (e) => setFarm(e.target.value);
   const handlePlotChange = (e) => setPlot(e.target.value);
@@ -227,18 +266,42 @@ const Upload = () => {
             <div className="relative">
               <label className="block text-sm font-medium text-gray-800 dark:text-gray-200 mb-1">Farm</label>
               <div className="relative">
-                <select value={farm} onChange={handleFarmChange} className="w-full pl-4 pr-10 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:border-emerald-600 focus:ring-emerald-500 appearance-none bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
-                  <option value="" disabled>Select farm</option>
-                  {farms.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                <select 
+                  value={farm} 
+                  onChange={handleFarmChange} 
+                  disabled={farmLoading}
+                  className="w-full pl-4 pr-10 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:border-emerald-600 focus:ring-emerald-500 appearance-none bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <option value="" disabled>{farmLoading ? "Loading farms..." : "Select farm"}</option>
+                  {farms.map((f) => (
+                    <option key={f._id} value={f._id}>{f.name}</option>
+                  ))}
                 </select>
                 <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-emerald-400 pointer-events-none" />
               </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-800 mb-1">
-                Plot/Section <span className="text-gray-500">(Optional)</span>
+                Plot/Section
               </label>
-              <input type="text" value={plot} onChange={handlePlotChange} placeholder="e.g., A1, North Section" className="w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:border-emerald-600 focus:ring-emerald-500 text-gray-900 placeholder-gray-400" />
+              <div className="relative">
+                <select 
+                  value={plot} 
+                  onChange={handlePlotChange} 
+                  disabled={!farm || plotLoading || plots.length === 0}
+                  className="w-full pl-4 pr-10 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:border-emerald-600 focus:ring-emerald-500 appearance-none bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <option value="" disabled>
+                    {plotLoading ? "Loading plots..." : plots.length === 0 ? "No plots available" : "Select plot"}
+                  </option>
+                  {plots.map((p) => (
+                    <option key={p._id} value={p._id}>
+                      {p.name || p.id}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-emerald-400 pointer-events-none" />
+              </div>
             </div>
           </div>
 
