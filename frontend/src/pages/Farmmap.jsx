@@ -16,23 +16,36 @@ L.Icon.Default.mergeOptions({
     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
 
-// Utility function to parse location string "lat° N/S, lng° E/W"
+// Utility function to parse location strings in multiple common formats:
+// - "6.8897° N, 81.7890° E"
+// - "6.8897, 81.7890" (plain decimal comma-separated)
+// - "6.8897 81.7890" (space-separated)
 const parseLocation = (locationString) => {
   if (!locationString) return null;
   try {
-    const regex = /(-?\d+\.?\d*)\s*°\s*([NS]),\s*(-?\d+\.?\d*)\s*°\s*([EW])/;
-    const match = locationString.match(regex);
-    if (!match) return null;
+    // Try degree format first: "6.8897° N, 81.7890° E"
+    const degRegex = /(-?\d+\.?\d*)\s*°?\s*([NS])[,\s]+(-?\d+\.?\d*)\s*°?\s*([EW])/i;
+    const degMatch = locationString.match(degRegex);
+    if (degMatch) {
+      let lat = parseFloat(degMatch[1]);
+      let lng = parseFloat(degMatch[3]);
+      if (degMatch[2].toUpperCase() === 'S') lat = -lat;
+      if (degMatch[4].toUpperCase() === 'W') lng = -lng;
+      return { lat, lng };
+    }
 
-    let lat = parseFloat(match[1]);
-    let lng = parseFloat(match[3]);
+    // Try plain decimal comma or space separated: "6.8897, 81.7890" or "6.8897 81.7890"
+    const decRegex = /(-?\d+\.?\d*)[,\s]+(-?\d+\.?\d*)/;
+    const decMatch = locationString.match(decRegex);
+    if (decMatch) {
+      const lat = parseFloat(decMatch[1]);
+      const lng = parseFloat(decMatch[2]);
+      if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
+    }
 
-    if (match[2] === "S") lat = -lat;
-    if (match[4] === "W") lng = -lng;
-
-    return { lat, lng };
+    return null;
   } catch (error) {
-    console.error("Error parsing location:", error);
+    console.error('Error parsing location:', error);
     return null;
   }
 };
@@ -132,6 +145,37 @@ const FarmMap = () => {
     };
 
     loadFarms();
+  }, []);
+
+  // Listen for farms added/updated elsewhere in the app and update map live
+  useEffect(() => {
+    const onFarmsUpdated = (e) => {
+      try {
+        const incoming = e?.detail;
+        if (!incoming) return;
+
+        // If farm exists, replace it; otherwise append
+        setFarms((prev) => {
+          const exists = prev.find((f) => f._id === incoming._id);
+          if (exists) return prev.map((f) => (f._id === incoming._id ? incoming : f));
+          return [...prev, incoming];
+        });
+
+        const coords = parseLocation(incoming.location);
+        if (coords) {
+          setValidLocations((prev) => {
+            const exists = prev.find((f) => f._id === incoming._id);
+            if (exists) return prev.map((f) => (f._id === incoming._id ? { ...incoming, ...coords } : f));
+            return [...prev, { ...incoming, ...coords }];
+          });
+        }
+      } catch (err) {
+        console.error('Error handling farmsUpdated event', err);
+      }
+    };
+
+    window.addEventListener('farmsUpdated', onFarmsUpdated);
+    return () => window.removeEventListener('farmsUpdated', onFarmsUpdated);
   }, []);
 
   // Safe default center
