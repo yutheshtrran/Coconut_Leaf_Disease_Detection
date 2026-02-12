@@ -8,7 +8,10 @@ import {
   MapPin,
   AlertCircle,
   Mail,
-  Clock
+  Clock,
+  FileText,
+  CheckCircle,
+  AlertTriangle
 } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
 import API from '../services/api';
@@ -145,51 +148,64 @@ const ReportPreviewModal = ({ reportId, onClose }) => {
               <p className="text-sm mt-1">{error}</p>
             </div>
           ) : report ? (
-            <div ref={contentRef} className="bg-white dark:bg-gray-900">
-              {/* Professional Header */}
-              <div className="bg-gradient-to-r from-green-600 to-green-800 text-white p-8">
-                <div className="flex justify-between items-start gap-8">
-                  <div className="flex items-center gap-4">
-                    <span className="text-5xl">🥥</span>
-                    <div>
-                      <h1 className="text-3xl font-bold">CocoGuard</h1>
-                      <p className="text-green-100">Coconut Leaf Disease Detection Report</p>
-                    </div>
+            <div ref={contentRef} className="bg-white dark:bg-gray-950">
+              {/* Professional Header - Formal Layout */}
+              <div className="bg-gradient-to-r from-green-800 to-green-900 dark:from-green-900 dark:to-black p-8 mb-6">
+                <div className="flex justify-between items-start">
+                  {/* Logo/Title Section */}
+                  <div>
+                    <h1 className="text-3xl font-bold text-white tracking-tight">CocoGuard</h1>
+                    <p className="text-sm text-green-100 mt-1">Agricultural Disease Detection & Management System</p>
                   </div>
-                  <div className="text-right text-sm">
-                    <p className="text-green-100">Report ID</p>
-                    <p className="font-bold text-lg">{report.reportId}</p>
-                    <p className="text-green-100 mt-2">Generated</p>
-                    <p className="font-semibold">{new Date().toLocaleDateString()}</p>
+                  {/* Report Metadata */}
+                  <div className="text-right">
+                    <p className="text-xs font-semibold text-green-100 uppercase tracking-wider">Report ID</p>
+                    <p className="text-2xl font-bold text-white mt-1">{report.reportId}</p>
+                    <p className="text-xs text-green-100 mt-3">Generated: {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
                   </div>
                 </div>
               </div>
 
-              {/* Summary Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-6 bg-gray-50 dark:bg-gray-800">
-                {/* Farm Card */}
-                <div className="bg-white dark:bg-gray-700 p-4 rounded-lg border-l-4 border-green-500 shadow-sm hover:shadow-md transition">
-                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Farm Name</p>
-                  <p className="text-lg font-bold text-gray-800 dark:text-gray-100 mt-1">🌾 {report.farm}</p>
-                </div>
+              {/* Header Divider */}
+              <div className="border-b-2 border-gray-300 dark:border-gray-700"></div>
 
-                {/* Date Card */}
-                <div className="bg-white dark:bg-gray-700 p-4 rounded-lg border-l-4 border-blue-500 shadow-sm hover:shadow-md transition">
-                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Report Date</p>
-                  <p className="text-lg font-bold text-gray-800 dark:text-gray-100 mt-1">📅 {new Date(report.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</p>
-                </div>
+              {/* Key Information Section */}
+              <div className="border-b border-gray-200 dark:border-gray-700 p-8">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                  {/* Location */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <MapPin className="w-4 h-4 text-gray-700 dark:text-gray-300" />
+                      <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">Location</p>
+                    </div>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">{report.farm}</p>
+                  </div>
 
-                {/* Disease Card */}
-                <div className="bg-white dark:bg-gray-700 p-4 rounded-lg border-l-4 border-amber-500 shadow-sm hover:shadow-md transition">
-                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Disease/Issue</p>
-                  <p className="text-lg font-bold text-gray-800 dark:text-gray-100 mt-1">🦠 {report.issue}</p>
-                </div>
+                  {/* Date */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Calendar className="w-4 h-4 text-gray-700 dark:text-gray-300" />
+                      <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">Assessment Date</p>
+                    </div>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">{new Date(report.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</p>
+                  </div>
 
-                {/* Severity Card */}
-                <div className="bg-white dark:bg-gray-700 p-4 rounded-lg border-l-4 border-red-500 shadow-sm hover:shadow-md transition">
-                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Severity</p>
-                  <div className="mt-1">
-                    <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${getSeverityColor(report.severity?.label)}`}>
+                  {/* Disease/Issue */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <AlertTriangle className="w-4 h-4 text-gray-700 dark:text-gray-300" />
+                      <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">Condition Detected</p>
+                    </div>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">{report.issue}</p>
+                  </div>
+
+                  {/* Severity Level */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <AlertCircle className="w-4 h-4 text-gray-700 dark:text-gray-300" />
+                      <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">Severity Level</p>
+                    </div>
+                    <span className={`inline-block px-2 py-1 rounded text-xs font-bold ${getSeverityColor(report.severity?.label)}`}>
                       {report.severity?.label || 'UNKNOWN'} ({report.severity?.value || 0}%)
                     </span>
                   </div>
@@ -197,95 +213,101 @@ const ReportPreviewModal = ({ reportId, onClose }) => {
               </div>
 
               {/* Main Content */}
-              <div className="p-8 space-y-6">
-                {/* Description Section */}
-                <div className="bg-gray-50 dark:bg-gray-800 p-6 rounded-lg border-l-4 border-green-500">
-                  <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-3 flex items-center gap-2">
-                    <span>📋</span> Disease Description
-                  </h3>
-                  <p className="text-gray-700 dark:text-gray-300 leading-relaxed">{report.description}</p>
-                </div>
+              <div className="p-8 space-y-8">
+                {/* Executive Summary */}
+                <section>
+                  <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1 uppercase tracking-wide border-b-2 border-gray-300 dark:border-gray-700 pb-3">
+                    Assessment Summary
+                  </h2>
+                  <div className="mt-4 p-6 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded">
+                    <p className="text-gray-800 dark:text-gray-200 leading-relaxed">{report.description}</p>
+                  </div>
+                </section>
 
-                {/* Status & Reporter Info */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-gray-50 dark:bg-gray-800 p-6 rounded-lg border-l-4 border-blue-500">
-                    <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-4 flex items-center gap-2">
-                      <span>📍</span> Report Status
-                    </h3>
-                    <div className="space-y-3">
-                      <div>
-                        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Status</p>
-                        <p className={`inline-block px-3 py-1 rounded mt-1 text-xs font-bold ${
-                          report.status === 'Finalized' 
-                            ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
-                            : 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
+                {/* Status Information */}
+                <section>
+                  <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1 uppercase tracking-wide border-b-2 border-gray-300 dark:border-gray-700 pb-3">
+                    Report Status
+                  </h2>
+                  <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="p-4 bg-gray-50 dark:bg-gray-900 border-l-4 border-gray-400 dark:border-gray-600">
+                      <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase mb-2">Current Status</p>
+                      <div className="flex items-center gap-2">
+                        {report.status === 'Finalized' ? (
+                          <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+                        ) : (
+                          <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                        )}
+                        <p className={`text-sm font-bold ${
+                          report.status === 'Finalized'
+                            ? 'text-green-700 dark:text-green-300'
+                            : 'text-amber-700 dark:text-amber-300'
                         }`}>
                           {report.status}
                         </p>
                       </div>
-                      <div>
-                        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Last Updated</p>
-                        <p className="text-sm text-gray-800 dark:text-gray-200 mt-1">{new Date(report.updatedAt).toLocaleString()}</p>
-                      </div>
+                      <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">Last Updated: {new Date(report.updatedAt).toLocaleString()}</p>
+                    </div>
+
+                    <div className="p-4 bg-gray-50 dark:bg-gray-900 border-l-4 border-gray-400 dark:border-gray-600">
+                      <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase mb-2">Assessed By</p>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-white">{getUserDisplayName(report.userId) || 'Unknown'}</p>
+                      {report.userId?.email && (
+                        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 flex items-center gap-1">
+                          <Mail className="w-3 h-3" /> {report.userId.email}
+                        </p>
+                      )}
                     </div>
                   </div>
+                </section>
 
-                  <div className="bg-gray-50 dark:bg-gray-800 p-6 rounded-lg border-l-4 border-purple-500">
-                    <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-4 flex items-center gap-2">
-                      <span>👤</span> Reported By
-                    </h3>
-                    <div className="space-y-3">
-                      <div>
-                        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Name</p>
-                        <p className="text-sm text-gray-800 dark:text-gray-200 mt-1 font-semibold">{getUserDisplayName(report.userId) || 'Unknown'}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Email</p>
-                        <p className="text-sm text-gray-800 dark:text-gray-200 mt-1">{report.userId?.email || 'Unknown'}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Images Gallery */}
+                {/* Field Evidence */}
                 {report.images && report.images.length > 0 && (
-                  <div className="bg-gray-50 dark:bg-gray-800 p-6 rounded-lg border-l-4 border-cyan-500">
-                    <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-4 flex items-center gap-2">
-                      <span>📸</span> Field Evidence ({report.images.length} images)
-                    </h3>
+                  <section>
+                    <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1 uppercase tracking-wide border-b-2 border-gray-300 dark:border-gray-700 pb-3">
+                      Field Evidence
+                    </h2>
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-3 mb-4">{report.images.length} image(s) attached to this assessment</p>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                       {report.images.map((image, index) => (
-                        <div key={index} className="overflow-hidden rounded-lg shadow-md hover:shadow-lg transition">
+                        <div key={index} className="border border-gray-300 dark:border-gray-700 rounded overflow-hidden bg-gray-100 dark:bg-gray-900">
                           <img
                             src={image}
-                            alt={`Report evidence ${index + 1}`}
-                            className="w-full h-40 object-cover hover:scale-105 transition duration-300"
+                            alt={`Assessment evidence ${index + 1}`}
+                            className="w-full h-48 object-cover"
                           />
+                          <p className="text-xs text-gray-600 dark:text-gray-400 p-2 bg-gray-50 dark:bg-gray-900 text-center">Evidence {index + 1}</p>
                         </div>
                       ))}
                     </div>
-                  </div>
+                  </section>
                 )}
 
-                {/* Timestamps */}
-                <div className="text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 pt-4">
-                  <div className="grid grid-cols-2 gap-4">
+                {/* Document Timestamps */}
+                <section className="pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <div className="grid grid-cols-2 gap-4 text-xs">
                     <div>
-                      <p className="font-semibold">Created: </p>
-                      <p>{new Date(report.createdAt).toLocaleString()}</p>
+                      <p className="font-semibold text-gray-700 dark:text-gray-300">Document Created</p>
+                      <p className="text-gray-600 dark:text-gray-400 mt-1">{new Date(report.createdAt).toLocaleString()}</p>
                     </div>
                     <div>
-                      <p className="font-semibold">Updated: </p>
-                      <p>{new Date(report.updatedAt).toLocaleString()}</p>
+                      <p className="font-semibold text-gray-700 dark:text-gray-300">Last Modified</p>
+                      <p className="text-gray-600 dark:text-gray-400 mt-1">{new Date(report.updatedAt).toLocaleString()}</p>
                     </div>
                   </div>
-                </div>
+                </section>
               </div>
 
-              {/* Footer */}
-              <div className="bg-gradient-to-r from-gray-100 to-gray-50 dark:from-gray-800 dark:to-gray-900 border-t border-gray-200 dark:border-gray-700 p-6 text-center text-xs text-gray-600 dark:text-gray-400">
-                <p className="font-semibold text-gray-700 dark:text-gray-300">CocoGuard © 2026 | Automated Disease Detection & Management System</p>
-                <p className="mt-2">This report is optimized for viewing and printing. Use the Download button to save as PDF.</p>
+              {/* Professional Footer */}
+              <div className="border-t-2 border-gray-300 dark:border-gray-700 bg-gradient-to-r from-green-900 to-black dark:from-black dark:to-green-900 text-white p-6">
+                <div className="max-w-4xl mx-auto">
+                  <p className="text-xs font-semibold tracking-wide">COCOGUARD AGRICULTURAL MANAGEMENT SYSTEM</p>
+                  <p className="text-xs text-green-100 mt-2">This is an official automated assessment document generated by the CocoGuard Disease Detection System. For inquiries about this report, please contact the agricultural assessment team.</p>
+                  <div className="border-t border-green-700 mt-3 pt-3 flex justify-between items-center">
+                    <p className="text-xs text-green-200">© 2026 CocoGuard. All rights reserved.</p>
+                    <p className="text-xs text-green-200">Confidential Agricultural Assessment</p>
+                  </div>
+                </div>
               </div>
             </div>
           ) : null}
