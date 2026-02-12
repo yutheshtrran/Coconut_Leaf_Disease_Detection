@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Search, Plus, Pencil, X, Check, Map, Calendar, AlertCircle, Loader } from 'lucide-react';
 import * as farmService from '../services/farmService';
 
@@ -42,6 +42,10 @@ const getStatusBadge = (status) => {
 const AddFarmForm = ({ onAdd, onCancel, isLoading }) => {
   const [formData, setFormData] = useState({ name: '', subtitle: '', location: '', area: '', description: '' });
   const [error, setError] = useState('');
+  const [locMode, setLocMode] = useState('manual'); // 'manual' | 'current' | 'map'
+  const [lat, setLat] = useState('');
+  const [lng, setLng] = useState('');
+  const mapRef = useRef(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -52,12 +56,81 @@ const AddFarmForm = ({ onAdd, onCancel, isLoading }) => {
     
     try {
       setError('');
-      await onAdd(formData);
+      // prefer the explicit lat/lng if provided
+      const finalData = { ...formData };
+      if ((locMode === 'manual' || locMode === 'current' || locMode === 'map') && lat && lng) {
+        finalData.location = `${lat}, ${lng}`;
+      }
+      await onAdd(finalData);
       setFormData({ name: '', subtitle: '', location: '', area: '', description: '' });
+      setLat('');
+      setLng('');
+      setLocMode('manual');
     } catch (err) {
       setError(err.message || 'Failed to add farm');
     }
   };
+
+  // Load Leaflet dynamically when map mode is selected
+  useEffect(() => {
+    let mapInstance;
+    const loadLeaflet = () => new Promise((resolve, reject) => {
+      if (window.L) return resolve(window.L);
+      const cssHref = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      const jsSrc = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+      if (!document.querySelector(`link[href="${cssHref}"]`)) {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = cssHref;
+        document.head.appendChild(link);
+      }
+      if (document.querySelector(`script[src="${jsSrc}"]`)) {
+        const existing = document.querySelector(`script[src="${jsSrc}"]`);
+        existing.addEventListener('load', () => resolve(window.L));
+        existing.addEventListener('error', () => reject(new Error('Failed to load Leaflet')));
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = jsSrc;
+      script.async = true;
+      script.onload = () => resolve(window.L);
+      script.onerror = () => reject(new Error('Failed to load Leaflet'));
+      document.body.appendChild(script);
+    });
+
+    const initMap = async () => {
+      try {
+        const L = await loadLeaflet();
+        if (!document.getElementById('add-farm-map')) return;
+        mapInstance = L.map('add-farm-map').setView([0, 0], 2);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(mapInstance);
+        let marker = null;
+        mapInstance.on('click', (e) => {
+          const { lat: clickedLat, lng: clickedLng } = e.latlng;
+          setLat(String(clickedLat));
+          setLng(String(clickedLng));
+          if (marker) marker.setLatLng(e.latlng);
+          else marker = L.marker(e.latlng).addTo(mapInstance);
+        });
+        mapRef.current = { instance: mapInstance, markerRef: () => marker };
+      } catch (err) {
+        console.error('Leaflet load failed', err);
+        setError('Map failed to load');
+      }
+    };
+
+    if (locMode === 'map') {
+      initMap();
+    }
+
+    return () => {
+      try {
+        if (mapInstance && mapInstance.remove) mapInstance.remove();
+      } catch (e) {}
+    };
+  }, [locMode]);
 
   return (
     <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100 animate-in fade-in zoom-in duration-200">
@@ -81,7 +154,45 @@ const AddFarmForm = ({ onAdd, onCancel, isLoading }) => {
         </div>
         <div className="space-y-1">
           <label className="text-xs font-bold text-gray-500 uppercase tracking-tight">Location (Lat/Long)</label>
-          <input placeholder="0.00° N, 0.00° E" type="text" className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-green-500" value={formData.location} onChange={e => setFormData({ ...formData, location: e.target.value })} disabled={isLoading} />
+          <div className="flex gap-2 mb-2">
+            <button type="button" onClick={() => setLocMode('manual')} className={`px-3 py-1 rounded-lg text-sm ${locMode==='manual' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700'}`}>Manual</button>
+            <button type="button" onClick={() => setLocMode('current')} className={`px-3 py-1 rounded-lg text-sm ${locMode==='current' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700'}`}>Use Current</button>
+            <button type="button" onClick={() => setLocMode('map')} className={`px-3 py-1 rounded-lg text-sm ${locMode==='map' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700'}`}>Select on Map</button>
+          </div>
+
+          {locMode === 'manual' && (
+            <div className="grid grid-cols-2 gap-2">
+              <input placeholder="Latitude" type="text" className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-green-500" value={lat} onChange={e => setLat(e.target.value)} disabled={isLoading} />
+              <input placeholder="Longitude" type="text" className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-green-500" value={lng} onChange={e => setLng(e.target.value)} disabled={isLoading} />
+            </div>
+          )}
+
+          {locMode === 'current' && (
+            <div className="flex gap-2 items-center">
+              <button type="button" onClick={async () => {
+                if (!navigator.geolocation) {
+                  setError('Geolocation is not supported by your browser');
+                  return;
+                }
+                setError('');
+                navigator.geolocation.getCurrentPosition((position) => {
+                  const { latitude, longitude } = position.coords;
+                  setLat(String(latitude));
+                  setLng(String(longitude));
+                }, (err) => {
+                  setError('Unable to retrieve your location');
+                });
+              }} className="bg-indigo-600 text-white px-3 py-2 rounded-lg">Get Current Location</button>
+              <div className="text-sm text-gray-600">{lat && lng ? `Lat: ${lat}, Lng: ${lng}` : 'No location yet'}</div>
+            </div>
+          )}
+
+          {locMode === 'map' && (
+            <div>
+              <div id="add-farm-map" style={{ height: 220 }} className="w-full rounded-lg overflow-hidden border" />
+              <div className="text-sm text-gray-600 mt-2">Click on the map to place a marker and select coordinates. {lat && lng ? `Selected: ${lat}, ${lng}` : ''}</div>
+            </div>
+          )}
         </div>
         <div className="space-y-1">
           <label className="text-xs font-bold text-gray-500 uppercase tracking-tight">Total Area (Ha)</label>
@@ -348,6 +459,12 @@ const MyFarms = () => {
       setError('');
       const response = await farmService.addFarm(formData);
       setFarms([...farms, response.farm]);
+      // notify other components (e.g., dashboard map) about the new farm
+      try {
+        window.dispatchEvent(new CustomEvent('farmsUpdated', { detail: response.farm }));
+      } catch (e) {
+        // ignore in non-browser envs
+      }
       setSelectedFarmId(response.farm._id);
       setShowFarmForm(false);
     } catch (err) {
