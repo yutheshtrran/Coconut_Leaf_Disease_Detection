@@ -441,6 +441,8 @@ const MyFarms = () => {
   const [showFarmForm, setShowFarmForm] = useState(false);
   const [showPlotForm, setShowPlotForm] = useState(false);
   const [editingFarm, setEditingFarm] = useState(null);
+  const [confirmVisible, setConfirmVisible] = useState(false);
+  const [confirmData, setConfirmData] = useState({ type: null, farmId: null, plotId: null, name: '' });
 
   // Load farms on component mount
   useEffect(() => {
@@ -552,7 +554,6 @@ const MyFarms = () => {
   };
 
   const handleDeleteFarm = async (farmId) => {
-    if (!window.confirm('Delete this farm and all its plots? This action cannot be undone.')) return;
     try {
       setIsSaving(true);
       setError('');
@@ -575,7 +576,6 @@ const MyFarms = () => {
   };
 
   const handleDeletePlot = async (farmId, plotId) => {
-    if (!window.confirm('Delete this plot? This action cannot be undone.')) return;
     try {
       setIsSaving(true);
       setError('');
@@ -588,6 +588,23 @@ const MyFarms = () => {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const openConfirm = ({ type, farmId = null, plotId = null, name = '' }) => {
+    setConfirmData({ type, farmId, plotId, name });
+    setConfirmVisible(true);
+  };
+
+  const closeConfirm = () => {
+    setConfirmVisible(false);
+    setConfirmData({ type: null, farmId: null, plotId: null, name: '' });
+  };
+
+  const confirmDelete = async () => {
+    const { type, farmId, plotId } = confirmData;
+    closeConfirm();
+    if (type === 'farm' && farmId) await handleDeleteFarm(farmId);
+    if (type === 'plot' && farmId && plotId) await handleDeletePlot(farmId, plotId);
   };
 
   if (isLoading) {
@@ -631,9 +648,9 @@ const MyFarms = () => {
                         <p className="text-xs opacity-70">{farm.subtitle || 'No subtitle'}</p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <button onClick={(e) => { e.stopPropagation(); handleDeleteFarm(farm._id); }} title="Delete farm" className="text-red-600 hover:text-red-900 p-1 rounded">
-                          <Trash className="w-4 h-4" />
-                        </button>
+                                <button onClick={(e) => { e.stopPropagation(); openConfirm({ type: 'farm', farmId: farm._id, name: farm.name }); }} title="Delete farm" className="text-red-600 hover:text-red-900 p-1 rounded">
+                                  <Trash className="w-4 h-4" />
+                                </button>
                       </div>
                     </div>
                   </div>
@@ -682,7 +699,7 @@ const MyFarms = () => {
                 farm={selectedFarm}
                 plots={plots}
                 onAddPlotRequest={() => setShowPlotForm(true)}
-                onDeletePlot={(plotId) => handleDeletePlot(selectedFarm._id, plotId)}
+                onDeletePlot={(plotId) => openConfirm({ type: 'plot', farmId: selectedFarm._id, plotId, name: '' })}
               />
             )}
           </div>
@@ -694,6 +711,32 @@ const MyFarms = () => {
           </div>
         )}
       </main>
+      <ConfirmModal
+        visible={confirmVisible}
+        title={confirmData.type === 'farm' ? 'Delete Farm' : 'Delete Plot'}
+        message={confirmData.type === 'farm' ? `Delete farm "${confirmData.name}" and all its plots? This action cannot be undone.` : 'Delete this plot? This action cannot be undone.'}
+        onCancel={closeConfirm}
+        onConfirm={confirmDelete}
+        isLoading={isSaving}
+      />
+    </div>
+  );
+};
+
+// Confirmation modal (simple, reusable)
+const ConfirmModal = ({ visible, title = 'Confirm', message, onCancel, onConfirm, isLoading }) => {
+  if (!visible) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={onCancel} />
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 w-full max-w-md z-10">
+        <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-2">{title}</h3>
+        <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">{message}</p>
+        <div className="flex justify-end gap-3">
+          <button onClick={onCancel} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg">Cancel</button>
+          <button onClick={onConfirm} disabled={isLoading} className="px-4 py-2 bg-red-600 text-white rounded-lg disabled:opacity-50">{isLoading ? 'Deleting...' : 'Delete'}</button>
+        </div>
+      </div>
     </div>
   );
 };
