@@ -3,6 +3,7 @@ import { Eye, Download, MoreHorizontal, ChevronLeft, ChevronRight, Filter, Plus,
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import API from '../services/api';
+import * as farmService from '../services/farmService';
 import ReportPreviewModal from '../components/ReportPreviewModal';
 
 // --- Helper Components ---
@@ -100,7 +101,24 @@ const Reports = () => {
     if (user && !authLoading) {
       fetchReports();
     }
+    // also load farms for selection in report form
+    if (user && !authLoading) {
+      fetchFarmsForForm();
+    }
   }, [user, authLoading]);
+
+  const [availableFarms, setAvailableFarms] = useState([]);
+
+  const fetchFarmsForForm = async () => {
+    try {
+      const res = await farmService.getUserFarms();
+      const list = res.farms || [];
+      setAvailableFarms(list);
+    } catch (err) {
+      console.error('Failed to load farms for report form', err);
+      setAvailableFarms([]);
+    }
+  };
 
   const fetchReports = async () => {
     try {
@@ -214,9 +232,7 @@ const Reports = () => {
     e.preventDefault();
     try {
       setError(null);
-
-      const reportPayload = {
-        farm: newReportData.farm,
+      const basePayload = {
         date: newReportData.date,
         issue: newReportData.issue,
         severity: {
@@ -227,8 +243,11 @@ const Reports = () => {
       };
 
       if (editingReportId) {
+        const reportPayload = { ...basePayload, farm: newReportData.farm };
         await API.put(`/reports/${editingReportId}`, reportPayload);
       } else {
+        if (!newReportData.farm) throw new Error('Please select a farm for the report');
+        const reportPayload = { ...basePayload, farm: newReportData.farm };
         await API.post('/reports', reportPayload);
       }
 
@@ -238,7 +257,7 @@ const Reports = () => {
 
       setShowReportForm(false);
       setEditingReportId(null);
-      setNewReportData({ farm: '', date: '', issue: '', severityValue: '', severityLabel: 'LOW', status: 'Pending' });
+      setNewReportData({ farm: '', farmsSelected: [], date: '', issue: '', severityValue: '', severityLabel: 'LOW', status: 'Pending' });
       
       await fetchReports();
     } catch (err) {
@@ -390,15 +409,26 @@ const Reports = () => {
               </h2>
               <form onSubmit={handleReportSubmit} className="flex flex-col gap-4">
 
-                <input 
-                  type="text" 
-                  name="farm" 
-                  value={newReportData.farm} 
-                  onChange={handleReportInputChange} 
-                  placeholder="Farm Name" 
-                  className="p-3 border rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-200" 
-                  required 
-                />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Select Farm</label>
+                  <div className="relative">
+                    <select
+                      name="farm"
+                      value={newReportData.farm}
+                      onChange={handleReportInputChange}
+                      required
+                      className="appearance-none w-full p-3 border rounded-lg bg-white dark:bg-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600"
+                    >
+                      <option value="" disabled>Choose a farm</option>
+                      {availableFarms.map((f) => (
+                        <option key={f._id} value={f.name}>{f.name}{f.subtitle ? ` • ${f.subtitle}` : ''}</option>
+                      ))}
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
+                      <svg className="w-4 h-4 text-gray-500" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z" clipRule="evenodd"/></svg>
+                    </div>
+                  </div>
+                </div>
                 <input 
                   type="date" 
                   name="date" 
