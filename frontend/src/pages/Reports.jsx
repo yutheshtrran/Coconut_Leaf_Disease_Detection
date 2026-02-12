@@ -64,6 +64,8 @@ const Reports = () => {
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
   const [previewReportId, setPreviewReportId] = useState(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const canCreate = user && (user.role === 'agronomist' || user.role === 'admin');
 
   const canModify = user && (user.role === 'agronomist' || user.role === 'admin');
@@ -280,22 +282,24 @@ const Reports = () => {
   };
 
   const handleDeleteReport = async (reportId) => {
-    if (!window.confirm('Are you sure you want to delete this report?')) {
-      return;
-    }
-
     try {
       setError(null);
       await API.delete(`/reports/${reportId}`);
 
       setSuccessMessage('Report deleted successfully!');
       setTimeout(() => setSuccessMessage(''), 3000);
-      
+      setShowConfirmDelete(false);
+      setConfirmDeleteId(null);
       await fetchReports();
     } catch (err) {
       console.error('Error deleting report:', err);
       setError(err.response?.data?.message || 'Failed to delete report');
     }
+  };
+
+  const showDeleteConfirm = (reportId) => {
+    setConfirmDeleteId(reportId);
+    setShowConfirmDelete(true);
   };
 
   const handleOpenForm = () => {
@@ -362,6 +366,30 @@ const Reports = () => {
         {successMessage && (
           <div className="mb-4 p-4 bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded-lg">
             {successMessage}
+          </div>
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {showConfirmDelete && (
+          <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50 overflow-auto">
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl w-full max-w-md shadow-lg">
+              <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-2">Delete Report</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Are you sure you want to delete this report? This action cannot be undone.</p>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => { setShowConfirmDelete(false); setConfirmDeleteId(null); }}
+                  className="px-4 py-2 rounded-lg bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-400 dark:hover:bg-gray-500 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleDeleteReport(confirmDeleteId)}
+                  className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -610,7 +638,7 @@ const Reports = () => {
                               {/* Delete Report */}
                               <button 
                                 title="Delete Report" 
-                                onClick={() => handleDeleteReport(report.id)} 
+                                onClick={() => showDeleteConfirm(report.id)} 
                                 className="text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition duration-150"
                               >
                                 <Trash2 className="w-5 h-5" />
