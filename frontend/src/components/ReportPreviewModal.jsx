@@ -12,6 +12,37 @@ import {
 } from 'lucide-react';
 import API from '../services/api';
 
+// Derive a user display name from available fields (name, first/last, email)
+const getUserDisplayName = (user) => {
+  if (!user) return 'Unknown';
+
+  // If user is a plain string (some APIs return user id/email as string)
+  if (typeof user === 'string' && user.trim()) return user;
+
+  const name = user.name || user.fullName;
+  if (name && String(name).trim()) return String(name).trim();
+
+  const first = user.firstName;
+  const last = user.lastName;
+  if ((first && first.trim()) || (last && last.trim())) {
+    return `${(first || '').trim()} ${(last || '').trim()}`.trim();
+  }
+
+  // Fallback: use local-part of email (before @), prettify it
+  if (user.email && user.email.includes('@')) {
+    const local = user.email.split('@')[0];
+    // replace dots/underscores with spaces and capitalize words
+    return local
+      .replace(/[._]/g, ' ')
+      .split(' ')
+      .filter(Boolean)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ');
+  }
+
+  return 'Unknown';
+};
+
 const ReportPreviewModal = ({ reportId, onClose }) => {
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -71,6 +102,9 @@ const ReportPreviewModal = ({ reportId, onClose }) => {
       bar: 'bg-green-600'
     };
   };
+
+  // Compute a stable display name for the reported user
+  const displayName = report ? getUserDisplayName(report.userId) : 'Unknown';
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50 overflow-auto p-4">
@@ -186,11 +220,11 @@ const ReportPreviewModal = ({ reportId, onClose }) => {
 
                   <div className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
                     <div className="w-12 h-12 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold">
-                      {report.userId?.name?.charAt(0) || 'U'}
+                      {displayName?.charAt(0)?.toUpperCase() || 'U'}
                     </div>
                     <div>
                       <p className="font-semibold text-gray-800 dark:text-gray-100">
-                        {report.userId?.name || 'Unknown'}
+                        {displayName || 'Unknown'}
                       </p>
                       <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-1">
                         <Mail className="w-3 h-3" />
