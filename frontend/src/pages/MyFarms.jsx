@@ -337,7 +337,67 @@ const AddPlotForm = ({ farmId, onAdd, onCancel, isLoading }) => {
 // --- Main Components ---
 const FarmDetailsCard = ({ farm, onEdit }) => {
   const adminName = farm.admin?.username || farm.admin || 'Unknown';
-  
+  const mapContainerId = `farm-map-${farm._id}`;
+  const mapRef = useRef(null);
+
+  useEffect(() => {
+    let mapInstance;
+    const cssHref = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    const jsSrc = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+
+    const loadLeaflet = () => new Promise((resolve, reject) => {
+      if (window.L) return resolve(window.L);
+      if (!document.querySelector(`link[href="${cssHref}"]`)) {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = cssHref;
+        document.head.appendChild(link);
+      }
+      if (document.querySelector(`script[src="${jsSrc}"]`)) {
+        const existing = document.querySelector(`script[src="${jsSrc}"]`);
+        existing.addEventListener('load', () => resolve(window.L));
+        existing.addEventListener('error', () => reject(new Error('Failed to load Leaflet')));
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = jsSrc;
+      script.async = true;
+      script.onload = () => resolve(window.L);
+      script.onerror = () => reject(new Error('Failed to load Leaflet'));
+      document.body.appendChild(script);
+    });
+
+    const initMap = async () => {
+      try {
+        const L = await loadLeaflet();
+        const loc = (farm.location || '').trim();
+        if (!loc) return;
+        const parts = loc.split(',').map(s => s.trim());
+        if (parts.length < 2) return;
+        const lat = parseFloat(parts[0]);
+        const lng = parseFloat(parts[1]);
+        if (Number.isNaN(lat) || Number.isNaN(lng)) return;
+        if (!document.getElementById(mapContainerId)) return;
+        mapInstance = L.map(mapContainerId, { zoomControl: false, attributionControl: false }).setView([lat, lng], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' }).addTo(mapInstance);
+        L.marker([lat, lng]).addTo(mapInstance);
+        mapRef.current = mapInstance;
+      } catch (err) {
+        console.error('Farm map init failed', err);
+      }
+    };
+
+    initMap();
+
+    return () => {
+      try {
+        if (mapInstance && mapInstance.remove) mapInstance.remove();
+      } catch (e) {}
+    };
+  }, [farm.location, mapContainerId]);
+
+  const hasCoords = !!farm.location && farm.location.split(',').length >= 2;
+
   return (
     <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700 transition-colors duration-300">
       <div className="flex justify-between items-center mb-4">
@@ -364,9 +424,15 @@ const FarmDetailsCard = ({ farm, onEdit }) => {
             </div>
           )}
         </div>
-        <div className="bg-gray-200 h-full min-h-[150px] rounded-lg flex flex-col items-center justify-center text-gray-400 font-medium tracking-wider shadow-inner border border-gray-300">
-          <Map size={32} className="mb-2 opacity-50" />
-          Map Preview
+        <div className="h-full min-h-[150px] rounded-lg overflow-hidden border">
+          {hasCoords ? (
+            <div id={mapContainerId} style={{ height: 220 }} className="w-full" />
+          ) : (
+            <div className="bg-gray-200 h-full min-h-[150px] rounded-lg flex flex-col items-center justify-center text-gray-400 font-medium tracking-wider shadow-inner border border-gray-300">
+              <Map size={32} className="mb-2 opacity-50" />
+              Map Preview
+            </div>
+          )}
         </div>
       </div>
     </div>
