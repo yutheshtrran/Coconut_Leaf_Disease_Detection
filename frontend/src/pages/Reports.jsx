@@ -72,12 +72,16 @@ const Reports = () => {
 
   const [newReportData, setNewReportData] = useState({
     farm: '',
+    plot: '',
     date: '',
     issue: '',
     severityValue: '',
     severityLabel: 'LOW',
     status: 'Pending',
   });
+
+  const [availablePlots, setAvailablePlots] = useState([]);
+  const [plotsLoading, setPlotsLoading] = useState(false);
 
   const [filterData, setFilterData] = useState({
     farm: '',
@@ -121,6 +125,42 @@ const Reports = () => {
       setAvailableFarms([]);
     }
   };
+
+  const fetchPlotsForFarm = async (farmId) => {
+    if (!farmId) {
+      setAvailablePlots([]);
+      return;
+    }
+    try {
+      setPlotsLoading(true);
+      const res = await farmService.getFarmPlots(farmId);
+      const list = res.plots || [];
+      setAvailablePlots(list);
+    } catch (err) {
+      console.error('Failed to load plots for farm', err);
+      setAvailablePlots([]);
+    } finally {
+      setPlotsLoading(false);
+    }
+  };
+
+  // Fetch plots for the selected farm in the form when farm changes
+  useEffect(() => {
+    const farmNameOrId = newReportData.farm;
+    if (!farmNameOrId) {
+      setAvailablePlots([]);
+      setNewReportData(prev => ({ ...prev, plot: '' }));
+      return;
+    }
+    const farmObj = availableFarms.find(f => f._id === farmNameOrId || f.name === farmNameOrId);
+    if (farmObj) {
+      fetchPlotsForFarm(farmObj._id);
+      setNewReportData(prev => ({ ...prev, plot: '' }));
+    } else {
+      setAvailablePlots([]);
+      setNewReportData(prev => ({ ...prev, plot: '' }));
+    }
+  }, [newReportData.farm, availableFarms]);
 
   const fetchReports = async () => {
     try {
@@ -246,10 +286,12 @@ const Reports = () => {
 
       if (editingReportId) {
         const reportPayload = { ...basePayload, farm: newReportData.farm };
+        if (newReportData.plot) reportPayload.plot = newReportData.plot;
         await API.put(`/reports/${editingReportId}`, reportPayload);
       } else {
         if (!newReportData.farm) throw new Error('Please select a farm for the report');
         const reportPayload = { ...basePayload, farm: newReportData.farm };
+        if (newReportData.plot) reportPayload.plot = newReportData.plot;
         await API.post('/reports', reportPayload);
       }
 
@@ -259,7 +301,7 @@ const Reports = () => {
 
       setShowReportForm(false);
       setEditingReportId(null);
-      setNewReportData({ farm: '', farmsSelected: [], date: '', issue: '', severityValue: '', severityLabel: 'LOW', status: 'Pending' });
+      setNewReportData({ farm: '', plot: '', date: '', issue: '', severityValue: '', severityLabel: 'LOW', status: 'Pending' });
       
       await fetchReports();
     } catch (err) {
@@ -271,6 +313,7 @@ const Reports = () => {
   const handleEditReport = (report) => {
     setNewReportData({
       farm: report.farm,
+      plot: report.plot || '',
       date: report.date,
       issue: report.issue,
       severityValue: report.severity.value.toString(),
@@ -304,14 +347,14 @@ const Reports = () => {
 
   const handleOpenForm = () => {
     setEditingReportId(null);
-    setNewReportData({ farm: '', date: '', issue: '', severityValue: '', severityLabel: 'LOW', status: 'Pending' });
+    setNewReportData({ farm: '', plot: '', date: '', issue: '', severityValue: '', severityLabel: 'LOW', status: 'Pending' });
     setShowReportForm(true);
   };
 
   const handleCloseForm = () => {
     setShowReportForm(false);
     setEditingReportId(null);
-    setNewReportData({ farm: '', date: '', issue: '', severityValue: '', severityLabel: 'LOW', status: 'Pending' });
+    setNewReportData({ farm: '', plot: '', date: '', issue: '', severityValue: '', severityLabel: 'LOW', status: 'Pending' });
   };
 
   const renderPaginationButton = (page, label) => (
@@ -455,6 +498,30 @@ const Reports = () => {
                     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
                       <svg className="w-4 h-4 text-gray-500" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z" clipRule="evenodd"/></svg>
                     </div>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Select Plot (optional)</label>
+                  <div>
+                    <select
+                      name="plot"
+                      value={newReportData.plot}
+                      onChange={handleReportInputChange}
+                      className="appearance-none w-full p-3 border rounded-lg bg-white dark:bg-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600"
+                    >
+                      {plotsLoading ? (
+                        <option>Loading plots...</option>
+                      ) : availablePlots.length > 0 ? (
+                        <>
+                          <option value="">(None)</option>
+                          {availablePlots.map(p => (
+                            <option key={p._id} value={p._id}>{p.name}</option>
+                          ))}
+                        </>
+                      ) : (
+                        <option value="">No plots available</option>
+                      )}
+                    </select>
                   </div>
                 </div>
                 <input 

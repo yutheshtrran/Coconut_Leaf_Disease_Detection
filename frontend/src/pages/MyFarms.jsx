@@ -334,6 +334,64 @@ const AddPlotForm = ({ farmId, onAdd, onCancel, isLoading }) => {
   );
 };
 
+const EditPlotForm = ({ farmId, plot, onUpdate, onCancel, isLoading }) => {
+  const [formData, setFormData] = useState({ name: plot.name || '', area: plot.area || '', status: plot.status || 'LOW_RISK' });
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!formData.name || !formData.area) {
+      setError('Plot name and area are required');
+      return;
+    }
+    try {
+      setError('');
+      await onUpdate(plot._id, formData);
+    } catch (err) {
+      setError(err.message || 'Failed to update plot');
+    }
+  };
+
+  return (
+    <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100 mt-8">
+      <div className="flex justify-between items-center mb-6">
+        <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2"><Pencil size={18} className="text-indigo-600" /> Edit Plot</h3>
+        <button onClick={onCancel} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+      </div>
+      {error && (
+        <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">
+          {error}
+        </div>
+      )}
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="space-y-1">
+          <label className="text-xs font-bold text-gray-500 uppercase">Plot Name</label>
+          <input required type="text" placeholder="e.g., A1, North Section" className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} disabled={isLoading} />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-bold text-gray-500 uppercase">Area (ha)</label>
+          <input required step="0.1" type="number" placeholder="0.0" className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" value={formData.area} onChange={e => setFormData({ ...formData, area: e.target.value })} disabled={isLoading} />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-bold text-gray-500 uppercase">Status</label>
+          <select className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 bg-white" value={formData.status} onChange={e => setFormData({ ...formData, status: e.target.value })} disabled={isLoading}>
+            <option value="LOW_RISK">LOW RISK</option>
+            <option value="MODERATE">MODERATE</option>
+            <option value="CRITICAL">CRITICAL</option>
+          </select>
+        </div>
+        <div className="flex items-end gap-2">
+          <button type="submit" disabled={isLoading} className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-indigo-700 flex-1 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+            {isLoading ? <Loader size={16} className="animate-spin" /> : <Check size={16} />}
+            {isLoading ? 'Saving...' : 'Save Changes'}
+          </button>
+          <button type="button" onClick={onCancel} disabled={isLoading} className="bg-gray-100 p-2 rounded-lg text-gray-500 hover:text-gray-700 disabled:opacity-50"><X size={20} /></button>
+        </div>
+      </form>
+    </div>
+  );
+};
+
 // --- Main Components ---
 const FarmDetailsCard = ({ farm, onEdit }) => {
   const adminName = farm.admin?.username || farm.admin || 'Unknown';
@@ -439,7 +497,7 @@ const FarmDetailsCard = ({ farm, onEdit }) => {
   );
 };
 
-const PlotsTable = ({ farm, plots, onAddPlotRequest, onDeletePlot }) => {
+const PlotsTable = ({ farm, plots, onAddPlotRequest, onDeletePlot, onEditPlot }) => {
   const farmPlots = useMemo(() => plots[farm._id] || [], [farm._id, plots]);
   return (
     <div className="mt-8">
@@ -473,7 +531,7 @@ const PlotsTable = ({ farm, plots, onAddPlotRequest, onDeletePlot }) => {
                   <td className="px-6 py-4 whitespace-nowrap text-sm">{getStatusBadge(plot.status || 'LOW_RISK')}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
                     <div className="flex items-center justify-center gap-2">
-                      <button className="text-indigo-600 hover:text-indigo-900 p-2"><Pencil className="w-4 h-4" /></button>
+                      <button onClick={(e) => { e.stopPropagation(); onEditPlot && onEditPlot(plot); }} className="text-indigo-600 hover:text-indigo-900 p-2"><Pencil className="w-4 h-4" /></button>
                       <button onClick={(e) => { e.stopPropagation(); onDeletePlot && onDeletePlot(plot._id); }} className="text-red-600 hover:text-red-900 p-2"><Trash className="w-4 h-4" /></button>
                     </div>
                   </td>
@@ -507,6 +565,7 @@ const MyFarms = () => {
   const [showFarmForm, setShowFarmForm] = useState(false);
   const [showPlotForm, setShowPlotForm] = useState(false);
   const [editingFarm, setEditingFarm] = useState(null);
+  const [editingPlot, setEditingPlot] = useState(null);
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [confirmData, setConfirmData] = useState({ type: null, farmId: null, plotId: null, name: '' });
 
@@ -614,6 +673,23 @@ const MyFarms = () => {
     } catch (err) {
       console.error('Error adding plot:', err);
       throw new Error(err.response?.data?.message || 'Failed to add plot');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleUpdatePlot = async (plotId, formData) => {
+    if (!selectedFarmId) return;
+    try {
+      setIsSaving(true);
+      setError('');
+      const response = await farmService.updatePlot(selectedFarmId, plotId, formData);
+      const updatedPlots = (plots[selectedFarmId] || []).map(p => p._id === plotId ? response.plot : p);
+      setPlots({ ...plots, [selectedFarmId]: updatedPlots });
+      setEditingPlot(null);
+    } catch (err) {
+      console.error('Error updating plot:', err);
+      throw new Error(err.response?.data?.message || 'Failed to update plot');
     } finally {
       setIsSaving(false);
     }
@@ -760,12 +836,21 @@ const MyFarms = () => {
                 onCancel={() => setShowPlotForm(false)}
                 isLoading={isSaving}
               />
+            ) : editingPlot ? (
+              <EditPlotForm
+                farmId={selectedFarm._id}
+                plot={editingPlot}
+                onUpdate={handleUpdatePlot}
+                onCancel={() => setEditingPlot(null)}
+                isLoading={isSaving}
+              />
             ) : (
               <PlotsTable
                 farm={selectedFarm}
                 plots={plots}
                 onAddPlotRequest={() => setShowPlotForm(true)}
                 onDeletePlot={(plotId) => openConfirm({ type: 'plot', farmId: selectedFarm._id, plotId, name: '' })}
+                onEditPlot={(plot) => setEditingPlot(plot)}
               />
             )}
           </div>
