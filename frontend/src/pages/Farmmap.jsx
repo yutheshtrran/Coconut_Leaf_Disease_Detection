@@ -16,47 +16,56 @@ L.Icon.Default.mergeOptions({
     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
 
-// Utility function to parse location strings in multiple common formats:
-// - "6.8897° N, 81.7890° E"
-// - "6.8897, 81.7890" (plain decimal comma-separated)
-// - "6.8897 81.7890" (space-separated)
+// Validate that coordinates are within Sri Lanka's bounds (with some buffer)
+const isValidSriLankaCoordinate = (lat, lng) => {
+  // Sri Lanka bounds: lat 5.9°N to 7.7°N, lng 80.5°E to 82.2°E
+  // Extended bounds with buffer for safety: lat 5.0 to 9.0, lng 79.5 to 83.0
+  const minLat = 5.0;
+  const maxLat = 9.0;
+  const minLng = 79.5;
+  const maxLng = 83.0;
+  
+  return lat >= minLat && lat <= maxLat && lng >= minLng && lng <= maxLng;
+};
+
+// Parse location strings
 const parseLocation = (locationString) => {
   if (!locationString) return null;
   try {
-    // Try degree format first: "6.8897° N, 81.7890° E"
     const degRegex = /(-?\d+\.?\d*)\s*°?\s*([NS])[,\s]+(-?\d+\.?\d*)\s*°?\s*([EW])/i;
     const degMatch = locationString.match(degRegex);
     if (degMatch) {
       let lat = parseFloat(degMatch[1]);
       let lng = parseFloat(degMatch[3]);
-      if (degMatch[2].toUpperCase() === 'S') lat = -lat;
-      if (degMatch[4].toUpperCase() === 'W') lng = -lng;
-      return { lat, lng };
+      if (degMatch[2].toUpperCase() === "S") lat = -lat;
+      if (degMatch[4].toUpperCase() === "W") lng = -lng;
+      if (isValidSriLankaCoordinate(lat, lng)) {
+        return { lat, lng };
+      }
     }
-
-    // Try plain decimal comma or space separated: "6.8897, 81.7890" or "6.8897 81.7890"
     const decRegex = /(-?\d+\.?\d*)[,\s]+(-?\d+\.?\d*)/;
     const decMatch = locationString.match(decRegex);
     if (decMatch) {
       const lat = parseFloat(decMatch[1]);
       const lng = parseFloat(decMatch[2]);
-      if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
+      if (Number.isFinite(lat) && Number.isFinite(lng) && isValidSriLankaCoordinate(lat, lng)) {
+        return { lat, lng };
+      }
     }
-
     return null;
   } catch (error) {
-    console.error('Error parsing location:', error);
+    console.error("Error parsing location:", error);
     return null;
   }
 };
 
-// Marker colors by status
+// Marker colors
 const markerColor = {
   active: "green",
   inactive: "gray",
 };
 
-// Component to auto-fit map bounds safely
+// Auto-fit bounds
 const FitBounds = ({ locations }) => {
   const map = useMap();
 
@@ -65,9 +74,7 @@ const FitBounds = ({ locations }) => {
 
     try {
       const latLngs = locations
-        .filter(
-          (loc) => Number.isFinite(loc.lat) && Number.isFinite(loc.lng)
-        )
+        .filter((loc) => Number.isFinite(loc.lat) && Number.isFinite(loc.lng))
         .map((loc) => [loc.lat, loc.lng]);
 
       if (latLngs.length === 0) return;
@@ -77,7 +84,7 @@ const FitBounds = ({ locations }) => {
       if (bounds.isValid()) {
         map.fitBounds(bounds, {
           padding: [50, 50],
-          maxZoom: 13, // Prevent over-zoom for close farms
+          maxZoom: 13,
           animate: true,
         });
       }
@@ -100,25 +107,17 @@ const FarmMap = () => {
   // Sync with system theme changes
   useEffect(() => {
     const darkModeQuery = window.matchMedia("(prefers-color-scheme: dark)");
-
-    const handleThemeChange = (e) => {
-      const newTheme = e.matches ? "dark" : "light";
-      setTheme(newTheme);
-    };
-
+    const handleThemeChange = (e) => setTheme(e.matches ? "dark" : "light");
     darkModeQuery.addEventListener("change", handleThemeChange);
-
-    return () => {
-      darkModeQuery.removeEventListener("change", handleThemeChange);
-    };
+    return () => darkModeQuery.removeEventListener("change", handleThemeChange);
   }, [setTheme]);
 
+  // Load farms
   useEffect(() => {
     const loadFarms = async () => {
       try {
         setIsLoading(true);
         setError(null);
-
         const response = await farmService.getUserFarms();
 
         if (response.farms && response.farms.length > 0) {
@@ -143,18 +142,16 @@ const FarmMap = () => {
         setIsLoading(false);
       }
     };
-
     loadFarms();
   }, []);
 
-  // Listen for farms added/updated elsewhere in the app and update map live
+  // Listen for live farm updates
   useEffect(() => {
     const onFarmsUpdated = (e) => {
       try {
         const incoming = e?.detail;
         if (!incoming) return;
 
-        // If farm exists, replace it; otherwise append
         setFarms((prev) => {
           const exists = prev.find((f) => f._id === incoming._id);
           if (exists) return prev.map((f) => (f._id === incoming._id ? incoming : f));
@@ -170,30 +167,31 @@ const FarmMap = () => {
           });
         }
       } catch (err) {
-        console.error('Error handling farmsUpdated event', err);
+        console.error("Error handling farmsUpdated event", err);
       }
     };
 
-    window.addEventListener('farmsUpdated', onFarmsUpdated);
-    return () => window.removeEventListener('farmsUpdated', onFarmsUpdated);
+    window.addEventListener("farmsUpdated", onFarmsUpdated);
+    return () => window.removeEventListener("farmsUpdated", onFarmsUpdated);
   }, []);
 
-  // Safe default center
+  // Default center Sri Lanka
+  const SRI_LANKA_CENTER = [7.8731, 80.7718];
   const defaultCenter =
-    validLocations.length > 0 &&
-    Number.isFinite(validLocations[0].lat) &&
-    Number.isFinite(validLocations[0].lng)
-      ? [validLocations[0].lat, validLocations[0].lng]
-      : [7.8731, 80.7718]; // Sri Lanka center
+    validLocations.length > 0
+      ? validLocations
+          .filter((loc) => Number.isFinite(loc.lat) && Number.isFinite(loc.lng))
+          .map((loc) => [loc.lat, loc.lng])[0] || SRI_LANKA_CENTER
+      : SRI_LANKA_CENTER;
 
   return (
     <div style={{ width: "100%", height: "100%", position: "relative" }}>
-      {/* Loading Overlay */}
+      {/* Loading */}
       {isLoading && (
         <div
           className="absolute top-0 left-0 right-0 bottom-0 flex items-center justify-center z-50"
           style={{
-            backgroundColor: theme === "dark" ? "rgba(20, 20, 20, 0.8)" : "rgba(243, 244, 246, 0.8)",
+            backgroundColor: theme === "dark" ? "rgba(20,20,20,0.8)" : "rgba(243,244,246,0.8)",
           }}
         >
           <div className="text-center">
@@ -203,7 +201,7 @@ const FarmMap = () => {
         </div>
       )}
 
-      {/* Error Overlay */}
+      {/* Error */}
       {error && (
         <div
           className="absolute top-4 left-4 right-4 p-4 rounded-lg flex items-center gap-3 z-50"
@@ -218,25 +216,19 @@ const FarmMap = () => {
         </div>
       )}
 
-      {/* Empty State */}
+      {/* Empty state */}
       {validLocations.length === 0 && !isLoading && !error && (
         <div
           className="absolute top-0 left-0 right-0 bottom-0 flex items-center justify-center z-10"
           style={{
-            backgroundColor: theme === "dark" ? "rgba(20, 20, 20, 0.5)" : "rgba(249, 250, 251, 0.5)",
+            backgroundColor: theme === "dark" ? "rgba(20,20,20,0.5)" : "rgba(249,250,251,0.5)",
           }}
         >
           <div className="text-center">
-            <p
-              className="text-lg"
-              style={{ color: theme === "dark" ? "#a0a0a0" : "#4b5563" }}
-            >
+            <p className="text-lg" style={{ color: theme === "dark" ? "#a0a0a0" : "#4b5563" }}>
               No farms with location data
             </p>
-            <p
-              className="text-sm mt-2"
-              style={{ color: theme === "dark" ? "#808080" : "#6b7280" }}
-            >
+            <p className="text-sm mt-2" style={{ color: theme === "dark" ? "#808080" : "#6b7280" }}>
               Add farms with location information to see them on the map
             </p>
           </div>
@@ -246,15 +238,19 @@ const FarmMap = () => {
       {/* Map */}
       <MapContainer
         center={defaultCenter}
-        zoom={10}
-        minZoom={6} // Prevent zooming out too far
+        zoom={validLocations.length > 0 ? 10 : 7}
+        minZoom={6}
         maxZoom={18}
         style={{ width: "100%", height: "100%" }}
       >
-        {/* Tile Layer - Dynamic based on theme */}
+        {/* Tile Layer */}
         <TileLayer
           key={`tile-${theme}`}
-          attribution={theme === "dark" ? '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors & <a href="https://carto.com/aboutcarto/">CARTO</a>' : 'Tiles © Esri'}
+          attribution={
+            theme === "dark"
+              ? '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors & <a href="https://carto.com/aboutcarto/">CARTO</a>'
+              : 'Tiles © Esri'
+          }
           url={
             theme === "dark"
               ? "https://cartodb-basemaps-{s}.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png"
@@ -267,9 +263,7 @@ const FarmMap = () => {
           <Marker
             key={farm._id}
             position={[farm.lat, farm.lng]}
-            eventHandlers={{
-              click: () => setSelectedFarm(farm),
-            }}
+            eventHandlers={{ click: () => setSelectedFarm(farm) }}
             icon={L.divIcon({
               className: "custom-marker",
               html: `<div style="
@@ -304,18 +298,22 @@ const FarmMap = () => {
                 {selectedFarm.name}
               </p>
               {selectedFarm.subtitle && (
-                <p className="text-xs mt-1" style={{ color: theme === "dark" ? "#b0b0b0" : "#666666" }}>
+                <p
+                  className="text-xs mt-1"
+                  style={{ color: theme === "dark" ? "#b0b0b0" : "#666666" }}
+                >
                   {selectedFarm.subtitle}
                 </p>
               )}
-              <p className="mt-2" style={{ color: theme === "dark" ? "#e0e0e0" : "#1a1a1a" }}>
+              <p className="mt-2">
                 <span className="font-medium">Area:</span> {selectedFarm.area}
               </p>
-              <p className="mt-1 capitalize" style={{ color: theme === "dark" ? "#e0e0e0" : "#1a1a1a" }}>
+              <p className="mt-1 capitalize">
                 <span className="font-medium">Status:</span>{" "}
                 <span
                   style={{
-                    color: markerColor[selectedFarm.status] === "active" ? "#22c55e" : "#9ca3af",
+                    color:
+                      markerColor[selectedFarm.status] === "active" ? "#22c55e" : "#9ca3af",
                     fontWeight: 600,
                   }}
                 >
@@ -331,7 +329,7 @@ const FarmMap = () => {
           </Popup>
         )}
 
-        {/* Auto-fit bounds */}
+        {/* Fit bounds */}
         {validLocations.length > 0 && <FitBounds locations={validLocations} />}
       </MapContainer>
     </div>
