@@ -54,7 +54,12 @@ API.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    if (error.response && error.response.status === 401 && !originalRequest._retry) {
+    // Do not attempt refresh for auth endpoints like login/register/forgot/reset
+    const authPathsToSkip = ['/auth/login', '/auth/register', '/auth/register/confirm', '/auth/forgot', '/auth/forgot/confirm', '/auth/reset', '/auth/verify', '/auth/resend', '/auth/register/resend'];
+    const reqUrl = originalRequest && originalRequest.url ? originalRequest.url : '';
+    const isAuthEndpoint = authPathsToSkip.some((p) => reqUrl.includes(p));
+
+    if (error.response && error.response.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
       if (isRefreshing) {
         return new Promise(function (resolve, reject) {
           failedQueue.push({ resolve, reject });
@@ -62,6 +67,9 @@ API.interceptors.response.use(
           .then(() => API(originalRequest))
           .catch((err) => Promise.reject(err));
       }
+
+      // Prevent attempting to refresh when the failing request was the refresh endpoint itself
+      if (reqUrl.includes('/auth/refresh')) return Promise.reject(error);
 
       originalRequest._retry = true;
       isRefreshing = true;

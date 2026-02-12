@@ -46,6 +46,7 @@ try {
   app.use('/api/reports', require('./routes/reportRoutes'));
   app.use('/api/alerts', require('./routes/alertRoutes'));
   app.use('/api/auth', require('./routes/authRoutes'));
+  app.use('/api/farms', require('./routes/farmRoutes'));
   // ML prediction route
   // app.use('/api/ml', require('./routes/mlRoutes'));
 

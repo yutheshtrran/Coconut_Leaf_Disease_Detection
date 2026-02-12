@@ -4,7 +4,6 @@ venv/
 .env/
 .venv/
 
-
 # Ignore dependency directories
 node_modules/
 

@@ -1,12 +1,25 @@
 const express = require('express');
 const router = express.Router();
 const reportController = require('../controllers/reportController');
+const authMiddleware = require('../middleware/authMiddleware');
 
-// Route to get all reports
+// All report routes require authentication
+router.use(authMiddleware);
+
+// Route to get all reports for authenticated user
 router.get('/', reportController.getReports);
+
+// Route to get filtered reports
+router.get('/filter', reportController.getFilteredReports);
 
 // Route to create a new report
 router.post('/', reportController.createReport);
+
+// Route to generate PDF and download report
+router.get('/:id/download', reportController.downloadReport);
+
+// Route to preview report data (JSON)
+router.get('/:id/preview', reportController.previewReport);
 
 // Route to get a specific report by ID
 router.get('/:id', reportController.getReportById);
