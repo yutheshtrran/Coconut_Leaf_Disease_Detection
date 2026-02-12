@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { Upload as UploadIcon, ChevronDown } from "lucide-react";
+import { Upload as UploadIcon, ChevronDown, AlertCircle, CheckCircle } from "lucide-react";
 import * as farmService from "../services/farmService";
+import API from "../services/api";
 
 const Upload = () => {
   const [farm, setFarm] = useState("");
@@ -20,6 +21,8 @@ const Upload = () => {
   const [uploadType, setUploadType] = useState(null); // 'image' or 'video'
   const [droneResult, setDroneResult] = useState(null); // Drone processing results
   const [showDroneModal, setShowDroneModal] = useState(false); // Modal for drone results
+  const [reportMessage, setReportMessage] = useState(''); // Report save feedback
+  const [reportError, setReportError] = useState('');
 
   // Fetch farms on component mount
   useEffect(() => {
@@ -111,6 +114,8 @@ const Upload = () => {
   const handleImageAnalysis = async () => {
     setLoading(true);
     setVideoAnalysis(null);
+    setReportMessage('');
+    setReportError('');
 
     const counts = {}; // disease occurrence counts
     const totalImages = selectedFiles.length;
@@ -155,9 +160,74 @@ const Upload = () => {
     const healthyPct = totalImages > 0 ? Math.round((healthyCount / totalImages) * 100) : 0;
 
     setHealthyPercent(healthyPct);
-
     setDiseaseLevels(aggregatedResults);
+
+    // Save analysis as report to backend
+    await saveAnalysisReport(aggregatedResults, healthyPct);
+    
     setLoading(false);
+  };
+
+  const saveAnalysisReport = async (diseases, healthyPercent) => {
+    if (!farm) {
+      setReportError('Please select a farm before analyzing');
+      return;
+    }
+
+    try {
+      // Determine primary issue and severity
+      let primaryIssue = 'Plantation Health Analysis';
+      let maxSeverityValue = 0;
+      let maxSeverityLabel = 'LOW';
+
+      if (diseases.length > 0) {
+        // Find the disease with highest percentage
+        const worstDisease = diseases.reduce((prev, current) => 
+          (prev.level > current.level) ? prev : current
+        );
+        
+        primaryIssue = `${worstDisease.name} detected (${worstDisease.level}%)`;
+        maxSeverityValue = worstDisease.level;
+        
+        // Determine severity label based on percentage
+        if (maxSeverityValue >= 75) {
+          maxSeverityLabel = 'CRITICAL';
+        } else if (maxSeverityValue >= 50) {
+          maxSeverityLabel = 'HIGH';
+        } else if (maxSeverityValue >= 25) {
+          maxSeverityLabel = 'MODERATE';
+        } else {
+          maxSeverityLabel = 'LOW';
+        }
+      }
+
+      const reportData = {
+        farm,
+        date: new Date().toISOString().split('T')[0],
+        issue: primaryIssue,
+        severity: {
+          value: maxSeverityValue,
+          label: maxSeverityLabel
+        },
+        status: 'Finalized',
+        plotId: plot || null,
+        note: notes || null,
+        analysisData: {
+          totalImagesAnalyzed: selectedFiles.length,
+          healthyPercent,
+          diseases: diseases.map(d => ({ name: d.name, percentage: d.level }))
+        }
+      };
+
+      const response = await API.post('/reports', reportData);
+      setReportMessage('Analysis saved as report successfully!');
+      
+      // Clear message after 3 seconds
+      setTimeout(() => setReportMessage(''), 3000);
+    } catch (err) {
+      console.error('Error saving analysis as report:', err);
+      setReportError(err.response?.data?.message || 'Failed to save analysis report');
+    }
   };
 
   const handleVideoAnalysis = async (videoFile) => {
@@ -257,6 +327,20 @@ const Upload = () => {
       <p className="text-gray-700 mb-6">
         Upload leaf or drone images for automated plantation health analysis.
       </p>
+
+      {/* Report Messages */}
+      {reportMessage && (
+        <div className="mb-6 p-4 bg-green-100 border border-green-400 text-green-700 rounded-lg flex items-center gap-3">
+          <CheckCircle size={20} />
+          {reportMessage}
+        </div>
+      )}
+      {reportError && (
+        <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg flex items-center gap-3">
+          <AlertCircle size={20} />
+          {reportError}
+        </div>
+      )}
 
       <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 space-y-6 max-w-6xl flex flex-col md:flex-row md:space-x-6">
 
