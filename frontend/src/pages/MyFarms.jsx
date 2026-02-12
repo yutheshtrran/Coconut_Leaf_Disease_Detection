@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Search, Plus, Pencil, X, Check, Map, Calendar, AlertCircle, Loader } from 'lucide-react';
+import { Search, Plus, Pencil, X, Check, Map, Calendar, AlertCircle, Loader, Trash } from 'lucide-react';
 import * as farmService from '../services/farmService';
 
 // --- Utility ---
@@ -373,7 +373,7 @@ const FarmDetailsCard = ({ farm, onEdit }) => {
   );
 };
 
-const PlotsTable = ({ farm, plots, onAddPlotRequest }) => {
+const PlotsTable = ({ farm, plots, onAddPlotRequest, onDeletePlot }) => {
   const farmPlots = useMemo(() => plots[farm._id] || [], [farm._id, plots]);
   return (
     <div className="mt-8">
@@ -406,7 +406,10 @@ const PlotsTable = ({ farm, plots, onAddPlotRequest }) => {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{plot.lastAnalyzed || 'N/A'}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">{getStatusBadge(plot.status || 'LOW_RISK')}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
-                    <button className="text-indigo-600 hover:text-indigo-900 p-2"><Pencil className="w-4 h-4" /></button>
+                    <div className="flex items-center justify-center gap-2">
+                      <button className="text-indigo-600 hover:text-indigo-900 p-2"><Pencil className="w-4 h-4" /></button>
+                      <button onClick={(e) => { e.stopPropagation(); onDeletePlot && onDeletePlot(plot._id); }} className="text-red-600 hover:text-red-900 p-2"><Trash className="w-4 h-4" /></button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -548,6 +551,45 @@ const MyFarms = () => {
     }
   };
 
+  const handleDeleteFarm = async (farmId) => {
+    if (!window.confirm('Delete this farm and all its plots? This action cannot be undone.')) return;
+    try {
+      setIsSaving(true);
+      setError('');
+      await farmService.deleteFarm(farmId);
+      const newFarms = farms.filter(f => f._id !== farmId);
+      setFarms(newFarms);
+      const newPlots = { ...plots };
+      delete newPlots[farmId];
+      setPlots(newPlots);
+      if (selectedFarmId === farmId) {
+        setSelectedFarmId(newFarms.length > 0 ? newFarms[0]._id : null);
+      }
+      try { window.dispatchEvent(new CustomEvent('farmsUpdated', { detail: { deleted: farmId } })); } catch (e) {}
+    } catch (err) {
+      console.error('Error deleting farm:', err);
+      setError(err.response?.data?.message || 'Failed to delete farm');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeletePlot = async (farmId, plotId) => {
+    if (!window.confirm('Delete this plot? This action cannot be undone.')) return;
+    try {
+      setIsSaving(true);
+      setError('');
+      await farmService.deletePlot(farmId, plotId);
+      const updated = (plots[farmId] || []).filter(p => p._id !== plotId);
+      setPlots({ ...plots, [farmId]: updated });
+    } catch (err) {
+      console.error('Error deleting plot:', err);
+      setError(err.response?.data?.message || 'Failed to delete plot');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900">
@@ -576,20 +618,29 @@ const MyFarms = () => {
           />
         </div>
         <nav className="space-y-2">
-          {filteredFarms.length > 0 ? (
-            filteredFarms.map(farm => (
-              <div
-                key={farm._id}
-                onClick={() => handleSelectFarm(farm._id)}
-                className={`p-3 rounded-xl cursor-pointer transition duration-150 ${farm._id === selectedFarmId ? 'bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-400 border-l-4 border-green-500 shadow-inner' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'}`}
-              >
-                <p className="font-semibold">{farm.name}</p>
-                <p className="text-xs opacity-70">{farm.subtitle || 'No subtitle'}</p>
-              </div>
-            ))
-          ) : (
-            <p className="text-sm text-gray-500 p-3">No farms found</p>
-          )}
+              {filteredFarms.length > 0 ? (
+                filteredFarms.map(farm => (
+                  <div
+                    key={farm._id}
+                    onClick={() => handleSelectFarm(farm._id)}
+                    className={`p-3 rounded-xl cursor-pointer transition duration-150 ${farm._id === selectedFarmId ? 'bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-400 border-l-4 border-green-500 shadow-inner' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'}`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold">{farm.name}</p>
+                        <p className="text-xs opacity-70">{farm.subtitle || 'No subtitle'}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button onClick={(e) => { e.stopPropagation(); handleDeleteFarm(farm._id); }} title="Delete farm" className="text-red-600 hover:text-red-900 p-1 rounded">
+                          <Trash className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-gray-500 p-3">No farms found</p>
+              )}
         </nav>
       </aside>
 
@@ -631,6 +682,7 @@ const MyFarms = () => {
                 farm={selectedFarm}
                 plots={plots}
                 onAddPlotRequest={() => setShowPlotForm(true)}
+                onDeletePlot={(plotId) => handleDeletePlot(selectedFarm._id, plotId)}
               />
             )}
           </div>
