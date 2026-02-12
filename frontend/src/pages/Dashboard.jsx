@@ -1,4 +1,5 @@
 import { Hand } from 'lucide-react';
+import FarmMap from "./Farmmap.jsx";
 
 // Define the custom colors
 const COLORS = {
