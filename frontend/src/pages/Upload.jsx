@@ -175,6 +175,10 @@ const Upload = () => {
     }
 
     try {
+      // Get farm name from farms array
+      const selectedFarmObj = farms.find(f => f._id === farm);
+      const farmName = selectedFarmObj?.name || farm;
+
       // Determine primary issue and severity
       let primaryIssue = 'Plantation Health Analysis';
       let maxSeverityValue = 0;
@@ -202,7 +206,7 @@ const Upload = () => {
       }
 
       const reportData = {
-        farm,
+        farm: farmName,
         date: new Date().toISOString().split('T')[0],
         issue: primaryIssue,
         severity: {
