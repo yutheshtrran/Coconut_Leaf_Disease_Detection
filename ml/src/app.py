@@ -84,12 +84,22 @@ if os.path.exists(DISEASE_INFO_PATH):
         print(f"[WARNING] Could not load disease_info.json: {e}")
 
 # ------------------------------------------------------------------
-# Check model existence
+# Check model existence & Load Model
 # ------------------------------------------------------------------
+CLASSIFICATION_MODEL = None
+
 if not os.path.exists(MODEL_PATH):
     print(f"[ERROR] Model NOT found at {MODEL_PATH}")
 else:
     print("✅ Model file found")
+    try:
+        # Pre-load the model to avoid first-request latency
+        # We need to import the build function or use the one from inference
+        from inference import model as loaded_model
+        CLASSIFICATION_MODEL = loaded_model
+        print("✅ Classification model loaded into memory")
+    except Exception as e:
+        print(f"❌ Failed to load classification model: {e}")
 
 # ------------------------------------------------------------------
 # Prediction API - image
@@ -113,10 +123,21 @@ def predict_api():
             if os.path.exists(img_path):
                 os.remove(img_path)
 
+        import re
+        def _to_snake(name):
+            return re.sub(r'[\s\-]+', '_', name.strip()).lower()
+
         confidence = float(output.get("confidence", 0.0))
         percentage = round(confidence * 100, 2)
         disease = output.get("disease", "Unknown")
-        disease_info = DISEASE_INFO.get(disease.lower(), {})
+        top3 = output.get("top3", [])
+
+        # Try original name first, then snake_case fallback
+        disease_info = (
+            DISEASE_INFO.get(disease)
+            or DISEASE_INFO.get(_to_snake(disease))
+            or {}
+        )
 
         return jsonify({
             "success": True,
@@ -126,7 +147,8 @@ def predict_api():
                 "percentage": percentage,
                 "description": disease_info.get("description", ""),
                 "impact": disease_info.get("impact", ""),
-                "remedy": disease_info.get("remedy", "No remedy available")
+                "remedy": disease_info.get("remedy", "No remedy available"),
+                "top3": top3,
             },
             "all_diseases": CLASS_NAMES
         })
@@ -189,18 +211,26 @@ def process_drone_images():
             return jsonify({"error": "No valid images uploaded"}), 400
 
         try:
-            # Use the enhanced pipeline: stitch + watershed segmentation + numbered annotation
+            # Use the enhanced pipeline: stitch + watershed segmentation + numbered annotation + disease classification
             from segmentation_enhanced import process_panoramic_images
+            
+            # Import necessary components for classification
+            from inference import device, _base_transform as transform, class_names
 
             result = process_panoramic_images(
                 image_paths=image_paths,
                 output_dir=None,  # Don't save to disk; we return base64
+                classification_model=CLASSIFICATION_MODEL,
+                transform=transform,
+                class_names=class_names,
+                device=device,
                 verbose=True
             )
 
             panorama = result['panorama']
             annotated = result['annotated']
             tree_data = result['tree_data']
+            disease_counts = result.get('disease_counts', {})
 
             # Save panorama for reference
             panorama_path = os.path.join(UPLOAD_DIR, f"panorama_{uuid.uuid4()}.jpg")
@@ -214,6 +244,11 @@ def process_drone_images():
             import base64
             with open(annotated_path, "rb") as img_file:
                 annotated_b64 = base64.b64encode(img_file.read()).decode('utf-8')
+            
+            # Calculate simple farm health score (0-100)
+            total_trees = result['num_trees']
+            healthy_trees = disease_counts.get('Healthy_Leaves', 0) + disease_counts.get('healthy_leaves', 0)
+            health_score = (healthy_trees / total_trees * 100) if total_trees > 0 else 0
 
             # Build response
             response_data = {
@@ -222,6 +257,8 @@ def process_drone_images():
                 "annotated_image": f"data:image/jpeg;base64,{annotated_b64}",
                 "tree_data": tree_data,
                 "num_trees": result['num_trees'],
+                "farm_health_score": round(health_score, 1),
+                "disease_counts": disease_counts,
                 "segmentation_stats": {
                     "total_trees_segmented": result['num_trees'],
                     "vegetation_coverage_px": int(np.sum(result['vegetation_mask'] > 0)),

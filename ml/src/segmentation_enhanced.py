@@ -394,13 +394,17 @@ def process_panoramic_images(
     output_dir: str = None,
     min_tree_area: int = None,
     max_tree_area: int = None,
+    classification_model=None,
+    transform=None,
+    class_names=None,
+    device=None,
     verbose: bool = True
 ) -> Dict:
     """
-    Full pipeline: stitch → preprocess → detect vegetation → segment → annotate.
+    Full pipeline: stitch → preprocess → detect vegetation → segment → classify → annotate.
 
     Returns:
-        panorama, annotated, tree_data, num_trees, vegetation_mask, tree_regions
+        panorama, annotated, tree_data, num_trees, vegetation_mask, tree_regions, farm_stats
     """
     if verbose:
         print(f"[INFO] Processing {len(image_paths)} images...")
@@ -450,7 +454,51 @@ def process_panoramic_images(
     tree_regions = sorted(tree_regions,
                           key=lambda r: (r['centroid'][1] // 100, r['centroid'][0]))
 
-    annotated, tree_data = annotate_trees(panorama, tree_regions)
+    # Classify Diseases (if model provided)
+    disease_counts = {}
+    if classification_model and transform and class_names:
+        if verbose:
+            print(f"[INFO] Classifying {len(tree_regions)} trees...")
+        
+        for region in tree_regions:
+            try:
+                x, y, w, h = region['bbox']
+                pad = int(min(w, h) * 0.1)
+                x1, y1 = max(0, x - pad), max(0, y - pad)
+                x2, y2 = min(panorama.shape[1], x + w + pad), min(panorama.shape[0], y + h + pad)
+                
+                tree_crop = panorama[y1:y2, x1:x2]
+                if tree_crop.size == 0:
+                    region['disease'] = 'Unknown'
+                    region['confidence'] = 0.0
+                    continue
+
+                pil_img = Image.fromarray(cv2.cvtColor(tree_crop, cv2.COLOR_BGR2RGB))
+                img_tensor = transform(pil_img).unsqueeze(0).to(device or 'cpu')
+
+                with torch.no_grad():
+                    outputs = classification_model(img_tensor)
+                    probs = torch.softmax(outputs, dim=1)[0]
+                    pred_idx = torch.argmax(probs).item()
+                    confidence = probs[pred_idx].item()
+                    
+                    if pred_idx < len(class_names):
+                        dis = class_names[pred_idx]
+                    else:
+                        dis = 'Unknown'
+
+                    region['disease'] = dis
+                    region['confidence'] = confidence
+                    disease_counts[dis] = disease_counts.get(dis, 0) + 1
+            except Exception as e:
+                print(f"[WARN] Classification failed for a tree: {e}")
+                region['disease'] = 'Unknown'
+                region['confidence'] = 0.0
+    else:
+        if verbose:
+            print("[INFO] No classification model provided — skipping disease detection")
+
+    annotated, tree_data = annotate_trees_enhanced(panorama, tree_regions)
 
     if verbose:
         print(f"[INFO] Final tree count: {len(tree_data)}")
@@ -469,8 +517,73 @@ def process_panoramic_images(
         'tree_data': tree_data,
         'num_trees': len(tree_data),
         'vegetation_mask': veg_mask,
-        'tree_regions': tree_regions
+        'tree_regions': tree_regions,
+        'disease_counts': disease_counts
     }
+
+
+def annotate_trees_enhanced(
+    image: np.ndarray,
+    tree_regions: List[Dict]
+) -> Tuple[np.ndarray, List[Dict]]:
+    """
+    Annotate with tree numbers + disease labels if available.
+    """
+    annotated = image.copy()
+    tree_data = []
+
+    # Colors: Generate golden-angle colors
+    np.random.seed(42)
+    colors = []
+    for i in range(len(tree_regions)):
+        hue = int((i * 137.508) % 180)
+        c_hsv = np.array([[[hue, 220, 220]]], dtype=np.uint8)
+        c_bgr = cv2.cvtColor(c_hsv, cv2.COLOR_HSV2BGR)[0][0]
+        colors.append((int(c_bgr[0]), int(c_bgr[1]), int(c_bgr[2])))
+
+    for idx, region in enumerate(tree_regions):
+        tree_num = idx + 1
+        x, y, bw, bh = region['bbox']
+        cx, cy = region['centroid']
+        color = colors[idx] if idx < len(colors) else (0, 255, 0)
+
+        # Draw bbox
+        cv2.rectangle(annotated, (x, y), (x + bw, y + bh), color, 2)
+
+        # Draw number tag
+        label = str(tree_num)
+        
+        # Add disease info if available
+        disease = region.get('disease')
+        if disease:
+            conf = region.get('confidence', 0)
+            label += f" | {disease} ({conf:.0%})"
+            # Color code based on health
+            if disease.lower() in ['healthy', 'healthy_leaves']:
+                 color = (0, 200, 0) # Green
+            else:
+                 color = (0, 0, 255) # Red for disease
+
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.6
+        thickness = 2
+        
+        (tw, th), _ = cv2.getTextSize(label, font, font_scale, thickness)
+        
+        # Background box for text
+        cv2.rectangle(annotated, (x, y - th - 10), (x + tw + 10, y), color, -1)
+        cv2.putText(annotated, label, (x + 5, y - 5), font, font_scale, (255, 255, 255), thickness)
+
+        tree_data.append({
+            'id': f'Tree_{tree_num}',
+            'number': tree_num,
+            'bbox': [x, y, x + bw, y + bh],
+            'centroid': [cx, cy],
+            'disease': disease,
+            'confidence': region.get('confidence')
+        })
+
+    return annotated, tree_data
 
 
 # ===========================================================================
