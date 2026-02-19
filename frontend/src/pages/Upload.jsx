@@ -494,16 +494,15 @@ const Upload = () => {
               </div>
             </div>
 
-            {/* Drag & Drop */}
             <label htmlFor="file-upload" className={`flex flex-col items-center justify-center p-10 rounded-xl border-2 border-dashed transition duration-300 cursor-pointer
             ${isDragActive ? "border-emerald-600 bg-emerald-50" : "border-gray-300 bg-gray-100 hover:bg-gray-200"}`}
               onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} onDragOver={handleDragOver} onDrop={handleDrop}>
               <UploadIcon className="h-10 w-10 text-emerald-500 mb-3" />
               <p className="text-gray-800 mb-2 font-medium">Drop images here</p>
               <p className="text-gray-500 text-sm mb-4">or click to browse your computer</p>
-              <input type="file" id="file-upload" multiple onChange={handleFileSelect} accept="image/jpeg,image/png,image/tiff,video/mp4,video/avi,video/quicktime,video/x-msvideo" className="hidden" />
-              {selectedFiles.length > 0 && <p className="mt-3 text-gray-800 font-medium">{selectedFiles.length} file(s) selected</p>}
-              <p className="mt-4 text-gray-500 text-xs">Supported formats: JPG, PNG, TIFF, MP4, AVI, MOV (max 50MB per file)</p>
+              <input type="file" id="file-upload" multiple onChange={handleFileSelect} accept="image/jpeg,image/png,image/tiff,image/webp,image/jpg" className="hidden" />
+              {selectedFiles.length > 0 && <p className="mt-3 text-gray-800 font-medium">{selectedFiles.length} image(s) selected</p>}
+              <p className="mt-4 text-gray-500 text-xs">Supported formats: JPG, PNG, TIFF, WEBP (max 50MB per file)</p>
             </label>
 
             {/* Notes */}
