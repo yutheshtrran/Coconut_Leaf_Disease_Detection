@@ -383,7 +383,7 @@ def process_drone_video():
         disease_counts = result.get("disease_counts", {})
 
         # ── Encode images as base64 ───────────────────────────────
-        import base64
+        import base64, re
 
         def _img_to_b64(img_arr):
             ok, buf = cv2.imencode(".jpg", img_arr, [cv2.IMWRITE_JPEG_QUALITY, 85])
@@ -393,6 +393,21 @@ def process_drone_video():
 
         annotated_b64  = _img_to_b64(annotated)
         panorama_b64   = _img_to_b64(panorama)
+
+        # ── Enrich tree_data with disease info from disease_info.json ─
+        def _to_snake(name):
+            return re.sub(r'[\s\-]+', '_', (name or '').strip()).lower()
+
+        for tree in tree_data:
+            dis = tree.get("disease") or ""
+            dis_info = (
+                DISEASE_INFO.get(dis)
+                or DISEASE_INFO.get(_to_snake(dis))
+                or {}
+            )
+            tree["description"] = dis_info.get("description", "")
+            tree["impact"]      = dis_info.get("impact", "")
+            tree["remedy"]      = dis_info.get("remedy", "No specific remedy available.")
 
         # ── Health score ──────────────────────────────────────────
         healthy = disease_counts.get("Healthy_Leaves", 0) + disease_counts.get("healthy_leaves", 0)
