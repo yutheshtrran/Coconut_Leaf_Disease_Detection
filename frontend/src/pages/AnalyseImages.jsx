@@ -165,7 +165,7 @@ const AnalyseImages = () => {
                                 <ImageIcon size={48} className="mx-auto text-gray-400 dark:text-gray-500" />
                                 <div>
                                     <p className="text-gray-700 dark:text-gray-300 font-medium">
-                                        Drag & drop images here
+                                        Drag &amp; drop images here
                                     </p>
                                     <p className="text-sm text-gray-500 dark:text-gray-400">
                                         or click to browse files

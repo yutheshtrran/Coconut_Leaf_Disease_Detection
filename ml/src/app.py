@@ -69,6 +69,9 @@ DISEASE_INFO_PATH = os.path.join(ML_DIR, "logs", "disease_info.json")
 UPLOAD_DIR = os.path.join(ML_DIR, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+VIDEOFRAMES_DIR = os.path.join(ML_DIR, "videoframes")
+os.makedirs(VIDEOFRAMES_DIR, exist_ok=True)
+
 # ------------------------------------------------------------------
 # Load config, class names, and disease info
 # ------------------------------------------------------------------
@@ -275,6 +278,144 @@ def process_drone_images():
     except Exception as e:
         traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
+# ------------------------------------------------------------------
+# Drone Video Processing API
+# ------------------------------------------------------------------
+@app.route("/process-drone-video", methods=["POST"])
+def process_drone_video():
+    """
+    Upload a drone video → extract frames → stitch panorama → number trees.
+
+    Frame extraction:
+      - Every FRAME_STEP-th frame is saved (default 30, i.e. ~1/sec at 30 fps)
+      - Maximum MAX_FRAMES frames are kept to avoid excessive processing time
+
+    Saved frames are kept in ml/videoframes/<session_id>/ after the request.
+    The uploaded video file is deleted once frames are extracted.
+    """
+    FRAME_STEP = 30   # save every Nth frame
+    MAX_FRAMES = 50   # hard cap
+
+    try:
+        if "file" not in request.files:
+            return jsonify({"error": "No video uploaded"}), 400
+        file = request.files["file"]
+        if file.filename == "":
+            return jsonify({"error": "Empty filename"}), 400
+
+        session_id = str(uuid.uuid4())
+
+        # Save the video temporarily
+        video_path = os.path.join(UPLOAD_DIR, f"{session_id}_{file.filename}")
+        file.save(video_path)
+
+        # Create per-session frame directory
+        frame_dir = os.path.join(VIDEOFRAMES_DIR, session_id)
+        os.makedirs(frame_dir, exist_ok=True)
+
+        # ── Frame extraction ──────────────────────────────────────
+        frame_paths = []
+        try:
+            cap = cv2.VideoCapture(video_path)
+            if not cap.isOpened():
+                return jsonify({"error": "Could not open video file"}), 400
+
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            fps = cap.get(cv2.CAP_PROP_FPS) or 30
+            print(f"[INFO] Video: {total_frames} frames @ {fps:.1f} fps")
+
+            frame_idx = 0
+            saved_count = 0
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                if frame_idx % FRAME_STEP == 0:
+                    frame_filename = os.path.join(frame_dir, f"frame_{saved_count:04d}.jpg")
+                    cv2.imwrite(frame_filename, frame)
+                    frame_paths.append(frame_filename)
+                    saved_count += 1
+                    if saved_count >= MAX_FRAMES:
+                        break
+                frame_idx += 1
+            cap.release()
+        finally:
+            # Remove the raw video once frames are extracted
+            if os.path.exists(video_path):
+                os.remove(video_path)
+
+        if not frame_paths:
+            return jsonify({"error": "No frames could be extracted from the video"}), 400
+
+        print(f"[INFO] Extracted {len(frame_paths)} frames → {frame_dir}")
+
+        # ── Panorama + tree detection ─────────────────────────────
+        try:
+            from segmentation_enhanced import process_panoramic_images
+
+            # Classification model (optional — may be None if not loaded)
+            clf_model = CLASSIFICATION_MODEL
+            try:
+                from inference import device as inf_device, _base_transform as inf_transform, class_names as inf_class_names
+                clf_transform = inf_transform
+                clf_class_names = inf_class_names
+                clf_device = inf_device
+            except Exception:
+                clf_transform = clf_class_names = clf_device = None
+
+            result = process_panoramic_images(
+                image_paths=frame_paths,
+                output_dir=None,
+                classification_model=clf_model,
+                transform=clf_transform,
+                class_names=clf_class_names,
+                device=clf_device,
+                verbose=True,
+            )
+        except Exception as seg_err:
+            traceback.print_exc()
+            return jsonify({"success": False, "error": f"Segmentation failed: {seg_err}"}), 500
+
+        panorama   = result["panorama"]
+        annotated  = result["annotated"]
+        tree_data  = result["tree_data"]
+        num_trees  = result["num_trees"]
+        disease_counts = result.get("disease_counts", {})
+
+        # ── Encode images as base64 ───────────────────────────────
+        import base64
+
+        def _img_to_b64(img_arr):
+            ok, buf = cv2.imencode(".jpg", img_arr, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            if not ok:
+                return ""
+            return base64.b64encode(buf.tobytes()).decode("utf-8")
+
+        annotated_b64  = _img_to_b64(annotated)
+        panorama_b64   = _img_to_b64(panorama)
+
+        # ── Health score ──────────────────────────────────────────
+        healthy = disease_counts.get("Healthy_Leaves", 0) + disease_counts.get("healthy_leaves", 0)
+        health_score = (healthy / num_trees * 100) if num_trees > 0 else 0
+
+        return jsonify({
+            "success": True,
+            "session_id": session_id,
+            "frames_extracted": len(frame_paths),
+            "frame_dir": frame_dir,
+            "num_trees": num_trees,
+            "annotated_image": f"data:image/jpeg;base64,{annotated_b64}",
+            "panorama_image":  f"data:image/jpeg;base64,{panorama_b64}",
+            "tree_data": tree_data,
+            "disease_counts": disease_counts,
+            "farm_health_score": round(health_score, 1),
+        })
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @app.route("/report/view/<report_id>")
 def view_report(report_id):
     try:
