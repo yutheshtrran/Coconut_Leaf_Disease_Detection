@@ -527,59 +527,43 @@ def annotate_trees_enhanced(
     tree_regions: List[Dict]
 ) -> Tuple[np.ndarray, List[Dict]]:
     """
-    Annotate with tree numbers + disease labels if available.
+    Annotate with tree numbers only — red circles, no disease labels.
     """
     annotated = image.copy()
     tree_data = []
 
-    # Colors: Generate golden-angle colors
-    np.random.seed(42)
-    colors = []
-    for i in range(len(tree_regions)):
-        hue = int((i * 137.508) % 180)
-        c_hsv = np.array([[[hue, 220, 220]]], dtype=np.uint8)
-        c_bgr = cv2.cvtColor(c_hsv, cv2.COLOR_HSV2BGR)[0][0]
-        colors.append((int(c_bgr[0]), int(c_bgr[1]), int(c_bgr[2])))
+    RED = (0, 0, 255)  # BGR red
+    WHITE = (255, 255, 255)
+    font = cv2.FONT_HERSHEY_SIMPLEX
 
     for idx, region in enumerate(tree_regions):
         tree_num = idx + 1
         x, y, bw, bh = region['bbox']
         cx, cy = region['centroid']
-        color = colors[idx] if idx < len(colors) else (0, 255, 0)
 
-        # Draw bbox
-        cv2.rectangle(annotated, (x, y), (x + bw, y + bh), color, 2)
-
-        # Draw number tag
         label = str(tree_num)
-        
-        # Add disease info if available
-        disease = region.get('disease')
-        if disease:
-            conf = region.get('confidence', 0)
-            label += f" | {disease} ({conf:.0%})"
-            # Color code based on health
-            if disease.lower() in ['healthy', 'healthy_leaves']:
-                 color = (0, 200, 0) # Green
-            else:
-                 color = (0, 0, 255) # Red for disease
-
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        font_scale = 0.6
+        font_scale = 0.55
         thickness = 2
-        
         (tw, th), _ = cv2.getTextSize(label, font, font_scale, thickness)
-        
-        # Background box for text
-        cv2.rectangle(annotated, (x, y - th - 10), (x + tw + 10, y), color, -1)
-        cv2.putText(annotated, label, (x + 5, y - 5), font, font_scale, (255, 255, 255), thickness)
+
+        # Circle radius — big enough to contain the number
+        radius = max(14, tw // 2 + 10, th // 2 + 10)
+
+        # Draw filled red circle with white border
+        cv2.circle(annotated, (cx, cy), radius, RED, -1)
+        cv2.circle(annotated, (cx, cy), radius, WHITE, 2)
+
+        # Centre the number text inside the circle
+        tx = cx - tw // 2
+        ty = cy + th // 2
+        cv2.putText(annotated, label, (tx, ty), font, font_scale, WHITE, thickness, cv2.LINE_AA)
 
         tree_data.append({
             'id': f'Tree_{tree_num}',
             'number': tree_num,
             'bbox': [x, y, x + bw, y + bh],
             'centroid': [cx, cy],
-            'disease': disease,
+            'disease': region.get('disease'),
             'confidence': region.get('confidence')
         })
 
@@ -750,28 +734,35 @@ class EnhancedTreeSegmenter:
     def label_trees_on_frame(self, frame: np.ndarray, tree_regions: List[Dict],
                               include_metrics: bool = True):
         """
-        Draw numbered labels + disease status on the frame.
+        Draw numbered red circles only — no disease labels, no metrics text.
         Returns (annotated_frame, disease_counts).
         """
-        annotated_frame, _ = annotate_trees(frame, tree_regions,
-                                             draw_mask=True, draw_bbox=True, draw_number=True)
+        RED = (0, 0, 255)
+        WHITE = (255, 255, 255)
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        annotated_frame = frame.copy()
         disease_counts = {}
 
         for idx, region in enumerate(tree_regions):
+            tree_num = idx + 1
+            cx, cy = region['centroid']
+
             disease, confidence = self.classify_tree_health(frame, region)
             disease_counts[disease] = disease_counts.get(disease, 0) + 1
+            region['disease'] = disease
+            region['confidence'] = confidence
 
-            x, y, bw, bh = region['bbox']
-            health_text = (f"Healthy ({confidence*100:.0f}%)"
-                           if disease.lower() == 'healthy'
-                           else f"{disease} ({confidence*100:.0f}%)")
-            cv2.putText(annotated_frame, health_text, (x, y + bh + 14),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.38, (255, 255, 255), 1)
+            label = str(tree_num)
+            font_scale = 0.55
+            thickness = 2
+            (tw, th), _ = cv2.getTextSize(label, font, font_scale, thickness)
+            radius = max(14, tw // 2 + 10, th // 2 + 10)
 
-            if include_metrics:
-                metrics_text = f"A:{region['area']:.0f} S:{region['solidity']:.2f}"
-                cv2.putText(annotated_frame, metrics_text, (x, y + bh + 26),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.32, (200, 200, 200), 1)
+            cv2.circle(annotated_frame, (cx, cy), radius, RED, -1)
+            cv2.circle(annotated_frame, (cx, cy), radius, WHITE, 2)
+            cv2.putText(annotated_frame, label,
+                        (cx - tw // 2, cy + th // 2),
+                        font, font_scale, WHITE, thickness, cv2.LINE_AA)
 
         return annotated_frame, disease_counts
 
