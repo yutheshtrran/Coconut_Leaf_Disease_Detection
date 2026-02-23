@@ -49,6 +49,7 @@ ml/experiments/
 ml/runs/
 ml/checkpoints/
 ml/logs/
+ml/videoframes/
 
 # ==============================
 # CACHE FILES
