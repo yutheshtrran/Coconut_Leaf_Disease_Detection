@@ -13,6 +13,9 @@ import traceback
 import argparse
 import uuid
 import time
+import shutil
+import base64
+import re
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import cv2
@@ -191,6 +194,39 @@ def analyze_video():
 # ------------------------------------------------------------------
 # Drone Image Processing API
 # ------------------------------------------------------------------
+# ------------------------------------------------------------------
+# Helper: encode a cv2 image (numpy array) to base64 JPEG string
+# ------------------------------------------------------------------
+def _img_to_b64(img_arr, quality=85):
+    """Encode a BGR numpy image to a base64 JPEG data-URI string."""
+    ok, buf = cv2.imencode(".jpg", img_arr, [cv2.IMWRITE_JPEG_QUALITY, quality])
+    if not ok:
+        return ""
+    return "data:image/jpeg;base64," + base64.b64encode(buf.tobytes()).decode("utf-8")
+
+def _to_snake(name):
+    """Convert a disease name to snake_case for lookup."""
+    return re.sub(r'[\s\-]+', '_', (name or '').strip()).lower()
+
+def _enrich_tree_data(tree_data):
+    """Add description / impact / remedy from DISEASE_INFO to each tree dict."""
+    for tree in tree_data:
+        dis = tree.get("disease") or ""
+        dis_info = (
+            DISEASE_INFO.get(dis)
+            or DISEASE_INFO.get(_to_snake(dis))
+            or {}
+        )
+        tree["description"] = dis_info.get("description", "")
+        tree["impact"]      = dis_info.get("impact", "")
+        tree["remedy"]      = dis_info.get("remedy", "No specific remedy available.")
+
+def _calc_health_score(disease_counts, num_trees):
+    """Calculate farm health score (0-100) from disease counts."""
+    healthy = disease_counts.get("Healthy_Leaves", 0) + disease_counts.get("healthy_leaves", 0)
+    return round((healthy / num_trees * 100) if num_trees > 0 else 0, 1)
+
+
 @app.route("/process-drone-images", methods=["POST"])
 def process_drone_images():
     try:
@@ -214,61 +250,49 @@ def process_drone_images():
             return jsonify({"error": "No valid images uploaded"}), 400
 
         try:
-            # Use the enhanced pipeline: stitch + watershed segmentation + numbered annotation + disease classification
             from segmentation_enhanced import process_panoramic_images
-            
-            # Import necessary components for classification
             from inference import device, _base_transform as transform, class_names
 
+            t0 = time.time()
             result = process_panoramic_images(
                 image_paths=image_paths,
-                output_dir=None,  # Don't save to disk; we return base64
+                output_dir=None,
                 classification_model=CLASSIFICATION_MODEL,
                 transform=transform,
                 class_names=class_names,
                 device=device,
                 verbose=True
             )
+            elapsed = time.time() - t0
+            print(f"[PERF] process_panoramic_images took {elapsed:.2f}s")
 
-            panorama = result['panorama']
-            annotated = result['annotated']
-            tree_data = result['tree_data']
+            panorama      = result['panorama']
+            annotated     = result['annotated']
+            tree_data     = result['tree_data']
             disease_counts = result.get('disease_counts', {})
+            num_trees     = result['num_trees']
 
-            # Save panorama for reference
-            panorama_path = os.path.join(UPLOAD_DIR, f"panorama_{uuid.uuid4()}.jpg")
-            cv2.imwrite(panorama_path, panorama)
+            # Enrich tree data with disease info
+            _enrich_tree_data(tree_data)
 
-            # Save annotated image
-            annotated_path = os.path.join(UPLOAD_DIR, f"annotated_{uuid.uuid4()}.jpg")
-            cv2.imwrite(annotated_path, annotated)
+            # In-memory base64 encoding — no temp file writes
+            annotated_b64 = _img_to_b64(annotated)
+            panorama_b64  = _img_to_b64(panorama)
 
-            # Convert annotated image to base64 for frontend
-            import base64
-            with open(annotated_path, "rb") as img_file:
-                annotated_b64 = base64.b64encode(img_file.read()).decode('utf-8')
-            
-            # Calculate simple farm health score (0-100)
-            total_trees = result['num_trees']
-            healthy_trees = disease_counts.get('Healthy_Leaves', 0) + disease_counts.get('healthy_leaves', 0)
-            health_score = (healthy_trees / total_trees * 100) if total_trees > 0 else 0
-
-            # Build response
-            response_data = {
+            return jsonify({
                 "success": True,
-                "panorama_path": panorama_path,
-                "annotated_image": f"data:image/jpeg;base64,{annotated_b64}",
+                "annotated_image": annotated_b64,
+                "panorama_image":  panorama_b64,
                 "tree_data": tree_data,
-                "num_trees": result['num_trees'],
-                "farm_health_score": round(health_score, 1),
+                "num_trees": num_trees,
+                "farm_health_score": _calc_health_score(disease_counts, num_trees),
                 "disease_counts": disease_counts,
+                "processing_time_s": round(elapsed, 2),
                 "segmentation_stats": {
-                    "total_trees_segmented": result['num_trees'],
+                    "total_trees_segmented": num_trees,
                     "vegetation_coverage_px": int(np.sum(result['vegetation_mask'] > 0)),
                 }
-            }
-
-            return jsonify(response_data)
+            })
 
         finally:
             for path in image_paths:
@@ -284,85 +308,102 @@ def process_drone_images():
 @app.route("/process-drone-video", methods=["POST"])
 def process_drone_video():
     """
-    Upload a drone video → extract frames → stitch panorama → number trees.
+    Upload a drone video → extract frames → stitch panorama → segment trees → classify.
 
-    Frame extraction:
-      - Every FRAME_STEP-th frame is saved (default 30, i.e. ~1/sec at 30 fps)
-      - Maximum MAX_FRAMES frames are kept to avoid excessive processing time
+    Optimisations:
+      1. Seek-based frame extraction (skip decoding unwanted frames)
+      2. Frames downscaled to FRAME_MAX_DIM during extraction → smaller disk + memory
+      3. process_panoramic_images() handles further downscale for segmentation
+      4. Batched GPU classification inside process_panoramic_images()
+      5. Full cleanup of video + frame dir in finally block
 
-    Saved frames are kept in ml/videoframes/<session_id>/ after the request.
-    The uploaded video file is deleted once frames are extracted.
+    Returns JSON with annotated_image, panorama_image, tree_data,
+    disease_counts, farm_health_score — same shape as /process-drone-images.
     """
-    FRAME_STEP = 30   # save every Nth frame
-    MAX_FRAMES = 50   # hard cap
+    FRAME_STEP    = 30    # save every Nth frame (≈1 fps at 30fps video)
+    MAX_FRAMES    = 40    # hard cap on extracted frames
+    FRAME_MAX_DIM = 1500  # downscale each frame so longest edge ≤ this
+
+    session_id = str(uuid.uuid4())
+    video_path = None
+    frame_dir  = os.path.join(VIDEOFRAMES_DIR, session_id)
 
     try:
+        # ── Validate upload ───────────────────────────────────────
         if "file" not in request.files:
             return jsonify({"error": "No video uploaded"}), 400
         file = request.files["file"]
         if file.filename == "":
             return jsonify({"error": "Empty filename"}), 400
 
-        session_id = str(uuid.uuid4())
-
-        # Save the video temporarily
+        # ── Save video temporarily ────────────────────────────────
         video_path = os.path.join(UPLOAD_DIR, f"{session_id}_{file.filename}")
         file.save(video_path)
-
-        # Create per-session frame directory
-        frame_dir = os.path.join(VIDEOFRAMES_DIR, session_id)
         os.makedirs(frame_dir, exist_ok=True)
 
-        # ── Frame extraction ──────────────────────────────────────
+        # ── Seek-based frame extraction + downscale ───────────────
+        t0 = time.time()
         frame_paths = []
-        try:
-            cap = cv2.VideoCapture(video_path)
-            if not cap.isOpened():
-                return jsonify({"error": "Could not open video file"}), 400
 
-            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            fps = cap.get(cv2.CAP_PROP_FPS) or 30
-            print(f"[INFO] Video: {total_frames} frames @ {fps:.1f} fps")
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            return jsonify({"error": "Could not open video file"}), 400
 
-            frame_idx = 0
-            saved_count = 0
-            while True:
-                ret, frame = cap.read()
-                if not ret:
-                    break
-                if frame_idx % FRAME_STEP == 0:
-                    frame_filename = os.path.join(frame_dir, f"frame_{saved_count:04d}.jpg")
-                    cv2.imwrite(frame_filename, frame)
-                    frame_paths.append(frame_filename)
-                    saved_count += 1
-                    if saved_count >= MAX_FRAMES:
-                        break
-                frame_idx += 1
-            cap.release()
-        finally:
-            # Remove the raw video once frames are extracted
-            if os.path.exists(video_path):
-                os.remove(video_path)
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        fps = cap.get(cv2.CAP_PROP_FPS) or 30
+        print(f"[INFO] Video: {total_frames} frames @ {fps:.1f} fps")
+
+        # Compute target frame indices upfront, then seek directly
+        target_indices = list(range(0, total_frames, FRAME_STEP))[:MAX_FRAMES]
+
+        for saved_idx, frame_idx in enumerate(target_indices):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+            ret, frame = cap.read()
+            if not ret:
+                continue
+
+            # Downscale frame if too large (saves memory + speeds stitching)
+            fh, fw = frame.shape[:2]
+            longest = max(fh, fw)
+            if longest > FRAME_MAX_DIM:
+                s = FRAME_MAX_DIM / longest
+                frame = cv2.resize(frame,
+                                   (int(fw * s), int(fh * s)),
+                                   interpolation=cv2.INTER_AREA)
+
+            frame_filename = os.path.join(frame_dir, f"frame_{saved_idx:04d}.jpg")
+            cv2.imwrite(frame_filename, frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
+            frame_paths.append(frame_filename)
+
+        cap.release()
+        t_extract = time.time() - t0
+        print(f"[PERF] Frame extraction: {len(frame_paths)} frames "
+              f"(downscaled to ≤{FRAME_MAX_DIM}px) in {t_extract:.2f}s")
+
+        # Delete the raw video immediately to free disk space
+        if video_path and os.path.exists(video_path):
+            os.remove(video_path)
+            video_path = None  # prevent double-delete in finally
 
         if not frame_paths:
             return jsonify({"error": "No frames could be extracted from the video"}), 400
 
-        print(f"[INFO] Extracted {len(frame_paths)} frames → {frame_dir}")
-
-        # ── Panorama + tree detection ─────────────────────────────
+        # ── Panorama + segmentation + classification ──────────────
         try:
             from segmentation_enhanced import process_panoramic_images
 
-            # Classification model (optional — may be None if not loaded)
             clf_model = CLASSIFICATION_MODEL
             try:
-                from inference import device as inf_device, _base_transform as inf_transform, class_names as inf_class_names
-                clf_transform = inf_transform
+                from inference import (device as inf_device,
+                                       _base_transform as inf_transform,
+                                       class_names as inf_class_names)
+                clf_transform   = inf_transform
                 clf_class_names = inf_class_names
-                clf_device = inf_device
+                clf_device      = inf_device
             except Exception:
                 clf_transform = clf_class_names = clf_device = None
 
+            t1 = time.time()
             result = process_panoramic_images(
                 image_paths=frame_paths,
                 output_dir=None,
@@ -372,63 +413,64 @@ def process_drone_video():
                 device=clf_device,
                 verbose=True,
             )
+            t_pipeline = time.time() - t1
+            print(f"[PERF] Panoramic pipeline: {t_pipeline:.2f}s")
+
         except Exception as seg_err:
             traceback.print_exc()
-            return jsonify({"success": False, "error": f"Segmentation failed: {seg_err}"}), 500
+            return jsonify({"success": False,
+                            "error": f"Segmentation failed: {seg_err}"}), 500
 
-        panorama   = result["panorama"]
-        annotated  = result["annotated"]
-        tree_data  = result["tree_data"]
-        num_trees  = result["num_trees"]
+        panorama       = result["panorama"]
+        annotated      = result["annotated"]
+        tree_data      = result["tree_data"]
+        num_trees      = result["num_trees"]
         disease_counts = result.get("disease_counts", {})
 
-        # ── Encode images as base64 ───────────────────────────────
-        import base64, re
+        # ── Encode images as base64 (in-memory) ───────────────────
+        annotated_b64 = _img_to_b64(annotated)
+        panorama_b64  = _img_to_b64(panorama)
 
-        def _img_to_b64(img_arr):
-            ok, buf = cv2.imencode(".jpg", img_arr, [cv2.IMWRITE_JPEG_QUALITY, 85])
-            if not ok:
-                return ""
-            return base64.b64encode(buf.tobytes()).decode("utf-8")
+        # ── Enrich tree_data with disease info ────────────────────
+        _enrich_tree_data(tree_data)
 
-        annotated_b64  = _img_to_b64(annotated)
-        panorama_b64   = _img_to_b64(panorama)
-
-        # ── Enrich tree_data with disease info from disease_info.json ─
-        def _to_snake(name):
-            return re.sub(r'[\s\-]+', '_', (name or '').strip()).lower()
-
-        for tree in tree_data:
-            dis = tree.get("disease") or ""
-            dis_info = (
-                DISEASE_INFO.get(dis)
-                or DISEASE_INFO.get(_to_snake(dis))
-                or {}
-            )
-            tree["description"] = dis_info.get("description", "")
-            tree["impact"]      = dis_info.get("impact", "")
-            tree["remedy"]      = dis_info.get("remedy", "No specific remedy available.")
-
-        # ── Health score ──────────────────────────────────────────
-        healthy = disease_counts.get("Healthy_Leaves", 0) + disease_counts.get("healthy_leaves", 0)
-        health_score = (healthy / num_trees * 100) if num_trees > 0 else 0
+        # ── Build response ────────────────────────────────────────
+        total_elapsed = time.time() - t0
+        print(f"[PERF] Total drone-video pipeline: {total_elapsed:.2f}s")
 
         return jsonify({
             "success": True,
             "session_id": session_id,
             "frames_extracted": len(frame_paths),
-            "frame_dir": frame_dir,
             "num_trees": num_trees,
-            "annotated_image": f"data:image/jpeg;base64,{annotated_b64}",
-            "panorama_image":  f"data:image/jpeg;base64,{panorama_b64}",
+            "annotated_image": annotated_b64,
+            "panorama_image":  panorama_b64,
             "tree_data": tree_data,
             "disease_counts": disease_counts,
-            "farm_health_score": round(health_score, 1),
+            "farm_health_score": _calc_health_score(disease_counts, num_trees),
+            "processing_time_s": round(total_elapsed, 2),
+            "segmentation_stats": {
+                "total_trees_segmented": num_trees,
+                "vegetation_coverage_px": int(np.sum(result['vegetation_mask'] > 0)),
+            }
         })
 
     except Exception as e:
         traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
+
+    finally:
+        # ── Cleanup all temporary files ───────────────────────────
+        if video_path and os.path.exists(video_path):
+            try:
+                os.remove(video_path)
+            except OSError:
+                pass
+        if os.path.isdir(frame_dir):
+            try:
+                shutil.rmtree(frame_dir, ignore_errors=True)
+            except OSError:
+                pass
 
 
 @app.route("/report/view/<report_id>")
