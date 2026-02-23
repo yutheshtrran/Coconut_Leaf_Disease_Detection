@@ -14,6 +14,7 @@ Key improvements over base segmentation.py:
 """
 
 import cv2
+cv2.ocl.setUseOpenCL(False)   # Disable OpenCL — prevents CL_OUT_OF_RESOURCES crashes in stitcher
 import numpy as np
 import torch
 from torchvision import transforms
@@ -62,26 +63,31 @@ def detect_vegetation_mask(image: np.ndarray) -> np.ndarray:
         1. HSV green range
         2. Excess Green Index (ExG = 2G - R - B)
         3. NDVI approximation from RGB channels
+
+    Optimized: uses uint8 bitwise counting instead of int32 upcasting.
     """
     # 1. HSV
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     hsv_mask = cv2.inRange(hsv, np.array([20, 30, 30]), np.array([100, 255, 255]))
 
-    # 2. ExG
-    b_ch, g_ch, r_ch = cv2.split(image.astype(np.float32))
-    exg = np.clip(2.0 * g_ch - r_ch - b_ch, 0, None)
+    # 2. ExG  — vectorized, avoids full float32 split
+    img_f = image.astype(np.float32)
+    exg = np.clip(2.0 * img_f[:, :, 1] - img_f[:, :, 2] - img_f[:, :, 0], 0, None)
     exg_max = exg.max()
-    exg_u8 = (exg / exg_max * 255).astype(np.uint8) if exg_max > 0 else exg.astype(np.uint8)
-    _, exg_mask = cv2.threshold(exg_u8, 60, 255, cv2.THRESH_BINARY)
+    if exg_max > 0:
+        exg *= (255.0 / exg_max)
+    exg_mask = (exg > 60).astype(np.uint8) * 255
 
-    # 3. NDVI approx
+    # 3. NDVI approx  — reuse channels from img_f
+    g_ch = img_f[:, :, 1]
+    r_ch = img_f[:, :, 2]
     ndvi = (g_ch - r_ch) / (g_ch + r_ch + 1e-5)
-    ndvi_u8 = ((ndvi + 1) / 2 * 255).astype(np.uint8)
-    _, ndvi_mask = cv2.threshold(ndvi_u8, 140, 255, cv2.THRESH_BINARY)
+    ndvi_mask = (ndvi > 0.098).astype(np.uint8) * 255  # (0.098 ≈ (140/255)*2 - 1)
 
-    # Majority vote (≥2 of 3)
-    combined = hsv_mask.astype(np.int32) + exg_mask.astype(np.int32) + ndvi_mask.astype(np.int32)
-    veg_mask = (combined >= 2 * 255).astype(np.uint8) * 255
+    # Majority vote (≥2 of 3) — bitwise approach avoids int32 arrays
+    # For each pixel: count how many masks are 255; keep if ≥2
+    vote = (hsv_mask > 0).astype(np.uint8) + (exg_mask > 0).astype(np.uint8) + (ndvi_mask > 0).astype(np.uint8)
+    veg_mask = (vote >= 2).astype(np.uint8) * 255
 
     # Morphological cleanup
     k3 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
@@ -358,12 +364,31 @@ def stitch_panorama(image_paths: List[str], max_width: int = 4000) -> Optional[n
     """
     Stitch multiple images into a high-resolution panorama.
     Tries PANORAMA then SCANS mode with automatic fallback.
+
+    For robustness with many frames:
+      - Limits input to MAX_STITCH_IMAGES (stitchers struggle with >25 images)
+      - Auto-reduces max_width when many images are provided
+      - Catches OpenCV internal errors gracefully
     """
+    MAX_STITCH_IMAGES = 25  # OpenCV stitcher is unreliable with too many images
+
     if len(image_paths) < 2:
         return None
 
+    # If too many images, sample evenly across the sequence
+    paths_to_use = image_paths
+    if len(image_paths) > MAX_STITCH_IMAGES:
+        step = len(image_paths) / MAX_STITCH_IMAGES
+        indices = [int(i * step) for i in range(MAX_STITCH_IMAGES)]
+        paths_to_use = [image_paths[i] for i in indices]
+        print(f"[INFO] Sampled {len(paths_to_use)}/{len(image_paths)} frames for stitching")
+
+    # Auto-reduce max_width for many images to prevent OOM
+    if len(paths_to_use) > 15:
+        max_width = min(max_width, 2000)
+
     images = []
-    for path in image_paths:
+    for path in paths_to_use:
         img = cv2.imread(str(path))
         if img is None:
             print(f"[WARN] Could not read: {path}")
@@ -372,19 +397,25 @@ def stitch_panorama(image_paths: List[str], max_width: int = 4000) -> Optional[n
         if w > max_width:
             scale = max_width / w
             img = cv2.resize(img, (int(w * scale), int(h * scale)),
-                             interpolation=cv2.INTER_LANCZOS4)
+                             interpolation=cv2.INTER_AREA)
         images.append(img)
 
     if len(images) < 2:
         return None
 
     for mode in [cv2.Stitcher_PANORAMA, cv2.Stitcher_SCANS]:
-        stitcher = cv2.Stitcher_create(mode)
-        status, panorama = stitcher.stitch(images)
-        if status == cv2.Stitcher_OK:
-            print(f"[INFO] Stitching succeeded (mode={mode})")
-            return panorama
-        print(f"[WARN] Stitching failed (mode={mode}, status={status})")
+        try:
+            stitcher = cv2.Stitcher_create(mode)
+            status, panorama = stitcher.stitch(images)
+            if status == cv2.Stitcher_OK:
+                print(f"[INFO] Stitching succeeded (mode={mode}, "
+                      f"{len(images)} images → {panorama.shape[1]}×{panorama.shape[0]})")
+                return panorama
+            print(f"[WARN] Stitching failed (mode={mode}, status={status})")
+        except cv2.error as e:
+            print(f"[WARN] OpenCV stitcher error (mode={mode}): {e}")
+        except Exception as e:
+            print(f"[WARN] Unexpected stitcher error (mode={mode}): {e}")
 
     return None
 
@@ -403,13 +434,21 @@ def process_panoramic_images(
     """
     Full pipeline: stitch → preprocess → detect vegetation → segment → classify → annotate.
 
+    Performance optimizations:
+      - Large panoramas are downscaled for segmentation, then bboxes mapped back
+      - Disease classification is batched into a single forward pass
+      - GPU half-precision (AMP) is used when available
+
     Returns:
-        panorama, annotated, tree_data, num_trees, vegetation_mask, tree_regions, farm_stats
+        panorama, annotated, tree_data, num_trees, vegetation_mask, tree_regions, disease_counts
     """
+    import time as _time
+    _t0 = _time.time()
+
     if verbose:
         print(f"[INFO] Processing {len(image_paths)} images...")
 
-    # Stitch
+    # ── Stitch ────────────────────────────────────────────────────
     if len(image_paths) >= 2:
         panorama = stitch_panorama(image_paths)
         if panorama is None:
@@ -422,23 +461,38 @@ def process_panoramic_images(
     if panorama is None:
         raise ValueError("Could not load any images")
 
+    orig_h, orig_w = panorama.shape[:2]
     if verbose:
-        print(f"[INFO] Panorama: {panorama.shape[1]}×{panorama.shape[0]}")
+        print(f"[INFO] Panorama: {orig_w}×{orig_h}")
 
-    preprocessed = preprocess_for_trees(panorama)
+    # ── Downscale for segmentation if large ───────────────────────
+    SEG_MAX_EDGE = 3000  # max longest edge for segmentation ops
+    longest = max(orig_h, orig_w)
+    scale = 1.0
+    if longest > SEG_MAX_EDGE:
+        scale = SEG_MAX_EDGE / longest
+        seg_img = cv2.resize(panorama,
+                             (int(orig_w * scale), int(orig_h * scale)),
+                             interpolation=cv2.INTER_AREA)
+        if verbose:
+            print(f"[PERF] Downscaled {orig_w}×{orig_h} → {seg_img.shape[1]}×{seg_img.shape[0]} (scale={scale:.3f})")
+    else:
+        seg_img = panorama
+
+    preprocessed = preprocess_for_trees(seg_img)
 
     veg_mask = detect_vegetation_mask(preprocessed)
     if verbose:
         veg_pct = (np.sum(veg_mask > 0) / veg_mask.size) * 100
         print(f"[INFO] Vegetation coverage: {veg_pct:.1f}%")
 
-    # Watershed (primary)
+    # ── Watershed (primary) ───────────────────────────────────────
     tree_regions = segment_individual_trees_watershed(
         preprocessed, veg_mask, min_tree_area, max_tree_area)
     if verbose:
         print(f"[INFO] Watershed: {len(tree_regions)} trees")
 
-    # Contour fallback
+    # ── Contour fallback ──────────────────────────────────────────
     if len(tree_regions) < 5:
         contour_regions = segment_individual_trees_contour(
             preprocessed, veg_mask, min_tree_area, max_tree_area)
@@ -450,23 +504,42 @@ def process_panoramic_images(
     if verbose:
         print(f"[INFO] After deduplication: {len(tree_regions)} trees")
 
+    # ── Map bounding boxes back to full resolution ────────────────
+    if scale < 1.0:
+        inv = 1.0 / scale
+        for r in tree_regions:
+            x, y, w, h = r['bbox']
+            r['bbox'] = (int(x * inv), int(y * inv), int(w * inv), int(h * inv))
+            cx, cy = r['centroid']
+            r['centroid'] = (int(cx * inv), int(cy * inv))
+            r['area'] *= (inv * inv)
+        # Upscale vegetation mask for stats
+        veg_mask = cv2.resize(veg_mask, (orig_w, orig_h), interpolation=cv2.INTER_NEAREST)
+
     # Sort left-to-right, top-to-bottom for consistent numbering
     tree_regions = sorted(tree_regions,
                           key=lambda r: (r['centroid'][1] // 100, r['centroid'][0]))
 
-    # Classify Diseases (if model provided)
+    # ── Classify diseases (batched + AMP) ─────────────────────────
     disease_counts = {}
     if classification_model and transform and class_names:
         if verbose:
-            print(f"[INFO] Classifying {len(tree_regions)} trees...")
-        
-        for region in tree_regions:
+            print(f"[INFO] Classifying {len(tree_regions)} trees (batched)...")
+
+        _dev = device or 'cpu'
+        BATCH_SIZE = 64  # max crops per forward pass
+
+        # Prepare all crops + tensors
+        crop_tensors = []
+        crop_indices = []  # indices into tree_regions that have valid crops
+
+        for idx, region in enumerate(tree_regions):
             try:
                 x, y, w, h = region['bbox']
                 pad = int(min(w, h) * 0.1)
                 x1, y1 = max(0, x - pad), max(0, y - pad)
                 x2, y2 = min(panorama.shape[1], x + w + pad), min(panorama.shape[0], y + h + pad)
-                
+
                 tree_crop = panorama[y1:y2, x1:x2]
                 if tree_crop.size == 0:
                     region['disease'] = 'Unknown'
@@ -474,34 +547,56 @@ def process_panoramic_images(
                     continue
 
                 pil_img = Image.fromarray(cv2.cvtColor(tree_crop, cv2.COLOR_BGR2RGB))
-                img_tensor = transform(pil_img).unsqueeze(0).to(device or 'cpu')
-
-                with torch.no_grad():
-                    outputs = classification_model(img_tensor)
-                    probs = torch.softmax(outputs, dim=1)[0]
-                    pred_idx = torch.argmax(probs).item()
-                    confidence = probs[pred_idx].item()
-                    
-                    if pred_idx < len(class_names):
-                        dis = class_names[pred_idx]
-                    else:
-                        dis = 'Unknown'
-
-                    region['disease'] = dis
-                    region['confidence'] = confidence
-                    disease_counts[dis] = disease_counts.get(dis, 0) + 1
+                tensor = transform(pil_img)
+                crop_tensors.append(tensor)
+                crop_indices.append(idx)
             except Exception as e:
-                print(f"[WARN] Classification failed for a tree: {e}")
+                print(f"[WARN] Crop preparation failed for tree {idx}: {e}")
                 region['disease'] = 'Unknown'
                 region['confidence'] = 0.0
+
+        # Batched forward pass
+        if crop_tensors:
+            all_preds = []
+            all_confs = []
+
+            for batch_start in range(0, len(crop_tensors), BATCH_SIZE):
+                batch = torch.stack(crop_tensors[batch_start:batch_start + BATCH_SIZE]).to(_dev)
+
+                with torch.no_grad():
+                    # Use AMP half-precision on CUDA for ~1.5-2× speedup
+                    if str(_dev) != 'cpu' and hasattr(torch.cuda, 'amp'):
+                        with torch.cuda.amp.autocast():
+                            outputs = classification_model(batch)
+                    else:
+                        outputs = classification_model(batch)
+
+                    probs = torch.softmax(outputs, dim=1)
+                    pred_indices = torch.argmax(probs, dim=1)
+                    confidences = probs[torch.arange(probs.size(0)), pred_indices]
+
+                    all_preds.extend(pred_indices.cpu().tolist())
+                    all_confs.extend(confidences.cpu().tolist())
+
+            # Map predictions back to tree_regions
+            for i, region_idx in enumerate(crop_indices):
+                pred_idx = all_preds[i]
+                confidence = all_confs[i]
+                dis = class_names[pred_idx] if pred_idx < len(class_names) else 'Unknown'
+                tree_regions[region_idx]['disease'] = dis
+                tree_regions[region_idx]['confidence'] = confidence
+                disease_counts[dis] = disease_counts.get(dis, 0) + 1
     else:
         if verbose:
             print("[INFO] No classification model provided — skipping disease detection")
 
+    # ── Annotate on full-resolution panorama ───────────────────────
     annotated, tree_data = annotate_trees_enhanced(panorama, tree_regions)
 
     if verbose:
+        elapsed = _time.time() - _t0
         print(f"[INFO] Final tree count: {len(tree_data)}")
+        print(f"[PERF] Total process_panoramic_images: {elapsed:.2f}s")
 
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
