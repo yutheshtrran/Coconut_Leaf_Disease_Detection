@@ -107,17 +107,22 @@ def segment_individual_trees_watershed(
     """
     Primary segmentation: watershed + distance transform.
     Splits touching/overlapping tree crowns into individual instances.
+
+    Tuned for coconut palm drone imagery where crowns are 15-80px diameter.
     """
     h, w = image.shape[:2]
-    img_area = h * w
-    min_tree_area = min_tree_area or max(200, int(img_area * 0.0003))
-    max_tree_area = max_tree_area or int(img_area * 0.08)
+    # Use vegetation pixel count (not full image area) so black borders don't inflate thresholds
+    veg_pixels = int(np.sum(vegetation_mask > 0))
+    effective_area = max(veg_pixels, h * w // 4)  # fallback: at least 25% of image
+    min_tree_area = min_tree_area or max(100, int(effective_area * 0.0002))
+    max_tree_area = max_tree_area or int(effective_area * 0.10)
 
     # Distance transform → local maxima = tree centers
     dist = cv2.distanceTransform(vegetation_mask, cv2.DIST_L2, 5)
     cv2.normalize(dist, dist, 0, 1.0, cv2.NORM_MINMAX)
 
-    _, sure_fg = cv2.threshold(dist, 0.35, 1.0, cv2.THRESH_BINARY)
+    # Lower threshold (0.20) splits adjacent crowns more aggressively
+    _, sure_fg = cv2.threshold(dist, 0.20, 1.0, cv2.THRESH_BINARY)
     sure_fg = np.uint8(sure_fg * 255)
 
     k7 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
@@ -130,6 +135,7 @@ def segment_individual_trees_watershed(
     markers_ws = cv2.watershed(image, markers)
 
     tree_regions = []
+    rejected = {'area': 0, 'aspect': 0, 'solidity': 0}
     for label in np.unique(markers_ws):
         if label <= 1:
             continue
@@ -140,11 +146,13 @@ def segment_individual_trees_watershed(
         contour = max(contours, key=cv2.contourArea)
         area = cv2.contourArea(contour)
         if area < min_tree_area or area > max_tree_area:
+            rejected['area'] += 1
             continue
 
         x, y, bw, bh = cv2.boundingRect(contour)
         ar = float(bw) / (bh + 1e-5)
-        if ar < 0.25 or ar > 4.0:
+        if ar < 0.2 or ar > 5.0:
+            rejected['aspect'] += 1
             continue
 
         M = cv2.moments(contour)
@@ -153,7 +161,8 @@ def segment_individual_trees_watershed(
 
         hull_area = cv2.contourArea(cv2.convexHull(contour))
         solidity = float(area) / (hull_area + 1e-5)
-        if solidity < 0.3:
+        if solidity < 0.25:
+            rejected['solidity'] += 1
             continue
 
         perimeter = cv2.arcLength(contour, True)
@@ -171,6 +180,8 @@ def segment_individual_trees_watershed(
             'mask': tree_mask
         })
 
+    print(f"[DEBUG] Watershed candidates: {len(tree_regions)} kept, "
+          f"rejected — area:{rejected['area']} aspect:{rejected['aspect']} solidity:{rejected['solidity']}")
     return tree_regions
 
 
@@ -181,13 +192,14 @@ def segment_individual_trees_contour(
     max_tree_area: int = None
 ) -> List[Dict]:
     """
-    Fallback segmentation: contour-based with aggressive blob splitting.
-    Supplements watershed when it finds too few trees.
+    Complementary segmentation: contour-based with aggressive blob splitting.
+    Always runs alongside watershed to catch trees that watershed misses.
     """
     h, w = image.shape[:2]
-    img_area = h * w
-    min_tree_area = min_tree_area or max(200, int(img_area * 0.0003))
-    max_tree_area = max_tree_area or int(img_area * 0.08)
+    veg_pixels = int(np.sum(vegetation_mask > 0))
+    effective_area = max(veg_pixels, h * w // 4)
+    min_tree_area = min_tree_area or max(100, int(effective_area * 0.0002))
+    max_tree_area = max_tree_area or int(effective_area * 0.10)
 
     contours, _ = cv2.findContours(vegetation_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     tree_regions = []
@@ -200,26 +212,26 @@ def segment_individual_trees_contour(
         x, y, bw, bh = cv2.boundingRect(contour)
         ar = float(bw) / (bh + 1e-5)
 
-        # Large blob → try to split
-        if area > max_tree_area * 0.5:
+        # Large blob → try to split with lower threshold for more aggressive splitting
+        if area > max_tree_area * 0.3:
             sub_mask = np.zeros((h, w), dtype=np.uint8)
             cv2.drawContours(sub_mask, [contour], -1, 255, -1)
             dist = cv2.distanceTransform(sub_mask, cv2.DIST_L2, 5)
             cv2.normalize(dist, dist, 0, 1.0, cv2.NORM_MINMAX)
-            _, sub_fg = cv2.threshold(dist, 0.4, 1.0, cv2.THRESH_BINARY)
+            _, sub_fg = cv2.threshold(dist, 0.25, 1.0, cv2.THRESH_BINARY)
             sub_fg = np.uint8(sub_fg * 255)
             num_labels, _, stats, centroids = cv2.connectedComponentsWithStats(sub_fg)
 
             if num_labels > 2:
                 for i in range(1, num_labels):
-                    if stats[i, cv2.CC_STAT_AREA] < 50:
+                    if stats[i, cv2.CC_STAT_AREA] < 30:
                         continue
                     scx, scy = int(centroids[i][0]), int(centroids[i][1])
-                    est_r = max(int(np.sqrt(area / num_labels / np.pi)), 20)
+                    est_r = max(int(np.sqrt(area / num_labels / np.pi)), 15)
                     rx1, ry1 = max(0, scx - est_r), max(0, scy - est_r)
                     rx2, ry2 = min(w, scx + est_r), min(h, scy + est_r)
                     rw, rh = rx2 - rx1, ry2 - ry1
-                    if rw < 10 or rh < 10:
+                    if rw < 8 or rh < 8:
                         continue
                     tree_regions.append({
                         'label': len(tree_regions) + 100,
@@ -232,7 +244,7 @@ def segment_individual_trees_contour(
                     })
                 continue
 
-        if area > max_tree_area or ar < 0.25 or ar > 4.0:
+        if area > max_tree_area or ar < 0.2 or ar > 5.0:
             continue
 
         M = cv2.moments(contour)
@@ -241,7 +253,7 @@ def segment_individual_trees_contour(
 
         hull_area = cv2.contourArea(cv2.convexHull(contour))
         solidity = float(area) / (hull_area + 1e-5)
-        if solidity < 0.3:
+        if solidity < 0.25:
             continue
 
         perimeter = cv2.arcLength(contour, True)
@@ -259,13 +271,16 @@ def segment_individual_trees_contour(
             'mask': None
         })
 
+    print(f"[DEBUG] Contour: {len(tree_regions)} candidates")
     return tree_regions
 
 
-def remove_duplicate_trees(tree_regions: List[Dict], overlap_threshold: float = 0.4) -> List[Dict]:
+def remove_duplicate_trees(tree_regions: List[Dict], overlap_threshold: float = 0.50) -> List[Dict]:
     """
     IoU-based duplicate removal. Keeps the highest-quality detection per overlap group.
     Quality = solidity (50%) + circularity (30%) + normalized area (20%).
+
+    overlap_threshold=0.50 — relaxed to avoid dropping closely-spaced coconut palms.
     """
     if not tree_regions:
         return tree_regions
@@ -283,10 +298,12 @@ def remove_duplicate_trees(tree_regions: List[Dict], overlap_threshold: float = 
     def quality(r):
         return r['solidity'] * 0.5 + r['circularity'] * 0.3 + min(r['area'] / 10000, 1.0) * 0.2
 
+    before_count = len(tree_regions)
     unique = []
     for region in sorted(tree_regions, key=quality, reverse=True):
         if not any(iou(region['bbox'], k['bbox']) > overlap_threshold for k in unique):
             unique.append(region)
+    print(f"[DEBUG] Dedup: {before_count} → {len(unique)} (IoU threshold={overlap_threshold})")
     return unique
 
 
@@ -465,6 +482,18 @@ def process_panoramic_images(
     if verbose:
         print(f"[INFO] Panorama: {orig_w}×{orig_h}")
 
+    # ── Mask out black stitching borders ──────────────────────────
+    # Stitched panoramas have large black (0,0,0) regions that inflate
+    # area calculations and pollute vegetation detection.
+    gray_for_mask = cv2.cvtColor(panorama, cv2.COLOR_BGR2GRAY)
+    content_mask = (gray_for_mask > 10).astype(np.uint8) * 255  # non-black pixels
+    # Erode slightly to remove border artifacts
+    k3 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    content_mask = cv2.erode(content_mask, k3, iterations=2)
+    content_pct = np.sum(content_mask > 0) / content_mask.size * 100
+    if verbose:
+        print(f"[INFO] Non-black content area: {content_pct:.1f}%")
+
     # ── Downscale for segmentation if large ───────────────────────
     SEG_MAX_EDGE = 3000  # max longest edge for segmentation ops
     longest = max(orig_h, orig_w)
@@ -474,17 +503,23 @@ def process_panoramic_images(
         seg_img = cv2.resize(panorama,
                              (int(orig_w * scale), int(orig_h * scale)),
                              interpolation=cv2.INTER_AREA)
+        seg_content_mask = cv2.resize(content_mask,
+                                      (int(orig_w * scale), int(orig_h * scale)),
+                                      interpolation=cv2.INTER_NEAREST)
         if verbose:
             print(f"[PERF] Downscaled {orig_w}×{orig_h} → {seg_img.shape[1]}×{seg_img.shape[0]} (scale={scale:.3f})")
     else:
         seg_img = panorama
+        seg_content_mask = content_mask
 
     preprocessed = preprocess_for_trees(seg_img)
 
     veg_mask = detect_vegetation_mask(preprocessed)
+    # Zero out vegetation in black border areas
+    veg_mask = cv2.bitwise_and(veg_mask, seg_content_mask)
     if verbose:
-        veg_pct = (np.sum(veg_mask > 0) / veg_mask.size) * 100
-        print(f"[INFO] Vegetation coverage: {veg_pct:.1f}%")
+        veg_pct = (np.sum(veg_mask > 0) / np.sum(seg_content_mask > 0)) * 100 if np.sum(seg_content_mask > 0) > 0 else 0
+        print(f"[INFO] Vegetation coverage (of content area): {veg_pct:.1f}%")
 
     # ── Watershed (primary) ───────────────────────────────────────
     tree_regions = segment_individual_trees_watershed(
@@ -492,15 +527,14 @@ def process_panoramic_images(
     if verbose:
         print(f"[INFO] Watershed: {len(tree_regions)} trees")
 
-    # ── Contour fallback ──────────────────────────────────────────
-    if len(tree_regions) < 5:
-        contour_regions = segment_individual_trees_contour(
-            preprocessed, veg_mask, min_tree_area, max_tree_area)
-        if verbose:
-            print(f"[INFO] Contour fallback: {len(contour_regions)} trees")
-        tree_regions = tree_regions + contour_regions
+    # ── Contour (always runs as complement, not just fallback) ────
+    contour_regions = segment_individual_trees_contour(
+        preprocessed, veg_mask, min_tree_area, max_tree_area)
+    if verbose:
+        print(f"[INFO] Contour: {len(contour_regions)} trees")
+    tree_regions = tree_regions + contour_regions
 
-    tree_regions = remove_duplicate_trees(tree_regions, overlap_threshold=0.35)
+    tree_regions = remove_duplicate_trees(tree_regions, overlap_threshold=0.50)
     if verbose:
         print(f"[INFO] After deduplication: {len(tree_regions)} trees")
 
