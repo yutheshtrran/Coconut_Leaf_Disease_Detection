@@ -64,6 +64,7 @@ const Reports = () => {
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
   const [previewReportId, setPreviewReportId] = useState(null);
+  const [downloadReportId, setDownloadReportId] = useState(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const canCreate = user && (user.role === 'agronomist' || user.role === 'admin');
@@ -212,12 +213,8 @@ const Reports = () => {
   };
 
   const handleDownload = (reportId) => {
-    const link = document.createElement("a");
-    link.href = `${API.defaults.baseURL}/reports/${reportId}/download`;
-    link.download = `${reportId}.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // Use the same modal renderer + html2pdf flow so download matches preview exactly.
+    setDownloadReportId(reportId);
   };
 
   const handleReportInputChange = (e) => {
@@ -402,7 +399,14 @@ const Reports = () => {
           onClose={() => setPreviewReportId(null)} 
         />
       )}
-
+      {downloadReportId && (
+        <ReportPreviewModal
+          reportId={downloadReportId}
+          autoDownload={true}
+          onClose={() => setDownloadReportId(null)}
+          onDownloadComplete={() => setDownloadReportId(null)}
+        />
+      )}
       <div className="max-w-7xl mx-auto">
 
         {/* Success Message */}
@@ -760,3 +764,4 @@ const Reports = () => {
 };
 
 export default Reports;
+
