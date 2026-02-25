@@ -58,7 +58,7 @@ const Dashboard = () => {
     const [reports, setReports] = useState([]);
     const [reportsLoading, setReportsLoading] = useState(true);
     const [reportsError, setReportsError] = useState(null);
-    
+
     // Stats state
     const [stats, setStats] = useState({
         totalFarms: 0,
@@ -76,22 +76,22 @@ const Dashboard = () => {
         const fetchDashboardData = async () => {
             try {
                 setStatsLoading(true);
-                
+
                 // Fetch all reports
                 const reportsResponse = await API.get('/reports');
                 const allReports = reportsResponse.data.data || [];
 
                 // Calculate stats
                 const totalFarms = new Set(allReports.map(r => r.farm)).size || 0;
-                
-                const criticalAlerts = allReports.filter(r => 
+
+                const criticalAlerts = allReports.filter(r =>
                     r.severity?.label === 'CRITICAL' || r.severity?.label === 'HIGH'
                 ).length;
 
                 // Get reports from this week
                 const today = new Date();
                 const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-                const reportsThisWeek = allReports.filter(r => 
+                const reportsThisWeek = allReports.filter(r =>
                     new Date(r.createdAt) >= weekAgo
                 ).length;
 
@@ -103,7 +103,7 @@ const Dashboard = () => {
 
                 let healthTrend = 'Neutral';
                 let trendDirection = '→';
-                
+
                 if (lowCount + moderateCount > criticalCount + highCount) {
                     healthTrend = 'Improving';
                     trendDirection = '↑';
@@ -138,7 +138,7 @@ const Dashboard = () => {
                 setReportsLoading(true);
                 setReportsError(null);
                 const response = await API.get('/reports');
-                
+
                 // Get the latest 3 reports
                 const latestReports = response.data.data
                     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
@@ -231,11 +231,10 @@ const Dashboard = () => {
                         </p>
                         <div className="flex items-center">
                             <span className="mr-1 text-2xl">{statsLoading ? '...' : stats.trendDirection}</span>
-                            <span className={`text-xl font-semibold ${
-                                stats.healthTrend === 'Improving' ? 'text-green-500' :
-                                stats.healthTrend === 'Declining' ? 'text-red-500' :
-                                'text-yellow-500'
-                            }`}>
+                            <span className={`text-xl font-semibold ${stats.healthTrend === 'Improving' ? 'text-green-500' :
+                                    stats.healthTrend === 'Declining' ? 'text-red-500' :
+                                        'text-yellow-500'
+                                }`}>
                                 {statsLoading ? 'Loading...' : stats.healthTrend}
                             </span>
                         </div>
@@ -252,7 +251,7 @@ const Dashboard = () => {
                         </h2>
 
                         {/* FIXED MAP CONTAINER */}
-                        <div className="relative h-96 w-full overflow-hidden rounded-lg">
+                        <div className="relative h-96 w-full overflow-hidden rounded-lg isolate">
                             <FarmMap />
                         </div>
                     </div>
