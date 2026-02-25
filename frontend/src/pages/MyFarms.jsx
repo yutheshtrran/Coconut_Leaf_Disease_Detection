@@ -44,7 +44,7 @@ const AddFarmForm = ({ onAdd, onCancel, isLoading }) => {
       setError('Farm name and area are required');
       return;
     }
-    
+
     try {
       setError('');
       // prefer the explicit lat/lng if provided
@@ -119,7 +119,7 @@ const AddFarmForm = ({ onAdd, onCancel, isLoading }) => {
     return () => {
       try {
         if (mapInstance && mapInstance.remove) mapInstance.remove();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, [locMode]);
 
@@ -146,9 +146,9 @@ const AddFarmForm = ({ onAdd, onCancel, isLoading }) => {
         <div className="space-y-1">
           <label className="text-xs font-bold text-gray-500 uppercase tracking-tight">Location (Lat/Long)</label>
           <div className="flex gap-2 mb-2">
-            <button type="button" onClick={() => setLocMode('manual')} className={`px-3 py-1 rounded-lg text-sm ${locMode==='manual' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700'}`}>Manual</button>
-            <button type="button" onClick={() => setLocMode('current')} className={`px-3 py-1 rounded-lg text-sm ${locMode==='current' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700'}`}>Use Current</button>
-            <button type="button" onClick={() => setLocMode('map')} className={`px-3 py-1 rounded-lg text-sm ${locMode==='map' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700'}`}>Select on Map</button>
+            <button type="button" onClick={() => setLocMode('manual')} className={`px-3 py-1 rounded-lg text-sm ${locMode === 'manual' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700'}`}>Manual</button>
+            <button type="button" onClick={() => setLocMode('current')} className={`px-3 py-1 rounded-lg text-sm ${locMode === 'current' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700'}`}>Use Current</button>
+            <button type="button" onClick={() => setLocMode('map')} className={`px-3 py-1 rounded-lg text-sm ${locMode === 'map' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700'}`}>Select on Map</button>
           </div>
 
           {locMode === 'manual' && (
@@ -221,7 +221,7 @@ const EditFarmForm = ({ farm, onUpdate, onCancel, isLoading }) => {
       setError('Farm name and area are required');
       return;
     }
-    
+
     try {
       setError('');
       await onUpdate(farm._id, formData);
@@ -450,7 +450,7 @@ const FarmDetailsCard = ({ farm, onEdit }) => {
     return () => {
       try {
         if (mapInstance && mapInstance.remove) mapInstance.remove();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, [farm.location, mapContainerId]);
 
@@ -577,7 +577,7 @@ const MyFarms = () => {
         setError('');
         const response = await farmService.getUserFarms();
         setFarms(response.farms || []);
-        
+
         // Load plots for all farms
         const plotsData = {};
         for (const farm of (response.farms || [])) {
@@ -590,7 +590,7 @@ const MyFarms = () => {
           }
         }
         setPlots(plotsData);
-        
+
         // Auto-select first farm if available
         if (response.farms && response.farms.length > 0) {
           setSelectedFarmId(response.farms[0]._id);
@@ -708,7 +708,7 @@ const MyFarms = () => {
       if (selectedFarmId === farmId) {
         setSelectedFarmId(newFarms.length > 0 ? newFarms[0]._id : null);
       }
-      try { window.dispatchEvent(new CustomEvent('farmsUpdated', { detail: { deleted: farmId } })); } catch (e) {}
+      try { window.dispatchEvent(new CustomEvent('farmsUpdated', { detail: { deleted: farmId } })); } catch (e) { }
     } catch (err) {
       console.error('Error deleting farm:', err);
       setError(err.response?.data?.message || 'Failed to delete farm');
@@ -777,29 +777,29 @@ const MyFarms = () => {
           />
         </div>
         <nav className="space-y-2">
-              {filteredFarms.length > 0 ? (
-                filteredFarms.map(farm => (
-                  <div
-                    key={farm._id}
-                    onClick={() => handleSelectFarm(farm._id)}
-                    className={`p-3 rounded-xl cursor-pointer transition duration-150 ${farm._id === selectedFarmId ? 'bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-400 border-l-4 border-green-500 shadow-inner' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'}`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold">{farm.name}</p>
-                        <p className="text-xs opacity-70">{farm.subtitle || 'No subtitle'}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                                <button onClick={(e) => { e.stopPropagation(); openConfirm({ type: 'farm', farmId: farm._id, name: farm.name }); }} title="Delete farm" className="text-red-600 hover:text-red-900 p-1 rounded">
-                                  <Trash className="w-4 h-4" />
-                                </button>
-                      </div>
-                    </div>
+          {filteredFarms.length > 0 ? (
+            filteredFarms.map(farm => (
+              <div
+                key={farm._id}
+                onClick={() => handleSelectFarm(farm._id)}
+                className={`p-3 rounded-xl cursor-pointer transition duration-150 ${farm._id === selectedFarmId ? 'bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-400 border-l-4 border-green-500 shadow-inner' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'}`}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-semibold">{farm.name}</p>
+                    <p className="text-xs opacity-70">{farm.subtitle || 'No subtitle'}</p>
                   </div>
-                ))
-              ) : (
-                <p className="text-sm text-gray-500 p-3">No farms found</p>
-              )}
+                  <div className="flex items-center gap-2">
+                    <button onClick={(e) => { e.stopPropagation(); openConfirm({ type: 'farm', farmId: farm._id, name: farm.name }); }} title="Delete farm" className="text-red-600 hover:text-red-900 p-1 rounded">
+                      <Trash className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <p className="text-sm text-gray-500 p-3">No farms found</p>
+          )}
         </nav>
       </aside>
 
@@ -827,7 +827,7 @@ const MyFarms = () => {
           <EditFarmForm farm={editingFarm} onUpdate={handleEditFarm} onCancel={() => setEditingFarm(null)} isLoading={isSaving} />
         ) : selectedFarm ? (
           <div className="space-y-8 max-w-5xl">
-            <FarmDetailsCard farm={selectedFarm} onEdit={() => setEditingFarm(selectedFarm)} />
+            <FarmDetailsCard key={selectedFarm._id} farm={selectedFarm} onEdit={() => setEditingFarm(selectedFarm)} />
 
             {showPlotForm ? (
               <AddPlotForm
