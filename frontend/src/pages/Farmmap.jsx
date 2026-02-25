@@ -59,12 +59,12 @@ const parseLocation = (locationString) => {
 
 // Severity colour palette
 const severityConfig = {
-  CRITICAL: { bg: "#dc2626", text: "#fff", dot: "#dc2626", border: "#fca5a5", glassBg: "rgba(220,38,38,0.18)", glassBorder: "rgba(220,38,38,0.35)", titleColor: "#991b1b", subColor: "#b91c1c" },
-  HIGH: { bg: "#ea580c", text: "#fff", dot: "#ea580c", border: "#fdba74", glassBg: "rgba(234,88,12,0.18)", glassBorder: "rgba(234,88,12,0.35)", titleColor: "#9a3412", subColor: "#c2410c" },
-  MODERATE: { bg: "#eab308", text: "#422006", dot: "#eab308", border: "#fde047", glassBg: "rgba(234,179,8,0.18)", glassBorder: "rgba(234,179,8,0.35)", titleColor: "#854d0e", subColor: "#a16207" },
-  LOW: { bg: "#16a34a", text: "#fff", dot: "#16a34a", border: "#86efac", glassBg: "rgba(22,163,74,0.15)", glassBorder: "rgba(22,163,74,0.30)", titleColor: "#166534", subColor: "#15803d" },
+  CRITICAL: { bg: "#dc2626", text: "#fff", dot: "#dc2626", border: "#fca5a5", glassBg: "rgba(255,240,240,0.92)", glassBorder: "rgba(220,38,38,0.45)", titleColor: "#1a1a1a", subColor: "#991b1b" },
+  HIGH: { bg: "#ea580c", text: "#fff", dot: "#ea580c", border: "#fdba74", glassBg: "rgba(255,243,232,0.92)", glassBorder: "rgba(234,88,12,0.45)", titleColor: "#1a1a1a", subColor: "#9a3412" },
+  MODERATE: { bg: "#eab308", text: "#422006", dot: "#eab308", border: "#fde047", glassBg: "rgba(255,251,230,0.92)", glassBorder: "rgba(234,179,8,0.45)", titleColor: "#1a1a1a", subColor: "#854d0e" },
+  LOW: { bg: "#16a34a", text: "#fff", dot: "#16a34a", border: "#86efac", glassBg: "rgba(235,255,243,0.92)", glassBorder: "rgba(22,163,74,0.40)", titleColor: "#1a1a1a", subColor: "#166534" },
 };
-const defaultSeverity = { bg: "#6b7280", text: "#fff", dot: "#6b7280", border: "#d1d5db", glassBg: "rgba(107,114,128,0.12)", glassBorder: "rgba(107,114,128,0.25)", titleColor: "#374151", subColor: "#6b7280" };
+const defaultSeverity = { bg: "#6b7280", text: "#fff", dot: "#6b7280", border: "#d1d5db", glassBg: "rgba(245,245,245,0.92)", glassBorder: "rgba(107,114,128,0.35)", titleColor: "#1a1a1a", subColor: "#374151" };
 
 const getSeverityStyle = (label) => severityConfig[label] || defaultSeverity;
 
