@@ -47,16 +47,21 @@ const getUserDisplayName = (user) => {
   return 'Unknown';
 };
 
-const ReportPreviewModal = ({ reportId, onClose }) => {
+const ReportPreviewModal = ({ reportId, onClose, autoDownload = false, onDownloadComplete }) => {
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [downloading, setDownloading] = useState(false);
   const contentRef = useRef(null);
+  const hasAutoDownloadedRef = useRef(false);
 
   useEffect(() => {
     fetchReportPreview();
   }, [reportId]);
+
+  useEffect(() => {
+    hasAutoDownloadedRef.current = false;
+  }, [reportId, autoDownload]);
 
   const fetchReportPreview = async () => {
     try {
@@ -94,9 +99,13 @@ const ReportPreviewModal = ({ reportId, onClose }) => {
         pagebreak: { mode: ['css', 'legacy'] }
       };
 
-      // Generate PDF from the beautiful React component
-      html2pdf().set(options).from(contentRef.current).save();
-      
+      // Generate PDF from this exact React component so exported output matches the preview.
+      await html2pdf().set(options).from(contentRef.current).save();
+
+      if (typeof onDownloadComplete === 'function') {
+        onDownloadComplete();
+      }
+
       setDownloading(false);
     } catch (err) {
       console.error('Error downloading report:', err);
@@ -106,6 +115,14 @@ const ReportPreviewModal = ({ reportId, onClose }) => {
   };
 
   // 🔥 Dynamic severity styling
+  useEffect(() => {
+    if (!autoDownload) return;
+    if (loading || error || downloading || !report || !contentRef.current) return;
+    if (hasAutoDownloadedRef.current) return;
+
+    hasAutoDownloadedRef.current = true;
+    handleDownload();
+  }, [autoDownload, loading, error, downloading, report]);
   const getSeverityColor = (label) => {
     switch (label?.toUpperCase()) {
       case 'CRITICAL':
@@ -345,3 +362,4 @@ const ReportPreviewModal = ({ reportId, onClose }) => {
 };
 
 export default ReportPreviewModal;
+
