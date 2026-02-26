@@ -18,6 +18,11 @@ def create_backbone(model_name: str = 'efficientnet_b3', pretrained: bool = True
         m = models.efficientnet_b0(weights=weights)
         return m, 'efficientnet_b0'
 
+    if name == 'efficientnet_b4':
+        weights = models.EfficientNet_B4_Weights.IMAGENET1K_V1 if pretrained else None
+        m = models.efficientnet_b4(weights=weights)
+        return m, 'efficientnet_b4'
+
     if name.startswith('resnet'):
         name_map = {
             'resnet18': (models.resnet18, models.ResNet18_Weights.IMAGENET1K_V1),
@@ -34,13 +39,13 @@ def create_backbone(model_name: str = 'efficientnet_b3', pretrained: bool = True
 
 
 class MyModel(nn.Module):
-    def __init__(self, num_classes: int, model_name: str = 'efficientnet_b3', pretrained: bool = True, dropout: float = 0.4):
+    def __init__(self, num_classes: int, model_name: str = 'efficientnet_b3', pretrained: bool = True, dropout: float = 0.3):
         super().__init__()
         backbone, kind = create_backbone(model_name, pretrained=pretrained)
         self.backbone = backbone
         self.kind = kind
 
-        if kind in ('efficientnet_b3', 'efficientnet_b0'):
+        if kind in ('efficientnet_b3', 'efficientnet_b0', 'efficientnet_b4'):
             in_features = self.backbone.classifier[1].in_features
             self.backbone.classifier = nn.Sequential(
                 nn.Dropout(p=dropout, inplace=True),
@@ -56,6 +61,25 @@ class MyModel(nn.Module):
     def forward(self, x):
         return self.backbone(x)
 
+    def freeze_backbone(self):
+        """Freeze all backbone parameters except the classifier head."""
+        for name, param in self.backbone.named_parameters():
+            if 'classifier' not in name and 'fc' not in name:
+                param.requires_grad = False
+        print("[FROZEN] Backbone frozen (only classifier head is trainable)")
+
+    def unfreeze_backbone(self):
+        """Unfreeze all backbone parameters for full fine-tuning."""
+        for param in self.backbone.parameters():
+            param.requires_grad = True
+        print("[UNFROZEN] Backbone unfrozen (all parameters are trainable)")
+
+    def get_trainable_params(self):
+        """Return count of trainable vs total parameters."""
+        total = sum(p.numel() for p in self.parameters())
+        trainable = sum(p.numel() for p in self.parameters() if p.requires_grad)
+        return trainable, total
+
 
 def load_weights(model: nn.Module, path: str, map_location: Optional[str] = None) -> nn.Module:
     if map_location is None:
@@ -64,7 +88,9 @@ def load_weights(model: nn.Module, path: str, map_location: Optional[str] = None
         raise FileNotFoundError(f'Weights file not found: {path}')
     data = torch.load(path, map_location=map_location)
     if isinstance(data, dict):
-        model.load_state_dict(data, strict=False)
+        # Strip 'module.' prefix if saved with DataParallel
+        state = {k.replace('module.', ''): v for k, v in data.items()}
+        model.load_state_dict(state, strict=True)
     else:
         model = data
     return model
