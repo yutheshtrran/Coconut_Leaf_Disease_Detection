@@ -148,7 +148,7 @@ const Sidebar = () => {
 
       {/* Logout Confirmation Modal */}
       {showLogoutConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60">
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-[90vw] max-w-md p-6">
             <h2 className="text-xl font-semibold mb-3 text-gray-900 dark:text-gray-100">Confirm Logout</h2>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Are you sure you want to log out?</p>

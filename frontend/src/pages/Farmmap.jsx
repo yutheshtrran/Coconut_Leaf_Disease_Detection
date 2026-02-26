@@ -1,9 +1,10 @@
-import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Tooltip, useMap } from "react-leaflet";
 import L from "leaflet";
 import { useState, useEffect } from "react";
 import { Loader, AlertCircle } from "lucide-react";
 import { useTheme } from "../context/ThemeContext";
 import * as farmService from "../services/farmService";
+import API from "../services/api";
 
 // Fix default marker icon issue in Vite
 delete L.Icon.Default.prototype._getIconUrl;
@@ -18,13 +19,10 @@ L.Icon.Default.mergeOptions({
 
 // Validate that coordinates are within Sri Lanka's bounds (with some buffer)
 const isValidSriLankaCoordinate = (lat, lng) => {
-  // Sri Lanka bounds: lat 5.9°N to 7.7°N, lng 80.5°E to 82.2°E
-  // Extended bounds with buffer for safety: lat 5.0 to 9.0, lng 79.5 to 83.0
   const minLat = 5.0;
   const maxLat = 9.0;
   const minLng = 79.5;
   const maxLng = 83.0;
-  
   return lat >= minLat && lat <= maxLat && lng >= minLng && lng <= maxLng;
 };
 
@@ -59,11 +57,16 @@ const parseLocation = (locationString) => {
   }
 };
 
-// Marker colors
-const markerColor = {
-  active: "green",
-  inactive: "gray",
+// Severity colour palette
+const severityConfig = {
+  CRITICAL: { bg: "#dc2626", text: "#fff", dot: "#dc2626", border: "#fca5a5", glassBg: "rgba(255,240,240,0.92)", glassBorder: "rgba(220,38,38,0.45)", titleColor: "#1a1a1a", subColor: "#991b1b" },
+  HIGH: { bg: "#ea580c", text: "#fff", dot: "#ea580c", border: "#fdba74", glassBg: "rgba(255,243,232,0.92)", glassBorder: "rgba(234,88,12,0.45)", titleColor: "#1a1a1a", subColor: "#9a3412" },
+  MODERATE: { bg: "#eab308", text: "#422006", dot: "#eab308", border: "#fde047", glassBg: "rgba(255,251,230,0.92)", glassBorder: "rgba(234,179,8,0.45)", titleColor: "#1a1a1a", subColor: "#854d0e" },
+  LOW: { bg: "#16a34a", text: "#fff", dot: "#16a34a", border: "#86efac", glassBg: "rgba(235,255,243,0.92)", glassBorder: "rgba(22,163,74,0.40)", titleColor: "#1a1a1a", subColor: "#166534" },
 };
+const defaultSeverity = { bg: "#6b7280", text: "#fff", dot: "#6b7280", border: "#d1d5db", glassBg: "rgba(245,245,245,0.92)", glassBorder: "rgba(107,114,128,0.35)", titleColor: "#1a1a1a", subColor: "#374151" };
+
+const getSeverityStyle = (label) => severityConfig[label] || defaultSeverity;
 
 // Auto-fit bounds
 const FitBounds = ({ locations }) => {
@@ -103,6 +106,7 @@ const FarmMap = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [validLocations, setValidLocations] = useState([]);
+  const [farmReportData, setFarmReportData] = useState({}); // { farmName: { label, value, issue } }
 
   // Sync with system theme changes
   useEffect(() => {
@@ -112,29 +116,51 @@ const FarmMap = () => {
     return () => darkModeQuery.removeEventListener("change", handleThemeChange);
   }, [setTheme]);
 
-  // Load farms
+  // Load farms + reports
   useEffect(() => {
-    const loadFarms = async () => {
+    const loadData = async () => {
       try {
         setIsLoading(true);
         setError(null);
-        const response = await farmService.getUserFarms();
 
-        if (response.farms && response.farms.length > 0) {
-          setFarms(response.farms);
+        // Fetch farms and reports in parallel
+        const [farmResponse, reportsResponse] = await Promise.all([
+          farmService.getUserFarms(),
+          API.get("/reports").catch(() => ({ data: { data: [] } })),
+        ]);
 
-          const validLocs = response.farms
-            .map((farm) => {
-              const coords = parseLocation(farm.location);
-              return coords ? { ...farm, ...coords } : null;
-            })
-            .filter((farm) => farm !== null);
+        const allFarms = farmResponse.farms || [];
+        setFarms(allFarms);
 
-          setValidLocations(validLocs);
-        } else {
-          setFarms([]);
-          setValidLocations([]);
+        const validLocs = allFarms
+          .map((farm) => {
+            const coords = parseLocation(farm.location);
+            return coords ? { ...farm, ...coords } : null;
+          })
+          .filter((farm) => farm !== null);
+
+        setValidLocations(validLocs);
+
+        // Build per-farm severity summary from reports
+        const reports = reportsResponse.data?.data || reportsResponse.data || [];
+        const farmMap = {};
+
+        for (const report of reports) {
+          const name = report.farm;
+          if (!name || !report.severity) continue;
+
+          const existing = farmMap[name];
+          // Keep the worst (highest) severity per farm
+          if (!existing || (report.severity.value > existing.value)) {
+            farmMap[name] = {
+              label: report.severity.label,
+              value: report.severity.value,
+              issue: report.issue || "No issue noted",
+            };
+          }
         }
+
+        setFarmReportData(farmMap);
       } catch (err) {
         console.error("Error loading farms:", err);
         setError("Failed to load farms. Please try again.");
@@ -142,7 +168,7 @@ const FarmMap = () => {
         setIsLoading(false);
       }
     };
-    loadFarms();
+    loadData();
   }, []);
 
   // Listen for live farm updates
@@ -175,13 +201,100 @@ const FarmMap = () => {
     return () => window.removeEventListener("farmsUpdated", onFarmsUpdated);
   }, []);
 
+  // Build custom marker icon with status badge
+  const buildMarkerIcon = (farm) => {
+    const reportInfo = farmReportData[farm.name];
+    const sevLabel = reportInfo?.label || null;
+    const style = getSeverityStyle(sevLabel);
+
+    const badgeHtml = sevLabel
+      ? `<div style="
+          position:absolute;
+          left:50%;
+          transform:translateX(-50%);
+          top:18px;
+          white-space:nowrap;
+          background:${style.bg};
+          color:${style.text};
+          font-size:9px;
+          font-weight:700;
+          padding:1px 5px;
+          border-radius:6px;
+          letter-spacing:0.3px;
+          box-shadow:0 1px 3px rgba(0,0,0,.35);
+          pointer-events:none;
+        ">${sevLabel}</div>`
+      : "";
+
+    return L.divIcon({
+      className: "custom-marker-with-badge",
+      iconSize: [14, 14],
+      iconAnchor: [7, 7],
+      popupAnchor: [0, -10],
+      tooltipAnchor: [10, 0],
+      html: `
+        <div style="position:relative;width:14px;height:14px;">
+          <div style="
+            background:${style.dot};
+            width:14px;
+            height:14px;
+            border-radius:50%;
+            border:2px solid white;
+            box-shadow:0 0 6px rgba(0,0,0,.45);
+          "></div>
+          ${badgeHtml}
+        </div>
+      `,
+    });
+  };
+
+  // Build tooltip content for hover
+  const buildTooltipContent = (farm) => {
+    const reportInfo = farmReportData[farm.name];
+    const style = reportInfo ? getSeverityStyle(reportInfo.label) : defaultSeverity;
+    const sevLabel = reportInfo?.label || "N/A";
+    const sevValue = reportInfo?.value != null ? `${reportInfo.value}%` : "—";
+    const issue = reportInfo?.issue || "No reports";
+
+    return `
+      <div style="
+        min-width:170px;
+        font-family:system-ui,sans-serif;
+        background:${style.glassBg};
+        backdrop-filter:blur(12px);
+        -webkit-backdrop-filter:blur(12px);
+        border:1.5px solid ${style.glassBorder};
+        border-radius:12px;
+        padding:10px 14px;
+      ">
+        <div style="font-weight:700;font-size:13px;margin-bottom:5px;color:${style.titleColor};">${farm.name}</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+          <span style="
+            display:inline-block;
+            background:${style.bg};
+            color:${style.text};
+            font-size:10px;
+            font-weight:700;
+            padding:2px 8px;
+            border-radius:8px;
+            box-shadow:0 1px 3px rgba(0,0,0,.15);
+          ">${sevLabel}</span>
+          <span style="font-size:12px;font-weight:600;color:${style.subColor};">${sevValue}</span>
+        </div>
+        <div style="font-size:11px;color:${style.subColor};border-top:1px solid ${style.glassBorder};padding-top:4px;margin-top:3px;">
+          ${issue}
+        </div>
+      </div>
+    `;
+  };
+
   // Default center Sri Lanka
   const SRI_LANKA_CENTER = [7.8731, 80.7718];
   const defaultCenter =
     validLocations.length > 0
       ? validLocations
-          .filter((loc) => Number.isFinite(loc.lat) && Number.isFinite(loc.lng))
-          .map((loc) => [loc.lat, loc.lng])[0] || SRI_LANKA_CENTER
+        .filter((loc) => Number.isFinite(loc.lat) && Number.isFinite(loc.lng))
+        .map((loc) => [loc.lat, loc.lng])[0] || SRI_LANKA_CENTER
       : SRI_LANKA_CENTER;
 
   return (
@@ -258,27 +371,27 @@ const FarmMap = () => {
           }
         />
 
-        {/* Markers */}
+        {/* Markers with Tooltip + Popup */}
         {validLocations.map((farm) => (
           <Marker
             key={farm._id}
             position={[farm.lat, farm.lng]}
             eventHandlers={{ click: () => setSelectedFarm(farm) }}
-            icon={L.divIcon({
-              className: "custom-marker",
-              html: `<div style="
-                background:${markerColor[farm.status] || "blue"};
-                width:14px;
-                height:14px;
-                border-radius:50%;
-                border:2px solid white;
-                box-shadow:0 0 4px rgba(0,0,0,.4);
-              "></div>`,
-            })}
-          />
+            icon={buildMarkerIcon(farm)}
+          >
+            {/* Hover tooltip */}
+            <Tooltip
+              direction="right"
+              offset={[12, 0]}
+              opacity={0.95}
+              className="farm-tooltip-custom"
+            >
+              <div dangerouslySetInnerHTML={{ __html: buildTooltipContent(farm) }} />
+            </Tooltip>
+          </Marker>
         ))}
 
-        {/* Popup */}
+        {/* Click Popup */}
         {selectedFarm && (
           <Popup
             position={[selectedFarm.lat, selectedFarm.lng]}
@@ -308,15 +421,27 @@ const FarmMap = () => {
               <p className="mt-2">
                 <span className="font-medium">Area:</span> {selectedFarm.area}
               </p>
+              {(() => {
+                const info = farmReportData[selectedFarm.name];
+                if (!info) return null;
+                const s = getSeverityStyle(info.label);
+                return (
+                  <>
+                    <p className="mt-1">
+                      <span className="font-medium">Severity:</span>{" "}
+                      <span style={{ color: s.dot, fontWeight: 700 }}>
+                        {info.label} ({info.value}%)
+                      </span>
+                    </p>
+                    <p className="mt-1">
+                      <span className="font-medium">Issue:</span> {info.issue}
+                    </p>
+                  </>
+                );
+              })()}
               <p className="mt-1 capitalize">
                 <span className="font-medium">Status:</span>{" "}
-                <span
-                  style={{
-                    color:
-                      markerColor[selectedFarm.status] === "active" ? "#22c55e" : "#9ca3af",
-                    fontWeight: 600,
-                  }}
-                >
+                <span style={{ fontWeight: 600 }}>
                   {selectedFarm.status}
                 </span>
               </p>
@@ -332,6 +457,33 @@ const FarmMap = () => {
         {/* Fit bounds */}
         {validLocations.length > 0 && <FitBounds locations={validLocations} />}
       </MapContainer>
+
+      {/* Custom tooltip styles — transparent wrapper so inner glass bg shows */}
+      <style>{`
+        .farm-tooltip-custom {
+          background: transparent !important;
+          border: none !important;
+          box-shadow: none !important;
+          padding: 0 !important;
+        }
+        .farm-tooltip-custom::before {
+          display: none !important;
+        }
+        .farm-tooltip-custom .leaflet-tooltip-content-wrapper {
+          background: transparent !important;
+          border: none !important;
+          border-radius: 0 !important;
+          padding: 0 !important;
+          box-shadow: none !important;
+        }
+        .farm-tooltip-custom > div {
+          box-shadow: 0 4px 20px rgba(0,0,0,.18);
+        }
+        .custom-marker-with-badge {
+          background: none !important;
+          border: none !important;
+        }
+      `}</style>
     </div>
   );
 };
