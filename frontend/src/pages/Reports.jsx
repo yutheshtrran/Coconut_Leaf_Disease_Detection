@@ -63,7 +63,7 @@ const Reports = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
-  const [previewReportId, setPreviewReportId] = useState(null);
+  const [previewConfig, setPreviewConfig] = useState({ reportId: null, autoDownload: false });
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const canCreate = user && (user.role === 'agronomist' || user.role === 'admin');
@@ -208,16 +208,12 @@ const Reports = () => {
   };
 
   const handleView = (reportId) => {
-    setPreviewReportId(reportId);
+    setPreviewConfig({ reportId, autoDownload: false });
   };
 
   const handleDownload = (reportId) => {
-    const link = document.createElement("a");
-    link.href = `${API.defaults.baseURL}/reports/${reportId}/download`;
-    link.download = `${reportId}.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // Use the same preview-based PDF generator so output matches the eye view report.
+    setPreviewConfig({ reportId, autoDownload: true });
   };
 
   const handleReportInputChange = (e) => {
@@ -396,10 +392,12 @@ const Reports = () => {
   return (
     <div className="pt-4 p-4 sm:p-6 lg:p-8 bg-gray-50 dark:bg-gray-900 min-h-screen font-['Inter', sans-serif] transition-colors duration-300">
       {/* Report Preview Modal */}
-      {previewReportId && (
+      {previewConfig.reportId && (
         <ReportPreviewModal 
-          reportId={previewReportId} 
-          onClose={() => setPreviewReportId(null)} 
+          reportId={previewConfig.reportId}
+          autoDownload={previewConfig.autoDownload}
+          onAutoDownloadComplete={() => setPreviewConfig({ reportId: null, autoDownload: false })}
+          onClose={() => setPreviewConfig({ reportId: null, autoDownload: false })}
         />
       )}
 
