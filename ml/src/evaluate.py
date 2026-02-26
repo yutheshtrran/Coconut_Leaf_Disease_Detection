@@ -8,7 +8,7 @@ def evaluate_model(model, data_loader, device):
     model.eval()
     all_preds = []
     all_labels = []
-
+ 
     with torch.no_grad():
         for images, labels in data_loader:
             images = images.to(device)

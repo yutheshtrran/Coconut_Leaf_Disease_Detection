@@ -139,8 +139,8 @@ const AnalyseImages = () => {
                         onDrop={handleDrop}
                         onClick={() => fileInputRef.current?.click()}
                         className={`relative border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all duration-200 ${isDragActive
-                                ? "border-green-500 bg-green-50 dark:bg-green-900/20"
-                                : "border-gray-300 dark:border-gray-600 hover:border-green-400 dark:hover:border-green-500 bg-gray-50 dark:bg-gray-700/50"
+                            ? "border-green-500 bg-green-50 dark:bg-green-900/20"
+                            : "border-gray-300 dark:border-gray-600 hover:border-green-400 dark:hover:border-green-500 bg-gray-50 dark:bg-gray-700/50"
                             }`}
                     >
                         <input
@@ -152,11 +152,11 @@ const AnalyseImages = () => {
                             className="hidden"
                         />
                         {previewUrls.length > 0 ? (
-                            <div className="space-y-4">
+                            <div className="grid grid-cols-3 gap-2">
                                 {previewUrls.map((url, idx) => (
-                                    <div key={idx} className="space-y-1">
-                                        <img src={url} alt={`Preview ${idx + 1}`} className="max-h-64 mx-auto rounded-lg shadow-md object-contain" />
-                                        <p className="text-sm text-gray-600 dark:text-gray-400">{selectedFiles[idx]?.name}</p>
+                                    <div key={idx} className="flex flex-col items-center gap-0.5">
+                                        <img src={url} alt={`Preview ${idx + 1}`} className="w-full max-h-20 rounded-md shadow-sm object-cover" />
+                                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate w-full text-center">{selectedFiles[idx]?.name}</p>
                                     </div>
                                 ))}
                             </div>
@@ -165,7 +165,7 @@ const AnalyseImages = () => {
                                 <ImageIcon size={48} className="mx-auto text-gray-400 dark:text-gray-500" />
                                 <div>
                                     <p className="text-gray-700 dark:text-gray-300 font-medium">
-                                        Drag & drop images here
+                                        Drag &amp; drop images here
                                     </p>
                                     <p className="text-sm text-gray-500 dark:text-gray-400">
                                         or click to browse files
