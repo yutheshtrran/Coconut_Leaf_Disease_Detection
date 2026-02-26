@@ -36,16 +36,20 @@ def _build_model(num_classes, model_name='efficientnet_b3'):
     if name == 'efficientnet_b3':
         m = tv_models.efficientnet_b3(weights=None)
         in_f = m.classifier[1].in_features
-        m.classifier = nn.Sequential(nn.Dropout(p=0.4, inplace=True), nn.Linear(in_f, num_classes))
+        m.classifier = nn.Sequential(nn.Dropout(p=0.3, inplace=True), nn.Linear(in_f, num_classes))
     elif name == 'efficientnet_b0':
         m = tv_models.efficientnet_b0(weights=None)
         in_f = m.classifier[1].in_features
-        m.classifier = nn.Sequential(nn.Dropout(p=0.4, inplace=True), nn.Linear(in_f, num_classes))
+        m.classifier = nn.Sequential(nn.Dropout(p=0.3, inplace=True), nn.Linear(in_f, num_classes))
+    elif name == 'efficientnet_b4':
+        m = tv_models.efficientnet_b4(weights=None)
+        in_f = m.classifier[1].in_features
+        m.classifier = nn.Sequential(nn.Dropout(p=0.3, inplace=True), nn.Linear(in_f, num_classes))
     else:
         # ResNet50 fallback
         m = tv_models.resnet50(weights=None)
         in_f = m.fc.in_features
-        m.fc = nn.Sequential(nn.Dropout(p=0.4), nn.Linear(in_f, num_classes))
+        m.fc = nn.Sequential(nn.Dropout(p=0.3), nn.Linear(in_f, num_classes))
     return m
 
 weights_path = os.path.join(os.path.dirname(__file__), "..", "weights", "best_model.pth")
@@ -74,6 +78,9 @@ try:
         model = _build_model(num_classes, model_name_cfg)
         # Strip 'module.' prefix if saved with DataParallel
         state = {k.replace('module.', ''): v for k, v in checkpoint.items()}
+        # Also handle 'backbone.' prefix from MyModel wrapper
+        if any(k.startswith('backbone.') for k in state):
+            state = {k.replace('backbone.', ''): v for k, v in state.items()}
         model.load_state_dict(state, strict=False)
     else:
         model = checkpoint
@@ -92,7 +99,7 @@ model.to(device)
 model.eval()
 
 # ── Transforms ────────────────────────────────────────────────────────────────
-image_size = config.get('image_size', 256)
+image_size = config.get('image_size', 300)
 
 # Standard inference transform (no augmentation)
 _base_transform = transforms.Compose([
@@ -101,34 +108,53 @@ _base_transform = transforms.Compose([
     transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
 ])
 
-# TTA transforms — 5 slightly different views of the same image
+# TTA transforms — 7 slightly different views of the same image for robust prediction
 _tta_transforms = [
+    # Original
     transforms.Compose([
         transforms.Resize((image_size, image_size)),
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ]),
+    # Horizontal flip
     transforms.Compose([
         transforms.Resize((image_size, image_size)),
         transforms.RandomHorizontalFlip(p=1.0),
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ]),
+    # Vertical flip
     transforms.Compose([
-        transforms.Resize((int(image_size * 1.1), int(image_size * 1.1))),
+        transforms.Resize((image_size, image_size)),
+        transforms.RandomVerticalFlip(p=1.0),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ]),
+    # Slightly larger + center crop
+    transforms.Compose([
+        transforms.Resize((int(image_size * 1.15), int(image_size * 1.15))),
         transforms.CenterCrop(image_size),
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ]),
+    # Rotation +15
     transforms.Compose([
         transforms.Resize((image_size, image_size)),
-        transforms.RandomRotation(degrees=(10, 10)),
+        transforms.RandomRotation(degrees=(15, 15)),
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ]),
+    # Rotation -15
     transforms.Compose([
         transforms.Resize((image_size, image_size)),
-        transforms.RandomRotation(degrees=(-10, -10)),
+        transforms.RandomRotation(degrees=(-15, -15)),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ]),
+    # Slight color shift
+    transforms.Compose([
+        transforms.Resize((image_size, image_size)),
+        transforms.ColorJitter(brightness=0.1, contrast=0.1),
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ]),

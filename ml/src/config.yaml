@@ -1,12 +1,15 @@
 # ml/src/config.yaml
-image_size: 256
+image_size: 300
 batch_size: 16
-learning_rate: 0.0003
-num_epochs: 40
-early_stopping_patience: 8
+learning_rate: 0.0001
+num_epochs: 60
+early_stopping_patience: 12
 model_name: efficientnet_b3
-weight_decay: 0.0001
+weight_decay: 0.01
 label_smoothing: 0.1
+warmup_epochs: 5
+mixup_alpha: 0.2
+accumulation_steps: 2
 device: cuda
 class_names:
   - Bud Root Dropping
