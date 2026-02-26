@@ -52,6 +52,7 @@ export default function ManageDiseases() {
   const [selectedDisease, setSelectedDisease] = useState(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [diseaseToDelete, setDiseaseToDelete] = useState(null);
+  const [lightboxImage, setLightboxImage] = useState(null);
 
   useEffect(() => { fetchDiseases(); }, []);
 
@@ -204,7 +205,7 @@ export default function ManageDiseases() {
               const visibleImages = samples.slice(0, 3);
               const moreCount = samples.length - 3;
               return (
-                <div key={disease._id} className="group bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-xl hover:border-green-200 dark:hover:border-green-700 transition-all overflow-hidden flex flex-col">
+                <div key={disease._id} onClick={() => openModal(disease)} className="group bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-xl hover:border-green-200 dark:hover:border-green-700 transition-all overflow-hidden flex flex-col cursor-pointer">
                   <div className="h-40 bg-gray-100 dark:bg-gray-700 relative overflow-hidden">
                     {samples.length > 0 ? <img src={samples[0]} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" /> :
                       <div className="w-full h-full flex items-center justify-center text-gray-300 dark:text-gray-500"><ImageIcon size={40} /></div>}
@@ -226,10 +227,10 @@ export default function ManageDiseases() {
                     </div>
                   }
                   <div className="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between">
-                    <button onClick={() => openModal(disease)} className="text-green-600 dark:text-green-400 font-bold text-sm hover:text-green-700 dark:hover:text-green-300 flex items-center gap-1.5 transition-colors"><Eye size={16} /> Details</button>
+                    <button onClick={(e) => { e.stopPropagation(); openModal(disease); }} className="text-green-600 dark:text-green-400 font-bold text-sm hover:text-green-700 dark:hover:text-green-300 flex items-center gap-1.5 transition-colors"><Eye size={16} /> Details</button>
                     <div className="flex gap-4">
-                      <button onClick={() => startEdit(disease)} className="p-2 text-blue-500 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-all"><Edit2 size={18} /></button>
-                      <button onClick={() => openDeleteConfirm(disease)} className="p-2 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all"><Trash2 size={18} /></button>
+                      <button onClick={(e) => { e.stopPropagation(); startEdit(disease); }} className="p-2 text-blue-500 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-all"><Edit2 size={18} /></button>
+                      <button onClick={(e) => { e.stopPropagation(); openDeleteConfirm(disease); }} className="p-2 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all"><Trash2 size={18} /></button>
                     </div>
                   </div>
                 </div>
@@ -240,8 +241,8 @@ export default function ManageDiseases() {
 
         {/* Modal */}
         {modalOpen && selectedDisease && (
-          <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+          <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setModalOpen(false)}>
+            <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
               <div className="px-8 py-6 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center sticky top-0 z-10 bg-white dark:bg-gray-800">
                 <div>
                   <h2 className="text-2xl font-extrabold text-gray-800 dark:text-gray-100">{selectedDisease.name}</h2>
@@ -250,25 +251,33 @@ export default function ManageDiseases() {
                 <button onClick={() => setModalOpen(false)} className="p-2 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 hover:text-gray-800 dark:hover:text-gray-100 rounded-full transition-all"><X size={24} /></button>
               </div>
               <div className="overflow-y-auto p-8 space-y-8">
-                <section><h4 className="text-xs font-black text-green-600 dark:text-green-400 uppercase tracking-widest mb-2">Description</h4>
+                <section><h4 className="text-sm font-bold text-green-600 dark:text-green-400 uppercase tracking-wide mb-2">Description</h4>
                   <p className="text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">{selectedDisease.description || 'No description.'}</p></section>
-                <section><h4 className="text-xs font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest mb-2">Primary Impact</h4>
+                <section><h4 className="text-sm font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wide mb-2">Primary Impact</h4>
                   <p className="text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">{selectedDisease.impact || 'No impact data.'}</p></section>
-                <section className="bg-green-50 dark:bg-green-900/30 rounded-2xl p-6 border border-green-100 dark:border-green-800"><h4 className="text-xs font-black text-green-700 dark:text-green-400 uppercase tracking-widest mb-2">Recommended Remedy</h4>
+                <section className="bg-green-50 dark:bg-green-900/30 rounded-2xl p-6 border border-green-100 dark:border-green-800"><h4 className="text-sm font-bold text-green-700 dark:text-green-400 uppercase tracking-wide mb-2">Recommended Remedy</h4>
                   <p className="text-green-800 dark:text-green-300 leading-relaxed whitespace-pre-wrap">{selectedDisease.remedy || 'No remedies provided.'}</p></section>
 
                 {selectedDisease.samples?.length > 0 && (
                   <div>
                     <h4 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-4 flex items-center gap-2"><ImageIcon size={20} /> Photo Gallery</h4>
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                      {selectedDisease.samples.map((img, i) => <div key={i} className="aspect-square rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow"><img src={img} alt={`Detail ${i + 1}`} className="w-full h-full object-cover hover:scale-110 transition-transform duration-500" /></div>)}
+                      {selectedDisease.samples.map((img, i) => <div key={i} onClick={() => setLightboxImage(img)} className="aspect-square rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow cursor-pointer"><img src={img} alt={`Detail ${i + 1}`} className="w-full h-full object-cover hover:scale-110 transition-transform duration-500" /></div>)}
                     </div>
                   </div>
                 )}
               </div>
-              <div className="px-8 py-4 bg-gray-50 dark:bg-gray-700/50 border-t border-gray-100 dark:border-gray-700 flex justify-end">
-                <button onClick={() => setModalOpen(false)} className="px-6 py-2 bg-gray-800 dark:bg-gray-600 text-white font-bold rounded-xl hover:bg-gray-900 dark:hover:bg-gray-500 transition-colors">Close Viewer</button>
-              </div>
+
+            </div>
+          </div>
+        )}
+
+        {/* Image Lightbox */}
+        {lightboxImage && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4" onClick={() => setLightboxImage(null)}>
+            <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-3 max-w-[90vw] max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
+              <button onClick={() => setLightboxImage(null)} className="absolute -top-3 -right-3 p-1.5 bg-gray-800 dark:bg-gray-600 text-white rounded-full hover:bg-gray-900 dark:hover:bg-gray-500 transition-all shadow-lg z-10"><X size={20} /></button>
+              <img src={lightboxImage} alt="Full view" className="max-w-full max-h-[80vh] object-contain rounded-xl" />
             </div>
           </div>
         )}
@@ -298,6 +307,6 @@ export default function ManageDiseases() {
         )}
 
       </div>
-    </div>
+    </div >
   )
 }
