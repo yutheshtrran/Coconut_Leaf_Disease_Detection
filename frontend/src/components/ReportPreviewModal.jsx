@@ -47,13 +47,13 @@ const getUserDisplayName = (user) => {
   return 'Unknown';
 };
 
-const ReportPreviewModal = ({ reportId, onClose, autoDownload = false, onDownloadComplete }) => {
+const ReportPreviewModal = ({ reportId, onClose, autoDownload = false, onAutoDownloadComplete }) => {
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [downloading, setDownloading] = useState(false);
   const contentRef = useRef(null);
-  const hasAutoDownloadedRef = useRef(false);
+  const autoDownloadTriggeredRef = useRef(false);
 
   useEffect(() => {
     fetchReportPreview();
@@ -77,7 +77,7 @@ const ReportPreviewModal = ({ reportId, onClose, autoDownload = false, onDownloa
     }
   };
 
-  const handleDownload = async () => {
+  const handleDownload = async (closeAfterDownload = false) => {
     try {
       setDownloading(true);
       
@@ -99,20 +99,31 @@ const ReportPreviewModal = ({ reportId, onClose, autoDownload = false, onDownloa
         pagebreak: { mode: ['css', 'legacy'] }
       };
 
-      // Generate PDF from this exact React component so exported output matches the preview.
+      // Generate PDF from the beautiful React component
       await html2pdf().set(options).from(contentRef.current).save();
-
-      if (typeof onDownloadComplete === 'function') {
-        onDownloadComplete();
-      }
-
+      
       setDownloading(false);
+      if (closeAfterDownload && typeof onAutoDownloadComplete === 'function') {
+        onAutoDownloadComplete();
+      }
     } catch (err) {
       console.error('Error downloading report:', err);
       setError('Failed to download report: ' + err.message);
       setDownloading(false);
     }
   };
+
+  useEffect(() => {
+    if (!autoDownload) {
+      autoDownloadTriggeredRef.current = false;
+      return;
+    }
+
+    if (!report || loading || error || downloading || autoDownloadTriggeredRef.current) return;
+
+    autoDownloadTriggeredRef.current = true;
+    handleDownload(true);
+  }, [autoDownload, report, loading, error, downloading]);
 
   // 🔥 Dynamic severity styling
   useEffect(() => {
