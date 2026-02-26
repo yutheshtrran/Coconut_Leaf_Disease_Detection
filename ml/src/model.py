@@ -4,42 +4,67 @@ import torch
 import torch.nn as nn
 import torchvision.models as models
 
-def create_backbone(model_name: str = 'resnet50', pretrained: bool = True):
+
+def create_backbone(model_name: str = 'efficientnet_b3', pretrained: bool = True):
     name = model_name.lower()
+
+    if name == 'efficientnet_b3':
+        weights = models.EfficientNet_B3_Weights.IMAGENET1K_V1 if pretrained else None
+        m = models.efficientnet_b3(weights=weights)
+        return m, 'efficientnet_b3'
+
+    if name == 'efficientnet_b0':
+        weights = models.EfficientNet_B0_Weights.IMAGENET1K_V1 if pretrained else None
+        m = models.efficientnet_b0(weights=weights)
+        return m, 'efficientnet_b0'
+
     if name.startswith('resnet'):
-        m = {'resnet18': models.resnet18, 'resnet34': models.resnet34}.get(name, models.resnet50)(pretrained=pretrained)
+        name_map = {
+            'resnet18': (models.resnet18, models.ResNet18_Weights.IMAGENET1K_V1),
+            'resnet34': (models.resnet34, models.ResNet34_Weights.IMAGENET1K_V1),
+            'resnet50': (models.resnet50, models.ResNet50_Weights.IMAGENET1K_V1),
+        }
+        fn, w = name_map.get(name, (models.resnet50, models.ResNet50_Weights.IMAGENET1K_V1))
+        m = fn(weights=w if pretrained else None)
         return m, 'resnet'
-    if name.startswith('efficientnet'):
-        m = models.efficientnet_b0(pretrained=pretrained)
-        return m, 'efficientnet'
-    return models.resnet50(pretrained=pretrained), 'resnet'
+
+    # Default fallback: EfficientNet-B3
+    weights = models.EfficientNet_B3_Weights.IMAGENET1K_V1 if pretrained else None
+    return models.efficientnet_b3(weights=weights), 'efficientnet_b3'
+
 
 class MyModel(nn.Module):
-    def __init__(self, num_classes: int, model_name: str = 'resnet50', pretrained: bool = True):
+    def __init__(self, num_classes: int, model_name: str = 'efficientnet_b3', pretrained: bool = True, dropout: float = 0.4):
         super().__init__()
         backbone, kind = create_backbone(model_name, pretrained=pretrained)
         self.backbone = backbone
         self.kind = kind
 
-        if kind == 'resnet':
-            in_features = self.backbone.fc.in_features
-            self.backbone.fc = nn.Linear(in_features, num_classes)
-        elif kind == 'efficientnet':
+        if kind in ('efficientnet_b3', 'efficientnet_b0'):
             in_features = self.backbone.classifier[1].in_features
-            self.backbone.classifier[1] = nn.Linear(in_features, num_classes)
+            self.backbone.classifier = nn.Sequential(
+                nn.Dropout(p=dropout, inplace=True),
+                nn.Linear(in_features, num_classes)
+            )
+        elif kind == 'resnet':
+            in_features = self.backbone.fc.in_features
+            self.backbone.fc = nn.Sequential(
+                nn.Dropout(p=dropout),
+                nn.Linear(in_features, num_classes)
+            )
 
     def forward(self, x):
         return self.backbone(x)
 
+
 def load_weights(model: nn.Module, path: str, map_location: Optional[str] = None) -> nn.Module:
-    import os
     if map_location is None:
         map_location = 'cpu'
     if not path or not os.path.exists(path):
         raise FileNotFoundError(f'Weights file not found: {path}')
     data = torch.load(path, map_location=map_location)
     if isinstance(data, dict):
-        model.load_state_dict(data)
+        model.load_state_dict(data, strict=False)
     else:
         model = data
     return model

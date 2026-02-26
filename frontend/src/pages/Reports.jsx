@@ -3,6 +3,7 @@ import { Eye, Download, MoreHorizontal, ChevronLeft, ChevronRight, Filter, Plus,
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import API from '../services/api';
+import * as farmService from '../services/farmService';
 import ReportPreviewModal from '../components/ReportPreviewModal';
 
 // --- Helper Components ---
@@ -63,18 +64,24 @@ const Reports = () => {
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
   const [previewReportId, setPreviewReportId] = useState(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const canCreate = user && (user.role === 'agronomist' || user.role === 'admin');
 
   const canModify = user && (user.role === 'agronomist' || user.role === 'admin');
 
   const [newReportData, setNewReportData] = useState({
     farm: '',
+    plot: '',
     date: '',
     issue: '',
     severityValue: '',
     severityLabel: 'LOW',
     status: 'Pending',
   });
+
+  const [availablePlots, setAvailablePlots] = useState([]);
+  const [plotsLoading, setPlotsLoading] = useState(false);
 
   const [filterData, setFilterData] = useState({
     farm: '',
@@ -100,7 +107,60 @@ const Reports = () => {
     if (user && !authLoading) {
       fetchReports();
     }
+    // also load farms for selection in report form
+    if (user && !authLoading) {
+      fetchFarmsForForm();
+    }
   }, [user, authLoading]);
+
+  const [availableFarms, setAvailableFarms] = useState([]);
+
+  const fetchFarmsForForm = async () => {
+    try {
+      const res = await farmService.getUserFarms();
+      const list = res.farms || [];
+      setAvailableFarms(list);
+    } catch (err) {
+      console.error('Failed to load farms for report form', err);
+      setAvailableFarms([]);
+    }
+  };
+
+  const fetchPlotsForFarm = async (farmId) => {
+    if (!farmId) {
+      setAvailablePlots([]);
+      return;
+    }
+    try {
+      setPlotsLoading(true);
+      const res = await farmService.getFarmPlots(farmId);
+      const list = res.plots || [];
+      setAvailablePlots(list);
+    } catch (err) {
+      console.error('Failed to load plots for farm', err);
+      setAvailablePlots([]);
+    } finally {
+      setPlotsLoading(false);
+    }
+  };
+
+  // Fetch plots for the selected farm in the form when farm changes
+  useEffect(() => {
+    const farmNameOrId = newReportData.farm;
+    if (!farmNameOrId) {
+      setAvailablePlots([]);
+      setNewReportData(prev => ({ ...prev, plot: '' }));
+      return;
+    }
+    const farmObj = availableFarms.find(f => f._id === farmNameOrId || f.name === farmNameOrId);
+    if (farmObj) {
+      fetchPlotsForFarm(farmObj._id);
+      setNewReportData(prev => ({ ...prev, plot: '' }));
+    } else {
+      setAvailablePlots([]);
+      setNewReportData(prev => ({ ...prev, plot: '' }));
+    }
+  }, [newReportData.farm, availableFarms]);
 
   const fetchReports = async () => {
     try {
@@ -214,9 +274,7 @@ const Reports = () => {
     e.preventDefault();
     try {
       setError(null);
-
-      const reportPayload = {
-        farm: newReportData.farm,
+      const basePayload = {
         date: newReportData.date,
         issue: newReportData.issue,
         severity: {
@@ -227,8 +285,13 @@ const Reports = () => {
       };
 
       if (editingReportId) {
+        const reportPayload = { ...basePayload, farm: newReportData.farm };
+        if (newReportData.plot) reportPayload.plot = newReportData.plot;
         await API.put(`/reports/${editingReportId}`, reportPayload);
       } else {
+        if (!newReportData.farm) throw new Error('Please select a farm for the report');
+        const reportPayload = { ...basePayload, farm: newReportData.farm };
+        if (newReportData.plot) reportPayload.plot = newReportData.plot;
         await API.post('/reports', reportPayload);
       }
 
@@ -238,7 +301,7 @@ const Reports = () => {
 
       setShowReportForm(false);
       setEditingReportId(null);
-      setNewReportData({ farm: '', date: '', issue: '', severityValue: '', severityLabel: 'LOW', status: 'Pending' });
+      setNewReportData({ farm: '', plot: '', date: '', issue: '', severityValue: '', severityLabel: 'LOW', status: 'Pending' });
       
       await fetchReports();
     } catch (err) {
@@ -250,6 +313,7 @@ const Reports = () => {
   const handleEditReport = (report) => {
     setNewReportData({
       farm: report.farm,
+      plot: report.plot || '',
       date: report.date,
       issue: report.issue,
       severityValue: report.severity.value.toString(),
@@ -261,17 +325,14 @@ const Reports = () => {
   };
 
   const handleDeleteReport = async (reportId) => {
-    if (!window.confirm('Are you sure you want to delete this report?')) {
-      return;
-    }
-
     try {
       setError(null);
       await API.delete(`/reports/${reportId}`);
 
       setSuccessMessage('Report deleted successfully!');
       setTimeout(() => setSuccessMessage(''), 3000);
-      
+      setShowConfirmDelete(false);
+      setConfirmDeleteId(null);
       await fetchReports();
     } catch (err) {
       console.error('Error deleting report:', err);
@@ -279,16 +340,21 @@ const Reports = () => {
     }
   };
 
+  const showDeleteConfirm = (reportId) => {
+    setConfirmDeleteId(reportId);
+    setShowConfirmDelete(true);
+  };
+
   const handleOpenForm = () => {
     setEditingReportId(null);
-    setNewReportData({ farm: '', date: '', issue: '', severityValue: '', severityLabel: 'LOW', status: 'Pending' });
+    setNewReportData({ farm: '', plot: '', date: '', issue: '', severityValue: '', severityLabel: 'LOW', status: 'Pending' });
     setShowReportForm(true);
   };
 
   const handleCloseForm = () => {
     setShowReportForm(false);
     setEditingReportId(null);
-    setNewReportData({ farm: '', date: '', issue: '', severityValue: '', severityLabel: 'LOW', status: 'Pending' });
+    setNewReportData({ farm: '', plot: '', date: '', issue: '', severityValue: '', severityLabel: 'LOW', status: 'Pending' });
   };
 
   const renderPaginationButton = (page, label) => (
@@ -346,6 +412,30 @@ const Reports = () => {
           </div>
         )}
 
+        {/* Delete Confirmation Modal */}
+        {showConfirmDelete && (
+          <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50 overflow-auto">
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl w-full max-w-md shadow-lg">
+              <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-2">Delete Report</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Are you sure you want to delete this report? This action cannot be undone.</p>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => { setShowConfirmDelete(false); setConfirmDeleteId(null); }}
+                  className="px-4 py-2 rounded-lg bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-400 dark:hover:bg-gray-500 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleDeleteReport(confirmDeleteId)}
+                  className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Error Message */}
         {error && (
           <div className="mb-4 p-4 bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 rounded-lg">
@@ -390,15 +480,50 @@ const Reports = () => {
               </h2>
               <form onSubmit={handleReportSubmit} className="flex flex-col gap-4">
 
-                <input 
-                  type="text" 
-                  name="farm" 
-                  value={newReportData.farm} 
-                  onChange={handleReportInputChange} 
-                  placeholder="Farm Name" 
-                  className="p-3 border rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-200" 
-                  required 
-                />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Select Farm</label>
+                  <div className="relative">
+                    <select
+                      name="farm"
+                      value={newReportData.farm}
+                      onChange={handleReportInputChange}
+                      required
+                      className="appearance-none w-full p-3 border rounded-lg bg-white dark:bg-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600"
+                    >
+                      <option value="" disabled>Choose a farm</option>
+                      {availableFarms.map((f) => (
+                        <option key={f._id} value={f.name}>{f.name}{f.subtitle ? ` • ${f.subtitle}` : ''}</option>
+                      ))}
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
+                      <svg className="w-4 h-4 text-gray-500" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z" clipRule="evenodd"/></svg>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Select Plot (optional)</label>
+                  <div>
+                    <select
+                      name="plot"
+                      value={newReportData.plot}
+                      onChange={handleReportInputChange}
+                      className="appearance-none w-full p-3 border rounded-lg bg-white dark:bg-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600"
+                    >
+                      {plotsLoading ? (
+                        <option>Loading plots...</option>
+                      ) : availablePlots.length > 0 ? (
+                        <>
+                          <option value="">(None)</option>
+                          {availablePlots.map(p => (
+                            <option key={p._id} value={p._id}>{p.name}</option>
+                          ))}
+                        </>
+                      ) : (
+                        <option value="">No plots available</option>
+                      )}
+                    </select>
+                  </div>
+                </div>
                 <input 
                   type="date" 
                   name="date" 
@@ -580,7 +705,7 @@ const Reports = () => {
                               {/* Delete Report */}
                               <button 
                                 title="Delete Report" 
-                                onClick={() => handleDeleteReport(report.id)} 
+                                onClick={() => showDeleteConfirm(report.id)} 
                                 className="text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition duration-150"
                               >
                                 <Trash2 className="w-5 h-5" />

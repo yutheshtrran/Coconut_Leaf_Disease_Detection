@@ -1,15 +1,24 @@
-import React, { useState } from "react";
-import { Upload as UploadIcon, ChevronDown } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { Upload as UploadIcon, ChevronDown, AlertCircle, CheckCircle, Video, Camera, Loader2, Download, RefreshCw } from "lucide-react";
+import * as farmService from "../services/farmService";
+import API from "../services/api";
 
-const farms = [
-  { id: 1, name: "Green Acres Farm" },
-  { id: 2, name: "Sunset Fields Co." },
-  { id: 3, name: "Riverbend Plantation" },
+// Animated step labels shown while drone video is processing
+const DRONE_VIDEO_STATUSES = [
+  "Uploading video…",
+  "Extracting frames…",
+  "Generating panoramic image…",
+  "Detecting & numbering coconut trees…",
+  "Finalising results…",
 ];
 
 const Upload = () => {
   const [farm, setFarm] = useState("");
   const [plot, setPlot] = useState("");
+  const [farms, setFarms] = useState([]);
+  const [plots, setPlots] = useState([]);
+  const [farmLoading, setFarmLoading] = useState(true);
+  const [plotLoading, setPlotLoading] = useState(false);
   const [notes, setNotes] = useState("");
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [isDragActive, setIsDragActive] = useState(false);
@@ -21,6 +30,59 @@ const Upload = () => {
   const [uploadType, setUploadType] = useState(null); // 'image' or 'video'
   const [droneResult, setDroneResult] = useState(null); // Drone processing results
   const [showDroneModal, setShowDroneModal] = useState(false); // Modal for drone results
+  const [reportMessage, setReportMessage] = useState(''); // Report save feedback
+  const [reportError, setReportError] = useState('');
+
+  // ── Drone VIDEO state ──────────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState('upload'); // 'upload' | 'drone-video'
+  const [droneVideoFile, setDroneVideoFile] = useState(null);
+  const [droneVideoLoading, setDroneVideoLoading] = useState(false);
+  const [droneVideoStatusIdx, setDroneVideoStatusIdx] = useState(0);
+  const [droneVideoResult, setDroneVideoResult] = useState(null);
+  const [droneVideoError, setDroneVideoError] = useState(null);
+  const [droneVideoPanoView, setDroneVideoPanoView] = useState('annotated'); // 'annotated'|'panorama'
+  const droneVideoFileRef = useRef(null);
+  const droneVideoStatusTimer = useRef(null);
+
+  // Fetch farms on component mount
+  useEffect(() => {
+    const loadFarms = async () => {
+      try {
+        setFarmLoading(true);
+        const response = await farmService.getUserFarms();
+        setFarms(response.farms || []);
+      } catch (err) {
+        console.error("Error loading farms:", err);
+      } finally {
+        setFarmLoading(false);
+      }
+    };
+
+    loadFarms();
+  }, []);
+
+  // Fetch plots when farm is selected
+  useEffect(() => {
+    if (!farm) {
+      setPlots([]);
+      return;
+    }
+
+    const loadPlots = async () => {
+      try {
+        setPlotLoading(true);
+        const response = await farmService.getFarmPlots(farm);
+        setPlots(response.plots || []);
+      } catch (err) {
+        console.error("Error loading plots:", err);
+        setPlots([]);
+      } finally {
+        setPlotLoading(false);
+      }
+    };
+
+    loadPlots();
+  }, [farm, farms]);
 
   const handleFarmChange = (e) => setFarm(e.target.value);
   const handlePlotChange = (e) => setPlot(e.target.value);
@@ -56,7 +118,7 @@ const Upload = () => {
 
   const handleStartAnalysis = async () => {
     if (selectedFiles.length === 0) return alert("Please upload at least one file.");
-    
+
     const firstFile = selectedFiles[0];
     const isVideo = isVideoFile(firstFile);
 
@@ -72,6 +134,8 @@ const Upload = () => {
   const handleImageAnalysis = async () => {
     setLoading(true);
     setVideoAnalysis(null);
+    setReportMessage('');
+    setReportError('');
 
     const counts = {}; // disease occurrence counts
     const totalImages = selectedFiles.length;
@@ -116,9 +180,78 @@ const Upload = () => {
     const healthyPct = totalImages > 0 ? Math.round((healthyCount / totalImages) * 100) : 0;
 
     setHealthyPercent(healthyPct);
-
     setDiseaseLevels(aggregatedResults);
+
+    // Save analysis as report to backend
+    await saveAnalysisReport(aggregatedResults, healthyPct);
+
     setLoading(false);
+  };
+
+  const saveAnalysisReport = async (diseases, healthyPercent) => {
+    if (!farm) {
+      setReportError('Please select a farm before analyzing');
+      return;
+    }
+
+    try {
+      // Get farm name from farms array
+      const selectedFarmObj = farms.find(f => f._id === farm);
+      const farmName = selectedFarmObj?.name || farm;
+
+      // Determine primary issue and severity
+      let primaryIssue = 'Plantation Health Analysis';
+      let maxSeverityValue = 0;
+      let maxSeverityLabel = 'LOW';
+
+      if (diseases.length > 0) {
+        // Find the disease with highest percentage
+        const worstDisease = diseases.reduce((prev, current) =>
+          (prev.level > current.level) ? prev : current
+        );
+
+        primaryIssue = `${worstDisease.name} detected (${worstDisease.level}%)`;
+        maxSeverityValue = worstDisease.level;
+
+        // Determine severity label based on percentage
+        if (maxSeverityValue >= 75) {
+          maxSeverityLabel = 'CRITICAL';
+        } else if (maxSeverityValue >= 50) {
+          maxSeverityLabel = 'HIGH';
+        } else if (maxSeverityValue >= 25) {
+          maxSeverityLabel = 'MODERATE';
+        } else {
+          maxSeverityLabel = 'LOW';
+        }
+      }
+
+      const reportData = {
+        farm: farmName,
+        date: new Date().toISOString().split('T')[0],
+        issue: primaryIssue,
+        severity: {
+          value: maxSeverityValue,
+          label: maxSeverityLabel
+        },
+        status: 'Finalized',
+        plotId: plot || null,
+        note: notes || null,
+        analysisData: {
+          totalImagesAnalyzed: selectedFiles.length,
+          healthyPercent,
+          diseases: diseases.map(d => ({ name: d.name, percentage: d.level }))
+        }
+      };
+
+      const response = await API.post('/reports', reportData);
+      setReportMessage('Analysis saved as report successfully!');
+
+      // Clear message after 3 seconds
+      setTimeout(() => setReportMessage(''), 3000);
+    } catch (err) {
+      console.error('Error saving analysis as report:', err);
+      setReportError(err.response?.data?.message || 'Failed to save analysis report');
+    }
   };
 
   const handleVideoAnalysis = async (videoFile) => {
@@ -212,325 +345,671 @@ const Upload = () => {
     setLoading(false);
   };
 
+  // ── Drone VIDEO handlers ───────────────────────────────────────────────
+  const handleDroneVideoSelect = (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setDroneVideoFile(f);
+    setDroneVideoResult(null);
+    setDroneVideoError(null);
+  };
+
+  const startDroneVideoStatusCycle = () => {
+    let i = 0;
+    setDroneVideoStatusIdx(0);
+    droneVideoStatusTimer.current = setInterval(() => {
+      i = Math.min(i + 1, DRONE_VIDEO_STATUSES.length - 1);
+      setDroneVideoStatusIdx(i);
+    }, 4000);
+  };
+
+  const stopDroneVideoStatusCycle = () => {
+    if (droneVideoStatusTimer.current) {
+      clearInterval(droneVideoStatusTimer.current);
+      droneVideoStatusTimer.current = null;
+    }
+  };
+
+  const handleDroneVideoAnalyse = async () => {
+    if (!droneVideoFile) return;
+    setDroneVideoLoading(true);
+    setDroneVideoError(null);
+    setDroneVideoResult(null);
+    startDroneVideoStatusCycle();
+    try {
+      const fd = new FormData();
+      fd.append('file', droneVideoFile);
+      const res = await fetch('http://127.0.0.1:5000/process-drone-video', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || `Server error ${res.status}`);
+      setDroneVideoResult(data);
+      setDroneVideoPanoView('annotated');
+    } catch (err) {
+      setDroneVideoError(err.message || 'Analysis failed. Make sure the ML server is running.');
+    } finally {
+      stopDroneVideoStatusCycle();
+      setDroneVideoLoading(false);
+    }
+  };
+
+  const handleDroneVideoReset = () => {
+    setDroneVideoFile(null);
+    setDroneVideoResult(null);
+    setDroneVideoError(null);
+    if (droneVideoFileRef.current) droneVideoFileRef.current.value = '';
+  };
+
+  const handleDownload = (src, name) => {
+    const a = document.createElement('a');
+    a.href = src; a.download = name; a.click();
+  };
+
   return (
     <div className="pt-4 p-4 sm:p-6 lg:p-8 bg-gray-50 dark:bg-gray-900 min-h-screen">
-      <h1 className="text-3xl font-bold text-emerald-800 mb-6">Upload Drone Images</h1>
-      <p className="text-gray-700 mb-6">
-        Upload leaf or drone images for automated plantation health analysis.
+      <h1 className="text-3xl font-bold text-emerald-800 mb-2">Upload &amp; Analyse</h1>
+      <p className="text-gray-700 mb-4">
+        Upload leaf images, drone images, or a drone video for automated plantation health analysis.
       </p>
 
-      <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 space-y-6 max-w-6xl flex flex-col md:flex-row md:space-x-6">
-
-        {/* LEFT SIDE FORM */}
-        <div className="flex-1 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="relative">
-              <label className="block text-sm font-medium text-gray-800 dark:text-gray-200 mb-1">Farm</label>
-              <div className="relative">
-                <select value={farm} onChange={handleFarmChange} className="w-full pl-4 pr-10 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:border-emerald-600 focus:ring-emerald-500 appearance-none bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
-                  <option value="" disabled>Select farm</option>
-                  {farms.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-emerald-400 pointer-events-none" />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-800 mb-1">
-                Plot/Section <span className="text-gray-500">(Optional)</span>
-              </label>
-              <input type="text" value={plot} onChange={handlePlotChange} placeholder="e.g., A1, North Section" className="w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:border-emerald-600 focus:ring-emerald-500 text-gray-900 placeholder-gray-400" />
-            </div>
-          </div>
-
-          {/* Drag & Drop */}
-          <label htmlFor="file-upload" className={`flex flex-col items-center justify-center p-10 rounded-xl border-2 border-dashed transition duration-300 cursor-pointer
-            ${isDragActive ? "border-emerald-600 bg-emerald-50" : "border-gray-300 bg-gray-100 hover:bg-gray-200"}`}
-            onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} onDragOver={handleDragOver} onDrop={handleDrop}>
-            <UploadIcon className="h-10 w-10 text-emerald-500 mb-3" />
-            <p className="text-gray-800 mb-2 font-medium">Drop images here</p>
-            <p className="text-gray-500 text-sm mb-4">or click to browse your computer</p>
-            <input type="file" id="file-upload" multiple onChange={handleFileSelect} accept="image/jpeg,image/png,image/tiff,video/mp4,video/avi,video/quicktime,video/x-msvideo" className="hidden" />
-            {selectedFiles.length > 0 && <p className="mt-3 text-gray-800 font-medium">{selectedFiles.length} file(s) selected</p>}
-            <p className="mt-4 text-gray-500 text-xs">Supported formats: JPG, PNG, TIFF, MP4, AVI, MOV (max 50MB per file)</p>
-          </label>
-
-          {/* Notes */}
-          <div className="mt-6">
-            <label className="block text-sm font-medium text-gray-800 mb-1">Notes <span className="text-gray-500">(Optional)</span></label>
-            <textarea value={notes} onChange={handleNotesChange} rows={4} placeholder="Add any observations or context about this flight..." className="w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:border-emerald-600 focus:ring-emerald-500 text-gray-900 placeholder-gray-400" />
-          </div>
-
-          <div className="mt-6 text-right space-x-4">
-            <button type="button" onClick={handleStartAnalysis} disabled={loading} className="inline-flex items-center justify-center px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-xl shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition duration-150">
-              {loading ? "Analyzing..." : "Start Analysis"}
-            </button>
-            <button type="button" onClick={handleDroneProcessing} disabled={loading || selectedFiles.length < 2} className="inline-flex items-center justify-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150 disabled:opacity-50">
-              {loading ? "Processing..." : "Process Drone Images"}
-            </button>
-          </div>
-        </div>
-
-        {/* RIGHT SIDE PANEL */}
-        <div className="mt-6 md:mt-0 w-full md:w-1/3 bg-gray-100 p-5 rounded-xl shadow-inner border border-gray-200 flex flex-col space-y-6">
-          
-          {videoAnalysis ? (
-            // VIDEO ANALYSIS RESULTS
-            <div>
-              <h3 className="text-emerald-800 font-semibold mb-4 text-center">Video Analysis Results</h3>
-              
-              {/* Coconut Trees Found */}
-              <div className="mb-4 bg-white p-4 rounded-lg border border-gray-300">
-                <p className="text-sm text-gray-600 mb-1">Coconut Trees Found</p>
-                <div className="text-3xl font-bold text-emerald-700">{videoAnalysis.coconutTreesFound}</div>
-              </div>
-
-              {/* Farm Size */}
-              <div className="mb-4 bg-white p-4 rounded-lg border border-gray-300">
-                <p className="text-sm text-gray-600 mb-1">Farm Size</p>
-                <div className="text-2xl font-bold text-emerald-700">
-                  {videoAnalysis.farmSize} <span className="text-sm text-gray-600">{videoAnalysis.farmSizeUnit}</span>
-                </div>
-              </div>
-
-              {/* Tree Health Percentage */}
-              <div className="mb-4 bg-white p-4 rounded-lg border border-gray-300">
-                <div className="flex justify-between mb-2">
-                  <p className="text-sm text-gray-600">Overall Tree Health</p>
-                  <span className="font-semibold text-emerald-700">{videoAnalysis.treeHealth}%</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-3">
-                  <div className="bg-emerald-600 h-3 rounded-full" style={{ width: `${videoAnalysis.treeHealth}%` }} />
-                </div>
-              </div>
-
-              {/* Healthy vs Diseased Trees */}
-              <div className="grid grid-cols-2 gap-2 mb-4">
-                <div className="bg-green-50 p-3 rounded-lg border border-green-200">
-                  <p className="text-xs text-gray-600">Healthy Trees</p>
-                  <div className="text-xl font-bold text-green-700">{videoAnalysis.healthyTrees}</div>
-                </div>
-                <div className="bg-red-50 p-3 rounded-lg border border-red-200">
-                  <p className="text-xs text-gray-600">Diseased Trees</p>
-                  <div className="text-xl font-bold text-red-700">{videoAnalysis.diseasedTrees}</div>
-                </div>
-              </div>
-
-              {/* Canopy Density */}
-              <div className="bg-white p-4 rounded-lg border border-gray-300">
-                <div className="flex justify-between mb-2">
-                  <p className="text-sm text-gray-600">Canopy Density</p>
-                  <span className="font-semibold text-blue-700">{videoAnalysis.canopyDensity}%</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-3">
-                  <div className="bg-blue-600 h-3 rounded-full" style={{ width: `${videoAnalysis.canopyDensity}%` }} />
-                </div>
-              </div>
-
-              {/* Disease Breakdown */}
-              {Object.keys(videoAnalysis.diseaseBreakdown).length > 0 && (
-                <div className="bg-white p-4 rounded-lg border border-gray-300">
-                  <p className="text-sm font-semibold text-gray-800 mb-3">Disease Breakdown</p>
-                  {Object.entries(videoAnalysis.diseaseBreakdown).map(([disease, count], idx) => (
-                    <div key={idx} className="mb-2 flex justify-between text-sm">
-                      <span className="text-gray-700">{disease}</span>
-                      <span className="font-semibold text-gray-800">{count}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (
-            // IMAGE ANALYSIS RESULTS
-            <div>
-              <h3 className="text-emerald-800 font-semibold mb-4 text-center">Disease Levels</h3>
-              <div className="text-center mb-4">
-                <span className="text-sm text-gray-600">Healthy:</span>
-                <div className="text-2xl font-semibold text-emerald-700">{healthyPercent != null ? `${healthyPercent}%` : '--'}</div>
-              </div>
-              {diseaseLevels.length > 0 ? (
-                diseaseLevels.map((disease, idx) => (
-                  <div key={idx} className="mb-4">
-                    <div className="flex justify-between mb-1 text-sm text-gray-700 font-medium">
-                      <span>{disease.name}</span>
-                      <span>{disease.level}%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-4">
-                      <div className="bg-emerald-600 h-4 rounded-full" style={{ width: `${disease.level}%` }} />
-                    </div>
-                    {diseaseRemedies[disease.name] && (
-                      <p className="text-xs text-gray-600 mt-2 italic">
-                        <strong>Remedy:</strong> {diseaseRemedies[disease.name]}
-                      </p>
-                    )}
-                  </div>
-                ))
-              ) : (
-                <p className="text-center text-gray-500 text-sm">No predictions yet</p>
-              )}
-            </div>
-          )}
-
-          <div>
-            <h3 className="text-emerald-800 font-semibold mb-4 text-center">Uploaded Files</h3>
-            {selectedFiles.length > 0 ? (
-              <div>
-                {uploadType === 'video' ? (
-                  <div className="bg-gray-800 rounded-lg p-4 text-center">
-                    <div className="text-white text-sm">📹 {selectedFiles[0].name}</div>
-                    <div className="text-gray-400 text-xs mt-1">
-                      {(selectedFiles[0].size / (1024 * 1024)).toFixed(2)} MB
-                    </div>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-3">
-                    {selectedFiles.slice(0, 4).map((file, idx) => (
-                      <img key={idx} src={URL.createObjectURL(file)} alt={file.name} className="w-full h-24 object-cover rounded-lg border border-gray-300 shadow-sm" />
-                    ))}
-                    {selectedFiles.length > 4 && (
-                      <p className="col-span-2 text-center text-gray-600 text-sm mt-2">+{selectedFiles.length - 4} more</p>
-                    )}
-                  </div>
-                )}
-              </div>
-            ) : <p className="text-center text-gray-500 text-sm">No files uploaded yet</p>}
-          </div>
-        </div>
+      {/* ── Tab switcher ─────────────────────────────────────────────── */}
+      <div className="flex gap-2 mb-6 border-b border-gray-200 dark:border-gray-700">
+        {[
+          { key: 'upload', label: 'Image / Video Upload', icon: <UploadIcon size={15} /> },
+          { key: 'drone-video', label: 'Drone Video', icon: <Video size={15} /> },
+        ].map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`flex items-center gap-2 px-5 py-2.5 text-sm font-medium rounded-t-xl border-b-2 transition-colors duration-150 ${activeTab === tab.key
+              ? 'border-emerald-600 text-emerald-700 dark:text-emerald-400 bg-white dark:bg-gray-800'
+              : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800'
+              }`}
+          >
+            {tab.icon} {tab.label}
+          </button>
+        ))}
       </div>
 
-      {/* Drone Processing Modal */}
-      {showDroneModal && droneResult && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-bold text-emerald-800">Drone Image Analysis Results</h2>
-                <button
-                  onClick={() => setShowDroneModal(false)}
-                  className="text-gray-500 hover:text-gray-700 text-2xl"
-                >
-                  ×
-                </button>
-              </div>
+      {/* ── UPLOAD TAB content ─────────────────────────────────────── */}
+      {activeTab === 'upload' && (<>
 
-              <div className="space-y-6">
-                {/* Statistics */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-emerald-50 p-4 rounded-lg border border-emerald-200">
-                  <p className="text-sm text-emerald-600 mb-1">Trees Detected</p>
-                  <div className="text-3xl font-bold text-emerald-700">{droneResult.num_trees}</div>
+        {/* Report Messages */}
+        {reportMessage && (
+          <div className="mb-6 p-4 bg-green-100 border border-green-400 text-green-700 rounded-lg flex items-center gap-3">
+            <CheckCircle size={20} />
+            {reportMessage}
+          </div>
+        )}
+        {reportError && (
+          <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg flex items-center gap-3">
+            <AlertCircle size={20} />
+            {reportError}
+          </div>
+        )}
+
+        <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 space-y-6 max-w-6xl flex flex-col md:flex-row md:space-x-6">
+
+          {/* LEFT SIDE FORM */}
+          <div className="flex-1 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="relative">
+                <label className="block text-sm font-medium text-gray-800 dark:text-gray-200 mb-1">Farm</label>
+                <div className="relative">
+                  <select
+                    value={farm}
+                    onChange={handleFarmChange}
+                    disabled={farmLoading}
+                    className="w-full pl-4 pr-10 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:border-emerald-600 focus:ring-emerald-500 appearance-none bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <option value="" disabled>{farmLoading ? "Loading farms..." : "Select farm"}</option>
+                    {farms.map((f) => (
+                      <option key={f._id} value={f._id}>{f.name}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-emerald-400 pointer-events-none" />
                 </div>
-                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                  <p className="text-sm text-blue-600 mb-1">Images Processed</p>
-                  <div className="text-3xl font-bold text-blue-700">{selectedFiles.length}</div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-800 mb-1">
+                  Plot/Section
+                </label>
+                <div className="relative">
+                  <select
+                    value={plot}
+                    onChange={handlePlotChange}
+                    disabled={!farm || plotLoading || plots.length === 0}
+                    className="w-full pl-4 pr-10 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:border-emerald-600 focus:ring-emerald-500 appearance-none bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <option value="" disabled>
+                      {plotLoading ? "Loading plots..." : plots.length === 0 ? "No plots available" : "Select plot"}
+                    </option>
+                    {plots.map((p) => (
+                      <option key={p._id} value={p._id}>
+                        {p.name || p.id}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-emerald-400 pointer-events-none" />
                 </div>
-                <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                  <p className="text-sm text-green-600 mb-1">Healthy Trees</p>
-                  <div className="text-3xl font-bold text-green-700">
-                    {droneResult.segmentation_stats?.healthy_trees || 0}
+              </div>
+            </div>
+
+            <label htmlFor="file-upload" className={`flex flex-col items-center justify-center p-10 rounded-xl border-2 border-dashed transition duration-300 cursor-pointer
+            ${isDragActive ? "border-emerald-600 bg-emerald-50" : "border-gray-300 bg-gray-100 hover:bg-gray-200"}`}
+              onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} onDragOver={handleDragOver} onDrop={handleDrop}>
+              <UploadIcon className="h-10 w-10 text-emerald-500 mb-3" />
+              <p className="text-gray-800 mb-2 font-medium">Drop images here</p>
+              <p className="text-gray-500 text-sm mb-4">or click to browse your computer</p>
+              <input type="file" id="file-upload" multiple onChange={handleFileSelect} accept="image/jpeg,image/png,image/tiff,image/webp,image/jpg" className="hidden" />
+              {selectedFiles.length > 0 && <p className="mt-3 text-gray-800 font-medium">{selectedFiles.length} image(s) selected</p>}
+              <p className="mt-4 text-gray-500 text-xs">Supported formats: JPG, PNG, TIFF, WEBP (max 50MB per file)</p>
+            </label>
+
+            {/* Notes */}
+            <div className="mt-6">
+              <label className="block text-sm font-medium text-gray-800 mb-1">Notes <span className="text-gray-500">(Optional)</span></label>
+              <textarea value={notes} onChange={handleNotesChange} rows={4} placeholder="Add any observations or context about this flight..." className="w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:border-emerald-600 focus:ring-emerald-500 text-gray-900 placeholder-gray-400" />
+            </div>
+
+            <div className="mt-6 text-right space-x-4">
+              <button type="button" onClick={handleStartAnalysis} disabled={loading} className="inline-flex items-center justify-center px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-xl shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition duration-150">
+                {loading ? "Analyzing..." : "Start Analysis"}
+              </button>
+              <button type="button" onClick={handleDroneProcessing} disabled={loading || selectedFiles.length < 2} className="inline-flex items-center justify-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150 disabled:opacity-50">
+                {loading ? "Processing..." : "Process Drone Images"}
+              </button>
+            </div>
+          </div>
+
+          {/* RIGHT SIDE PANEL */}
+          <div className="mt-6 md:mt-0 w-full md:w-1/3 bg-gray-100 p-5 rounded-xl shadow-inner border border-gray-200 flex flex-col space-y-6">
+
+            {videoAnalysis ? (
+              // VIDEO ANALYSIS RESULTS
+              <div>
+                <h3 className="text-emerald-800 font-semibold mb-4 text-center">Video Analysis Results</h3>
+
+                {/* Coconut Trees Found */}
+                <div className="mb-4 bg-white p-4 rounded-lg border border-gray-300">
+                  <p className="text-sm text-gray-600 mb-1">Coconut Trees Found</p>
+                  <div className="text-3xl font-bold text-emerald-700">{videoAnalysis.coconutTreesFound}</div>
+                </div>
+
+                {/* Farm Size */}
+                <div className="mb-4 bg-white p-4 rounded-lg border border-gray-300">
+                  <p className="text-sm text-gray-600 mb-1">Farm Size</p>
+                  <div className="text-2xl font-bold text-emerald-700">
+                    {videoAnalysis.farmSize} <span className="text-sm text-gray-600">{videoAnalysis.farmSizeUnit}</span>
                   </div>
                 </div>
-                <div className="bg-red-50 p-4 rounded-lg border border-red-200">
-                  <p className="text-sm text-red-600 mb-1">Diseased Trees</p>
-                  <div className="text-3xl font-bold text-red-700">
-                    {droneResult.segmentation_stats?.diseased_trees || 0}
-                  </div>
-                </div>
-              </div>
 
-              {/* Health Percentage */}
-              {droneResult.segmentation_stats && (
-                <div className="bg-gray-50 p-4 rounded-lg border border-gray-300">
+                {/* Tree Health Percentage */}
+                <div className="mb-4 bg-white p-4 rounded-lg border border-gray-300">
                   <div className="flex justify-between mb-2">
-                    <p className="text-sm text-gray-600">Overall Farm Health</p>
-                    <span className="font-semibold text-emerald-700">
-                      {droneResult.segmentation_stats.health_percentage?.toFixed(1)}%
-                    </span>
+                    <p className="text-sm text-gray-600">Overall Tree Health</p>
+                    <span className="font-semibold text-emerald-700">{videoAnalysis.treeHealth}%</span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-3">
-                    <div
-                      className="bg-emerald-600 h-3 rounded-full"
-                      style={{ width: `${droneResult.segmentation_stats.health_percentage}%` }}
-                    />
+                    <div className="bg-emerald-600 h-3 rounded-full" style={{ width: `${videoAnalysis.treeHealth}%` }} />
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Estimated Farm Size: {droneResult.segmentation_stats.estimated_farm_size?.toFixed(1)} hectares
-                  </p>
-                </div>
-              )}
-                {/* Annotated Image */}
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-3">Annotated Panorama</h3>
-                  <div className="flex justify-center">
-                    <img
-                      src={droneResult.annotated_image}
-                      alt="Annotated panorama with tree detections"
-                      className="max-w-full h-auto rounded-lg shadow-lg border border-gray-300"
-                    />
-                  </div>
-                  <p className="text-sm text-gray-600 mt-2 text-center">
-                    Red circles show detected coconut trees with unique IDs
-                  </p>
                 </div>
 
-                {/* Tree Data Table */}
-                {droneResult.tree_data && droneResult.tree_data.length > 0 && (
+                {/* Healthy vs Diseased Trees */}
+                <div className="grid grid-cols-2 gap-2 mb-4">
+                  <div className="bg-green-50 p-3 rounded-lg border border-green-200">
+                    <p className="text-xs text-gray-600">Healthy Trees</p>
+                    <div className="text-xl font-bold text-green-700">{videoAnalysis.healthyTrees}</div>
+                  </div>
+                  <div className="bg-red-50 p-3 rounded-lg border border-red-200">
+                    <p className="text-xs text-gray-600">Diseased Trees</p>
+                    <div className="text-xl font-bold text-red-700">{videoAnalysis.diseasedTrees}</div>
+                  </div>
+                </div>
+
+                {/* Canopy Density */}
+                <div className="bg-white p-4 rounded-lg border border-gray-300">
+                  <div className="flex justify-between mb-2">
+                    <p className="text-sm text-gray-600">Canopy Density</p>
+                    <span className="font-semibold text-blue-700">{videoAnalysis.canopyDensity}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div className="bg-blue-600 h-3 rounded-full" style={{ width: `${videoAnalysis.canopyDensity}%` }} />
+                  </div>
+                </div>
+
+                {/* Disease Breakdown */}
+                {Object.keys(videoAnalysis.diseaseBreakdown).length > 0 && (
                   <div className="bg-white p-4 rounded-lg border border-gray-300">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-3">Detected Trees</h3>
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full table-auto">
-                        <thead>
-                          <tr className="bg-gray-50">
-                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Tree ID</th>
-                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Bounding Box</th>
-                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Disease Status</th>
-                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Health %</th>
-                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Confidence</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {droneResult.tree_data.map((tree, idx) => (
-                            <tr key={idx} className="border-t border-gray-200">
-                              <td className="px-4 py-2 text-sm text-gray-900">{tree.id}</td>
-                              <td className="px-4 py-2 text-sm text-gray-600">
-                                [{tree.bbox.join(', ')}]
-                              </td>
-                              <td className="px-4 py-2 text-sm">
-                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                  tree.disease?.toLowerCase() === 'healthy'
-                                    ? 'bg-green-100 text-green-800'
-                                    : 'bg-red-100 text-red-800'
-                                }`}>
-                                  {tree.disease || 'Unknown'}
-                                </span>
-                              </td>
-                              <td className="px-4 py-2 text-sm text-gray-600">
-                                {tree.health_percentage ? `${tree.health_percentage.toFixed(1)}%` : 'N/A'}
-                              </td>
-                              <td className="px-4 py-2 text-sm text-gray-600">
-                                {tree.confidence ? `${(tree.confidence * 100).toFixed(1)}%` : 'N/A'}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                    <p className="text-sm font-semibold text-gray-800 mb-3">Disease Breakdown</p>
+                    {Object.entries(videoAnalysis.diseaseBreakdown).map(([disease, count], idx) => (
+                      <div key={idx} className="mb-2 flex justify-between text-sm">
+                        <span className="text-gray-700">{disease}</span>
+                        <span className="font-semibold text-gray-800">{count}</span>
+                      </div>
+                    ))}
                   </div>
                 )}
+              </div>
+            ) : (
+              // IMAGE ANALYSIS RESULTS
+              <div>
+                <h3 className="text-emerald-800 font-semibold mb-4 text-center">Disease Levels</h3>
+                <div className="text-center mb-4">
+                  <span className="text-sm text-gray-600">Healthy:</span>
+                  <div className="text-2xl font-semibold text-emerald-700">{healthyPercent != null ? `${healthyPercent}%` : '--'}</div>
+                </div>
+                {diseaseLevels.length > 0 ? (
+                  diseaseLevels.map((disease, idx) => (
+                    <div key={idx} className="mb-4">
+                      <div className="flex justify-between mb-1 text-sm text-gray-700 font-medium">
+                        <span>{disease.name}</span>
+                        <span>{disease.level}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-4">
+                        <div className="bg-emerald-600 h-4 rounded-full" style={{ width: `${disease.level}%` }} />
+                      </div>
+                      {diseaseRemedies[disease.name] && (
+                        <p className="text-xs text-gray-600 mt-2 italic">
+                          <strong>Remedy:</strong> {diseaseRemedies[disease.name]}
+                        </p>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-center text-gray-500 text-sm">No predictions yet</p>
+                )}
+              </div>
+            )}
 
-                {/* Close Button */}
-                <div className="text-center">
+            <div>
+              <h3 className="text-emerald-800 font-semibold mb-4 text-center">Uploaded Files</h3>
+              {selectedFiles.length > 0 ? (
+                <div>
+                  {uploadType === 'video' ? (
+                    <div className="bg-gray-800 rounded-lg p-4 text-center">
+                      <div className="text-white text-sm">📹 {selectedFiles[0].name}</div>
+                      <div className="text-gray-400 text-xs mt-1">
+                        {(selectedFiles[0].size / (1024 * 1024)).toFixed(2)} MB
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3">
+                      {selectedFiles.slice(0, 4).map((file, idx) => (
+                        <img key={idx} src={URL.createObjectURL(file)} alt={file.name} className="w-full h-24 object-cover rounded-lg border border-gray-300 shadow-sm" />
+                      ))}
+                      {selectedFiles.length > 4 && (
+                        <p className="col-span-2 text-center text-gray-600 text-sm mt-2">+{selectedFiles.length - 4} more</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : <p className="text-center text-gray-500 text-sm">No files uploaded yet</p>}
+            </div>
+          </div>
+        </div>
+
+        {/* Drone Processing Modal */}
+        {showDroneModal && droneResult && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-2xl font-bold text-emerald-800">Drone Image Analysis Results</h2>
                   <button
                     onClick={() => setShowDroneModal(false)}
-                    className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg shadow-md transition duration-150"
+                    className="text-gray-500 hover:text-gray-700 text-2xl"
                   >
-                    Close
+                    ×
+                  </button>
+                </div>
+
+                <div className="space-y-6">
+                  {/* Statistics */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="bg-emerald-50 p-4 rounded-lg border border-emerald-200">
+                      <p className="text-sm text-emerald-600 mb-1">Trees Detected</p>
+                      <div className="text-3xl font-bold text-emerald-700">{droneResult.num_trees}</div>
+                    </div>
+                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                      <p className="text-sm text-blue-600 mb-1">Images Processed</p>
+                      <div className="text-3xl font-bold text-blue-700">{selectedFiles.length}</div>
+                    </div>
+                    <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                      <p className="text-sm text-green-600 mb-1">Healthy Trees</p>
+                      <div className="text-3xl font-bold text-green-700">
+                        {droneResult.segmentation_stats?.healthy_trees || 0}
+                      </div>
+                    </div>
+                    <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+                      <p className="text-sm text-red-600 mb-1">Diseased Trees</p>
+                      <div className="text-3xl font-bold text-red-700">
+                        {droneResult.segmentation_stats?.diseased_trees || 0}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Health Percentage */}
+                  {droneResult.segmentation_stats && (
+                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-300">
+                      <div className="flex justify-between mb-2">
+                        <p className="text-sm text-gray-600">Overall Farm Health</p>
+                        <span className="font-semibold text-emerald-700">
+                          {droneResult.segmentation_stats.health_percentage?.toFixed(1)}%
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-3">
+                        <div
+                          className="bg-emerald-600 h-3 rounded-full"
+                          style={{ width: `${droneResult.segmentation_stats.health_percentage}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Estimated Farm Size: {droneResult.segmentation_stats.estimated_farm_size?.toFixed(1)} hectares
+                      </p>
+                    </div>
+                  )}
+                  {/* Annotated Image */}
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-3">Annotated Panorama</h3>
+                    <div className="flex justify-center">
+                      <img
+                        src={droneResult.annotated_image}
+                        alt="Annotated panorama with tree detections"
+                        className="max-w-full h-auto rounded-lg shadow-lg border border-gray-300"
+                      />
+                    </div>
+                    <p className="text-sm text-gray-600 mt-2 text-center">
+                      Red circles show detected coconut trees with unique IDs
+                    </p>
+                  </div>
+
+                  {/* Tree Data Table */}
+                  {droneResult.tree_data && droneResult.tree_data.length > 0 && (
+                    <div className="bg-white p-4 rounded-lg border border-gray-300">
+                      <h3 className="text-lg font-semibold text-gray-800 mb-3">Detected Trees</h3>
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full table-auto">
+                          <thead>
+                            <tr className="bg-gray-50">
+                              <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Tree ID</th>
+                              <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Bounding Box</th>
+                              <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Disease Status</th>
+                              <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Health %</th>
+                              <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Confidence</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {droneResult.tree_data.map((tree, idx) => (
+                              <tr key={idx} className="border-t border-gray-200">
+                                <td className="px-4 py-2 text-sm text-gray-900">{tree.id}</td>
+                                <td className="px-4 py-2 text-sm text-gray-600">
+                                  [{tree.bbox.join(', ')}]
+                                </td>
+                                <td className="px-4 py-2 text-sm">
+                                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${tree.disease?.toLowerCase() === 'healthy'
+                                    ? 'bg-green-100 text-green-800'
+                                    : 'bg-red-100 text-red-800'
+                                    }`}>
+                                    {tree.disease || 'Unknown'}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-2 text-sm text-gray-600">
+                                  {tree.health_percentage ? `${tree.health_percentage.toFixed(1)}%` : 'N/A'}
+                                </td>
+                                <td className="px-4 py-2 text-sm text-gray-600">
+                                  {tree.confidence ? `${(tree.confidence * 100).toFixed(1)}%` : 'N/A'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Close Button */}
+                  <div className="text-center">
+                    <button
+                      onClick={() => setShowDroneModal(false)}
+                      className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg shadow-md transition duration-150"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+      </>)} {/* end activeTab === 'upload' */}
+
+      {/* ═══════════════════════════════════════════════════════════════
+           DRONE VIDEO TAB
+      ═══════════════════════════════════════════════════════════════ */}
+      {activeTab === 'drone-video' && (
+        <div className="max-w-5xl space-y-6">
+
+          {/* Upload card */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
+            <h2 className="text-xl font-semibold text-emerald-800 dark:text-emerald-300 mb-1 flex items-center gap-2">
+              <Video size={20} /> Upload Drone Video
+            </h2>
+            <p className="text-sm text-gray-500 mb-5">
+              Upload an aerial/drone video. Frames are extracted and saved to <code>videoframes/</code>, stitched into a panorama, and coconut trees are automatically detected and numbered.
+            </p>
+
+            {/* File picker */}
+            <label
+              htmlFor="drone-video-input"
+              className={`flex flex-col items-center justify-center p-10 rounded-xl border-2 border-dashed transition duration-300 ${droneVideoLoading ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-emerald-50 hover:border-emerald-400'
+                } border-gray-300 bg-gray-50`}
+            >
+              {droneVideoFile ? (
+                <>
+                  <Video size={40} className="text-emerald-600 mb-2" />
+                  <p className="font-semibold text-gray-800">{droneVideoFile.name}</p>
+                  <p className="text-sm text-gray-500 mt-1">{(droneVideoFile.size / 1024 / 1024).toFixed(1)} MB — click to change</p>
+                </>
+              ) : (
+                <>
+                  <Video size={48} className="text-gray-400 mb-3" />
+                  <p className="font-medium text-gray-700">Click or drag a drone video here</p>
+                  <p className="text-sm text-gray-500 mt-1">MP4, AVI, MOV, WEBM · max 500 MB</p>
+                </>
+              )}
+              <input
+                id="drone-video-input"
+                ref={droneVideoFileRef}
+                type="file"
+                accept="video/*"
+                className="hidden"
+                disabled={droneVideoLoading}
+                onChange={handleDroneVideoSelect}
+              />
+            </label>
+
+            {/* Loading status */}
+            {droneVideoLoading && (
+              <div className="mt-5 p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-3">
+                <Loader2 size={22} className="text-emerald-600 animate-spin flex-shrink-0" />
+                <div>
+                  <p className="font-medium text-emerald-700">{DRONE_VIDEO_STATUSES[droneVideoStatusIdx]}</p>
+                  <p className="text-xs text-emerald-600/70 mt-0.5">This may take a minute for longer videos…</p>
+                </div>
+              </div>
+            )}
+
+            {/* Error */}
+            {droneVideoError && (
+              <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
+                <AlertCircle size={20} className="text-red-600 flex-shrink-0 mt-0.5" />
+                <p className="text-red-700 text-sm">{droneVideoError}</p>
+              </div>
+            )}
+
+            {/* Buttons */}
+            <div className="flex gap-3 mt-5">
+              <button
+                onClick={handleDroneVideoAnalyse}
+                disabled={!droneVideoFile || droneVideoLoading}
+                className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl disabled:bg-gray-400 disabled:cursor-not-allowed transition duration-200 shadow-lg"
+              >
+                {droneVideoLoading
+                  ? (<><Loader2 size={20} className="animate-spin" /> Analysing Video…</>)
+                  : (<><Camera size={20} /> Analyse Video</>)
+                }
+              </button>
+              {(droneVideoFile || droneVideoResult) && !droneVideoLoading && (
+                <button
+                  onClick={handleDroneVideoReset}
+                  className="px-4 py-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-medium rounded-xl hover:bg-gray-300 transition duration-200"
+                >
+                  ✕ Reset
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Results */}
+          {droneVideoResult && (
+            <>
+              {/* Stats */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                {[
+                  { label: 'Trees Found', value: droneVideoResult.num_trees, color: 'emerald' },
+                  { label: 'Frames Extracted', value: droneVideoResult.frames_extracted, color: 'blue' },
+                  { label: 'Farm Health', value: `${droneVideoResult.farm_health_score ?? 0}%`, color: 'green' },
+                  { label: 'Status', value: 'Complete', color: 'gray' },
+                ].map((s, i) => (
+                  <div key={i} className={`bg-${s.color}-50 border border-${s.color}-200 p-4 rounded-xl text-center`}>
+                    <p className={`text-2xl font-bold text-${s.color}-700`}>{s.value}</p>
+                    <p className={`text-xs text-${s.color}-600 mt-1`}>{s.label}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Image viewer */}
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
+                <div className="flex gap-2 mb-4">
+                  {[{ key: 'annotated', label: 'Annotated View' }, { key: 'panorama', label: 'Panoramic Image' }].map(t => (
+                    <button
+                      key={t.key}
+                      onClick={() => setDroneVideoPanoView(t.key)}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${droneVideoPanoView === t.key
+                        ? 'bg-emerald-600 text-white shadow'
+                        : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
+                        }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="relative rounded-xl overflow-hidden bg-gray-900">
+                  <img
+                    src={droneVideoPanoView === 'annotated' ? droneVideoResult.annotated_image : droneVideoResult.panorama_image}
+                    alt={droneVideoPanoView === 'annotated' ? 'Annotated panorama with numbered trees' : 'Stitched panoramic image'}
+                    className="w-full object-contain max-h-[520px]"
+                  />
+                  {droneVideoPanoView === 'annotated' && (
+                    <div className="absolute top-3 left-3 bg-black/60 text-white text-xs px-3 py-1.5 rounded-full backdrop-blur-sm">
+                      🌴 {droneVideoResult.num_trees} coconut {droneVideoResult.num_trees === 1 ? 'tree' : 'trees'} detected
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-3 flex justify-end">
+                  <button
+                    onClick={() => handleDownload(
+                      droneVideoPanoView === 'annotated' ? droneVideoResult.annotated_image : droneVideoResult.panorama_image,
+                      droneVideoPanoView === 'annotated' ? 'annotated_trees.jpg' : 'panorama.jpg'
+                    )}
+                    className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    <Download size={16} /> Download Image
                   </button>
                 </div>
               </div>
-            </div>
-          </div>
+
+              {/* Disease breakdown */}
+              {droneVideoResult.disease_counts && Object.keys(droneVideoResult.disease_counts).length > 0 && (
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 p-6">
+                  <h3 className="text-lg font-semibold text-emerald-800 mb-4">Disease Breakdown</h3>
+                  <div className="space-y-3">
+                    {Object.entries(droneVideoResult.disease_counts).map(([disease, count]) => {
+                      const pct = droneVideoResult.num_trees > 0 ? Math.round((count / droneVideoResult.num_trees) * 100) : 0;
+                      return (
+                        <div key={disease}>
+                          <div className="flex justify-between text-sm mb-1">
+                            <span className="text-gray-700 dark:text-gray-300 capitalize">{disease.replace(/_/g, ' ')}</span>
+                            <span className="font-medium text-gray-800 dark:text-gray-100">{count} trees ({pct}%)</span>
+                          </div>
+                          <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2">
+                            <div className="h-2 rounded-full bg-emerald-500 transition-all duration-500" style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Tree table */}
+              {droneVideoResult.tree_data?.length > 0 && (
+                <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
+                  <h3 className="text-lg font-semibold text-emerald-800 mb-4">Detected Trees</h3>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full table-auto">
+                      <thead>
+                        <tr className="bg-gray-50">
+                          <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Tree #</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Centroid</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Disease</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Confidence</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {droneVideoResult.tree_data.map((tree, idx) => (
+                          <tr key={idx} className="border-t border-gray-200">
+                            <td className="px-4 py-2 text-sm font-semibold text-emerald-700">{tree.number}</td>
+                            <td className="px-4 py-2 text-sm text-gray-600">
+                              ({tree.centroid?.[0]}, {tree.centroid?.[1]})
+                            </td>
+                            <td className="px-4 py-2 text-sm">
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${!tree.disease || tree.disease === 'Unknown'
+                                ? 'bg-gray-100 text-gray-700'
+                                : tree.disease?.toLowerCase().includes('healthy')
+                                  ? 'bg-green-100 text-green-800'
+                                  : 'bg-red-100 text-red-800'
+                                }`}>
+                                {tree.disease || 'Unknown'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-2 text-sm text-gray-600">
+                              {tree.confidence != null ? `${(tree.confidence * 100).toFixed(1)}%` : 'N/A'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-center pt-2">
+                <button
+                  onClick={handleDroneVideoReset}
+                  className="flex items-center gap-2 px-6 py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-medium rounded-xl hover:bg-gray-200 transition duration-200"
+                >
+                  <RefreshCw size={18} /> Analyse Another Video
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
+
     </div>
   );
 };

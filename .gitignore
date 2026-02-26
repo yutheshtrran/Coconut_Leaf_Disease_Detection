@@ -1,38 +1,83 @@
-# Ignore environment variables
+# ==============================
+# ENVIRONMENT VARIABLES
+# ==============================
 .env
+.env.*
 venv/
-.env/
 .venv/
+env/
 
-# Ignore dependency directories
+# ==============================
+# NODE / FRONTEND
+# ==============================
 node_modules/
-
-# Ignore build and cache files
 dist/
 build/
 .vite/
 coverage/
 
-# Ignore logs and temp files
-*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-.DS_Store
 
-# VSCode and local config
-.vscode/
-*.local
-
-# Python
+# ==============================
+# PYTHON
+# ==============================
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.pkl
+*.joblib
 
-# ML data & artifacts
-ml/data/original/
-ml/data/processed/
+# ==============================
+# ML DATASETS (IMPORTANT 🚨)
+# ==============================
+ml/data/
+ml/uploads/
+
+# If you want to keep folder structure but not files, use:
+# ml/data/*
+# !ml/data/.gitkeep
+
+# ==============================
+# ML MODELS & EXPERIMENTS
+# ==============================
 ml/models/
-ml/experiments/  
+ml/experiments/
+ml/runs/
+ml/checkpoints/
+ml/logs/
+ml/videoframes/
+
+# ==============================
+# CACHE FILES
+# ==============================
+.cache/
+pytest_cache/
+.mypy_cache/
+
+# ==============================
+# SYSTEM FILES
+# ==============================
+.DS_Store
+Thumbs.db
+
+# ==============================
+# IDE FILES
+# ==============================
+.vscode/
+.idea/
+*.local
+
+# ==============================
+# TEMP FILES
+# ==============================
+*.tmp
+*.temp
+
+# ==============================
+# TEMP FILES
+# ==============================
+docs/md_workflow
