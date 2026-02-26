@@ -101,14 +101,15 @@ def get_data_loaders(use_mixup=True):
         train_data,
         batch_size=batch_size,
         sampler=sampler,
-        num_workers=0,
+        num_workers=8,
         pin_memory=True
     )
+
     val_loader = DataLoader(
         val_dataset,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=0,
+        num_workers=8,
         pin_memory=True
     )
 
