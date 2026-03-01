@@ -42,17 +42,43 @@ MODEL_NAME = config.get("model_name", "efficientnet_b3")
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# ---- Build model (same architecture as training) ----
-print(f"[INFO] Building {MODEL_NAME} model with {len(CLASSES)} classes...")
+# ---- Detect number of classes from saved weights ----
+print(f"[INFO] Loading trained weights from: {MODEL_PATH}")
+state_dict = torch.load(MODEL_PATH, map_location=DEVICE)
+if isinstance(state_dict, dict):
+    # Find the classifier output layer to detect trained class count
+    for key in state_dict:
+        if 'classifier' in key and 'weight' in key:
+            MODEL_NUM_CLASSES = state_dict[key].shape[0]
+            break
+        elif key.endswith('fc.1.weight'):
+            MODEL_NUM_CLASSES = state_dict[key].shape[0]
+            break
+    else:
+        MODEL_NUM_CLASSES = len(CLASSES)
+else:
+    MODEL_NUM_CLASSES = len(CLASSES)
+
+# Classes the model can predict (first N from config)
+MODEL_CLASSES = CLASSES[:MODEL_NUM_CLASSES]
+
+if MODEL_NUM_CLASSES != len(CLASSES):
+    print(f"[INFO] Model was trained on {MODEL_NUM_CLASSES} classes, config has {len(CLASSES)} classes.")
+    print(f"[INFO] Model can predict: {MODEL_CLASSES}")
+    print(f"[INFO] New classes (manual assignment only): {CLASSES[MODEL_NUM_CLASSES:]}")
+else:
+    print(f"[INFO] Model matches config: {MODEL_NUM_CLASSES} classes.")
+
+# ---- Build model with the trained class count ----
+print(f"[INFO] Building {MODEL_NAME} model with {MODEL_NUM_CLASSES} classes...")
 model = MyModel(
-    num_classes=len(CLASSES),
+    num_classes=MODEL_NUM_CLASSES,
     model_name=MODEL_NAME,
     pretrained=False,
     dropout=0.3,
 )
 
 # ---- Load trained weights ----
-print(f"[INFO] Loading trained weights from: {MODEL_PATH}")
 model = load_weights(model, MODEL_PATH, map_location=str(DEVICE))
 model.to(DEVICE)
 model.eval()
@@ -238,7 +264,7 @@ def predict_image(img_path):
         output = model(input_tensor)
         probs = torch.softmax(output, dim=1)
         conf, pred = torch.max(probs, 1)
-    return CLASSES[pred.item()], conf.item()
+    return MODEL_CLASSES[pred.item()], conf.item()
 
 
 # ---- Main annotation loop ----
@@ -264,13 +290,18 @@ def auto_annotate():
     print("  2. Click & drag to select the diseased region")
     print("     - Selected region stays bright, rest darkens")
     print("     - Green border appears around selection")
-    print("  3. ENTER = Accept prediction | 0-9 = Change class")
+    print("  3. ENTER = Accept prediction | Key = Change class")
+    print("     0-9 for classes 0-9, a/b/c... for classes 10+")
     print("  4. Confirmation dialog: ENTER = Save | ESC = Re-select")
     print("  S = Skip image    Q = Quit    ESC = Clear selection")
     print("=" * 60)
     print("\nDisease Classes:")
     for i, cls in enumerate(CLASSES):
-        print(f"  [{i}] {cls}")
+        if i < 10:
+            key_label = str(i)
+        else:
+            key_label = chr(ord('a') + i - 10)
+        print(f"  [{key_label}] {cls}")
     print()
 
     WIN = "Auto Annotate"
@@ -311,8 +342,9 @@ def auto_annotate():
                     (10, y_off), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2, cv2.LINE_AA)
         y_off += 28
         for i, cls in enumerate(CLASSES):
+            key_label = str(i) if i < 10 else chr(ord('a') + i - 10)
             marker = " <<" if cls == pred_class else ""
-            cv2.putText(display_base, f"[{i}] {cls}{marker}",
+            cv2.putText(display_base, f"[{key_label}] {cls}{marker}",
                         (10, y_off), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (255, 255, 255), 1, cv2.LINE_AA)
             y_off += 16
 
@@ -328,11 +360,11 @@ def auto_annotate():
         while not action_done:
             # Build status text
             if _rect_done and _start_pt and _end_pt:
-                status = "Region selected | ENTER=Accept prediction | 0-9=Change class | S=Skip | Q=Quit"
+                status = "Region selected | ENTER=Accept | 0-9,a-z=Change class | S=Skip | Q=Quit"
             elif _drawing:
                 status = "Drawing selection..."
             else:
-                status = "Draw a region, then ENTER=Accept | 0-9=Change | S=Skip | Q=Quit"
+                status = "Draw a region, then ENTER=Accept | 0-9,a-z=Change | S=Skip | Q=Quit"
 
             has_rect = _drawing or _rect_done
             frame = _draw_overlay(
@@ -398,12 +430,15 @@ def auto_annotate():
                     action_done = True
                 continue
 
-            # ── Number key: override class ──
+            # ── Number or letter key: override class ──
+            # 0-9 for classes 0-9, a-z for classes 10+
+            class_idx = None
             if ord('0') <= key <= ord('9'):
                 class_idx = key - ord('0')
-                if class_idx >= len(CLASSES):
-                    continue
+            elif ord('a') <= key <= ord('z'):
+                class_idx = 10 + (key - ord('a'))
 
+            if class_idx is not None and class_idx < len(CLASSES):
                 final_class = CLASSES[class_idx]
                 final_conf = confidence
                 print(f"  -> Changed to: {final_class}")
