@@ -377,33 +377,113 @@ def annotate_trees(
     return annotated, tree_data
 
 
+def create_grid_panorama(image_paths: List[str], target_frame_height: int = 1080) -> Optional[np.ndarray]:
+    """
+    Build a high-resolution panorama by arranging frames in a grid layout.
+
+    This is a reliable fallback when feature-based stitching fails (e.g. drone
+    survey video where adjacent frames do not have enough texture overlap for
+    the OpenCV stitcher to find matches).
+
+    - All frames are resized to `target_frame_height` (aspect ratio preserved)
+    - Frames are arranged into a near-square grid (cols ≈ sqrt(n))
+    - Returns a single high-resolution numpy array covering the full farm area
+
+    Args:
+        image_paths: Ordered list of frame image paths
+        target_frame_height: Pixel height each frame is resized to (default 1080)
+
+    Returns:
+        Grid panorama as a numpy BGR array, or None on failure
+    """
+    if not image_paths:
+        return None
+
+    images = []
+    for path in image_paths:
+        img = cv2.imread(str(path))
+        if img is None:
+            print(f"[WARN] Grid panorama: could not read {path}")
+            continue
+        h, w = img.shape[:2]
+        # Resize to target height, preserve aspect ratio
+        if h != target_frame_height:
+            scale = target_frame_height / h
+            img = cv2.resize(img, (int(w * scale), target_frame_height),
+                             interpolation=cv2.INTER_LANCZOS4)
+        images.append(img)
+
+    if not images:
+        return None
+
+    n = len(images)
+    # Near-square grid: cols ≥ rows
+    cols = int(np.ceil(np.sqrt(n)))
+    rows = int(np.ceil(n / cols))
+
+    # Uniform frame width = most-common width (avoids thin strips)
+    widths = [img.shape[1] for img in images]
+    frame_w = int(np.median(widths))
+    frame_h = target_frame_height
+
+    # Resize all frames to exactly (frame_w, frame_h) for a clean grid
+    resized = []
+    for img in images:
+        h, w = img.shape[:2]
+        if w != frame_w or h != frame_h:
+            img = cv2.resize(img, (frame_w, frame_h), interpolation=cv2.INTER_LANCZOS4)
+        resized.append(img)
+
+    # Pad with black frames to fill the grid completely
+    total_slots = rows * cols
+    blank = np.zeros((frame_h, frame_w, 3), dtype=np.uint8)
+    while len(resized) < total_slots:
+        resized.append(blank)
+
+    # Build row-by-row then stack vertically
+    row_imgs = []
+    for r in range(rows):
+        row_frames = resized[r * cols: (r + 1) * cols]
+        row_imgs.append(np.hstack(row_frames))
+    panorama = np.vstack(row_imgs)
+
+    print(f"[INFO] Grid panorama: {n} frames in {rows}×{cols} grid "
+          f"→ {panorama.shape[1]}×{panorama.shape[0]} px")
+    return panorama
+
+
 def stitch_panorama(image_paths: List[str], max_width: int = 4000) -> Optional[np.ndarray]:
     """
     Stitch multiple images into a high-resolution panorama.
-    Tries PANORAMA then SCANS mode with automatic fallback.
+
+    Strategy:
+      1. Try OpenCV feature-based stitcher (PANORAMA then SCANS mode).
+         Works well for proper overlapping aerial photos.
+      2. If stitching fails (common for drone video frames without sufficient
+         feature overlap), fall back to create_grid_panorama() which is
+         guaranteed to produce a complete, high-resolution image.
 
     For robustness with many frames:
-      - Limits input to MAX_STITCH_IMAGES (stitchers struggle with >25 images)
-      - Auto-reduces max_width when many images are provided
+      - Limits feature-stitcher input to MAX_STITCH_IMAGES
       - Catches OpenCV internal errors gracefully
     """
     MAX_STITCH_IMAGES = 25  # OpenCV stitcher is unreliable with too many images
 
     if len(image_paths) < 2:
-        return None
+        # Single image — just return it directly
+        img = cv2.imread(str(image_paths[0])) if image_paths else None
+        return img
 
-    # If too many images, sample evenly across the sequence
+    # ── Attempt feature-based stitching ──────────────────────────────────
+    # Sample evenly if too many images
     paths_to_use = image_paths
     if len(image_paths) > MAX_STITCH_IMAGES:
         step = len(image_paths) / MAX_STITCH_IMAGES
         indices = [int(i * step) for i in range(MAX_STITCH_IMAGES)]
         paths_to_use = [image_paths[i] for i in indices]
-        print(f"[INFO] Sampled {len(paths_to_use)}/{len(image_paths)} frames for stitching")
+        print(f"[INFO] Sampled {len(paths_to_use)}/{len(image_paths)} frames for feature stitching")
 
-    # Auto-reduce max_width for many images to prevent OOM
-    if len(paths_to_use) > 15:
-        max_width = min(max_width, 2000)
-
+    # Load images (keep full resolution — no downscale)
     images = []
     for path in paths_to_use:
         img = cv2.imread(str(path))
@@ -411,28 +491,34 @@ def stitch_panorama(image_paths: List[str], max_width: int = 4000) -> Optional[n
             print(f"[WARN] Could not read: {path}")
             continue
         h, w = img.shape[:2]
+        # Only downscale if extremely large to avoid OOM in stitcher
         if w > max_width:
             scale = max_width / w
             img = cv2.resize(img, (int(w * scale), int(h * scale)),
                              interpolation=cv2.INTER_AREA)
         images.append(img)
 
-    if len(images) < 2:
-        return None
+    feature_stitch_ok = False
+    if len(images) >= 2:
+        for mode in [cv2.Stitcher_PANORAMA, cv2.Stitcher_SCANS]:
+            try:
+                stitcher = cv2.Stitcher_create(mode)
+                status, panorama = stitcher.stitch(images)
+                if status == cv2.Stitcher_OK:
+                    print(f"[INFO] Feature stitching succeeded (mode={mode}, "
+                          f"{len(images)} images → {panorama.shape[1]}×{panorama.shape[0]})")
+                    feature_stitch_ok = True
+                    return panorama
+                print(f"[WARN] Feature stitching failed (mode={mode}, status={status})")
+            except cv2.error as e:
+                print(f"[WARN] OpenCV stitcher error (mode={mode}): {e}")
+            except Exception as e:
+                print(f"[WARN] Unexpected stitcher error (mode={mode}): {e}")
 
-    for mode in [cv2.Stitcher_PANORAMA, cv2.Stitcher_SCANS]:
-        try:
-            stitcher = cv2.Stitcher_create(mode)
-            status, panorama = stitcher.stitch(images)
-            if status == cv2.Stitcher_OK:
-                print(f"[INFO] Stitching succeeded (mode={mode}, "
-                      f"{len(images)} images → {panorama.shape[1]}×{panorama.shape[0]})")
-                return panorama
-            print(f"[WARN] Stitching failed (mode={mode}, status={status})")
-        except cv2.error as e:
-            print(f"[WARN] OpenCV stitcher error (mode={mode}): {e}")
-        except Exception as e:
-            print(f"[WARN] Unexpected stitcher error (mode={mode}): {e}")
+    # ── Fallback: Grid panorama ───────────────────────────────────────────
+    if not feature_stitch_ok:
+        print("[INFO] Falling back to grid panorama layout (reliable for drone video frames)")
+        return create_grid_panorama(image_paths)
 
     return None
 
@@ -465,12 +551,12 @@ def process_panoramic_images(
     if verbose:
         print(f"[INFO] Processing {len(image_paths)} images...")
 
-    # ── Stitch ────────────────────────────────────────────────────
+    # ── Stitch / Grid panorama ─────────────────────────────────────
     if len(image_paths) >= 2:
         panorama = stitch_panorama(image_paths)
         if panorama is None:
             if verbose:
-                print("[WARN] Stitching failed — using first image")
+                print("[WARN] All panorama methods failed — using first image")
             panorama = cv2.imread(image_paths[0])
     else:
         panorama = cv2.imread(image_paths[0])

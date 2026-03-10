@@ -320,9 +320,9 @@ def process_drone_video():
     Returns JSON with annotated_image, panorama_image, tree_data,
     disease_counts, farm_health_score — same shape as /process-drone-images.
     """
-    FRAME_STEP    = 30    # save every Nth frame (≈1 fps at 30fps video)
-    MAX_FRAMES    = 40    # hard cap on extracted frames
-    FRAME_MAX_DIM = 1500  # downscale each frame so longest edge ≤ this
+    # Extract one frame every 2 seconds at full native resolution
+    FRAME_INTERVAL_SEC = 2    # seconds between extracted frames
+    MAX_FRAMES         = 40   # hard cap to control memory usage
 
     session_id = str(uuid.uuid4())
     video_path = None
@@ -341,7 +341,7 @@ def process_drone_video():
         file.save(video_path)
         os.makedirs(frame_dir, exist_ok=True)
 
-        # ── Seek-based frame extraction + downscale ───────────────
+        # ── Seek-based frame extraction at full resolution ────────
         t0 = time.time()
         frame_paths = []
 
@@ -353,8 +353,12 @@ def process_drone_video():
         fps = cap.get(cv2.CAP_PROP_FPS) or 30
         print(f"[INFO] Video: {total_frames} frames @ {fps:.1f} fps")
 
+        # One frame every FRAME_INTERVAL_SEC seconds
+        frame_step = max(1, int(round(fps * FRAME_INTERVAL_SEC)))
+        print(f"[INFO] Frame step: {frame_step} (every {FRAME_INTERVAL_SEC}s at {fps:.1f} fps)")
+
         # Compute target frame indices upfront, then seek directly
-        target_indices = list(range(0, total_frames, FRAME_STEP))[:MAX_FRAMES]
+        target_indices = list(range(0, total_frames, frame_step))[:MAX_FRAMES]
 
         for saved_idx, frame_idx in enumerate(target_indices):
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
@@ -362,23 +366,16 @@ def process_drone_video():
             if not ret:
                 continue
 
-            # Downscale frame if too large (saves memory + speeds stitching)
-            fh, fw = frame.shape[:2]
-            longest = max(fh, fw)
-            if longest > FRAME_MAX_DIM:
-                s = FRAME_MAX_DIM / longest
-                frame = cv2.resize(frame,
-                                   (int(fw * s), int(fh * s)),
-                                   interpolation=cv2.INTER_AREA)
-
+            # Save at full native resolution — no downscale
+            # The grid panorama builder will handle uniform sizing
             frame_filename = os.path.join(frame_dir, f"frame_{saved_idx:04d}.jpg")
-            cv2.imwrite(frame_filename, frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
+            cv2.imwrite(frame_filename, frame, [cv2.IMWRITE_JPEG_QUALITY, 92])
             frame_paths.append(frame_filename)
 
         cap.release()
         t_extract = time.time() - t0
         print(f"[PERF] Frame extraction: {len(frame_paths)} frames "
-              f"(downscaled to ≤{FRAME_MAX_DIM}px) in {t_extract:.2f}s")
+              f"(full resolution, every {FRAME_INTERVAL_SEC}s) in {t_extract:.2f}s")
 
         # Delete the raw video immediately to free disk space
         if video_path and os.path.exists(video_path):
