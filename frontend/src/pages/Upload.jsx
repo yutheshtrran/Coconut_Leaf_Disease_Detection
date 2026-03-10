@@ -379,7 +379,7 @@ const Upload = () => {
     try {
       const fd = new FormData();
       fd.append('file', droneVideoFile);
-      const res = await fetch('http://127.0.0.1:5000/process-drone-video', { method: 'POST', body: fd });
+      const res = await fetch('http://127.0.0.1:5001/process-drone-video', { method: 'POST', body: fd });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || `Server error ${res.status}`);
       setDroneVideoResult(data);
@@ -906,14 +906,14 @@ const Upload = () => {
                   ))}
                 </div>
 
-                <div className="relative rounded-xl overflow-hidden bg-gray-900">
+                <div className="relative rounded-xl bg-gray-900 border border-gray-700 overflow-auto max-h-[75vh]">
                   <img
                     src={droneVideoPanoView === 'annotated' ? droneVideoResult.annotated_image : droneVideoResult.panorama_image}
                     alt={droneVideoPanoView === 'annotated' ? 'Annotated panorama with numbered trees' : 'Stitched panoramic image'}
-                    className="w-full object-contain max-h-[520px]"
+                    className="max-w-none w-auto h-auto min-w-full origin-top-left"
                   />
                   {droneVideoPanoView === 'annotated' && (
-                    <div className="absolute top-3 left-3 bg-black/60 text-white text-xs px-3 py-1.5 rounded-full backdrop-blur-sm">
+                    <div className="fixed top-20 right-10 bg-black/80 text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-xl backdrop-blur-sm z-10 border border-gray-700">
                       🌴 {droneVideoResult.num_trees} coconut {droneVideoResult.num_trees === 1 ? 'tree' : 'trees'} detected
                     </div>
                   )}
