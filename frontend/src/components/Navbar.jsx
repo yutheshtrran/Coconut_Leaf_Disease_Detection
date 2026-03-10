@@ -127,7 +127,7 @@ const Navbar = () => {
       </div>
 
       {showLogoutConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60">
           <div className="bg-white rounded-2xl shadow-2xl w-[90vw] max-w-md p-6">
             <h2 className="text-xl font-semibold mb-3">Confirm Logout</h2>
             <p className="text-sm text-gray-600 mb-4">Are you sure you want to log out?</p>
