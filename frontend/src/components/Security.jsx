@@ -84,13 +84,11 @@ const Security = () => {
 
       {/* Enhanced Card Styling */}
       <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8 w-full max-w-4xl">
-
         <h2 className="text-2xl font-semibold text-gray-800 mb-6 pb-4 border-b border-gray-200">
           Change Password
         </h2>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-
           {/* Current Password */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1 flex items-center gap-2">
@@ -131,7 +129,6 @@ const Security = () => {
               />
             </div>
           </div>
-
           <div className="text-sm text-gray-500 pt-2">
             Tip: Use a mix of upper/lowercase letters, numbers, and symbols for a strong password.
           </div>

@@ -15,6 +15,12 @@ router.get('/filter', reportController.getFilteredReports);
 // Route to create a new report
 router.post('/', reportController.createReport);
 
+// Route to generate PDF and download report
+router.get('/:id/download', reportController.downloadReport);
+
+// Route to preview report data (JSON)
+router.get('/:id/preview', reportController.previewReport);
+
 // Route to get a specific report by ID
 router.get('/:id', reportController.getReportById);
 

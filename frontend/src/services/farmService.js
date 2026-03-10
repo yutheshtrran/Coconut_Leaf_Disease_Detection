@@ -29,3 +29,27 @@ export const deleteFarm = async (farmId) => {
   const res = await API.delete(`/farms/${farmId}`);
   return res.data;
 };
+
+// Get all plots for a specific farm
+export const getFarmPlots = async (farmId) => {
+  const res = await API.get(`/farms/${farmId}/plots`);
+  return res.data;
+};
+
+// Add a new plot to a farm
+export const addPlot = async (farmId, plotData) => {
+  const res = await API.post(`/farms/${farmId}/plots`, plotData);
+  return res.data;
+};
+
+// Update a plot
+export const updatePlot = async (farmId, plotId, plotData) => {
+  const res = await API.put(`/farms/${farmId}/plots/${plotId}`, plotData);
+  return res.data;
+};
+
+// Delete a plot
+export const deletePlot = async (farmId, plotId) => {
+  const res = await API.delete(`/farms/${farmId}/plots/${plotId}`);
+  return res.data;
+};
