@@ -411,12 +411,12 @@ def install_deps():
 def test_endpoints():
     print_header("Testing Endpoints")
     import requests
-    print("Make sure API is running on http://127.0.0.1:5000")
+    print("Make sure API is running on http://127.0.0.1:5001")
     time.sleep(3)
     try:
-        r = requests.get("http://127.0.0.1:5000/")
+        r = requests.get("http://127.0.0.1:5001/")
         print(f"GET /           -> Status {r.status_code}, Response {r.json()}")
-        r = requests.get("http://127.0.0.1:5000/health")
+        r = requests.get("http://127.0.0.1:5001/health")
         print(f"GET /health     -> Status {r.status_code}, Response {r.json()}")
         print("✓ Basic tests passed")
     except Exception as e:
@@ -424,9 +424,9 @@ def test_endpoints():
 
 def start_api():
     print_header("Starting Flask API Server")
-    print("API Server running at http://127.0.0.1:5000")
+    print("API Server running at http://127.0.0.1:5001")
     print("Press Ctrl+C to stop\n")
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5001, debug=True)
 
 # ------------------------------------------------------------------
 # Main CLI interface
