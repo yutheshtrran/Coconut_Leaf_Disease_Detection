@@ -56,7 +56,7 @@ const Upload = () => {
 
   const handleStartAnalysis = async () => {
     if (selectedFiles.length === 0) return alert("Please upload at least one file.");
-    
+
     const firstFile = selectedFiles[0];
     const isVideo = isVideoFile(firstFile);
 
@@ -81,7 +81,7 @@ const Upload = () => {
       formData.append("file", file);
 
       try {
-        const response = await fetch("http://127.0.0.1:5000/predict", {
+        const response = await fetch("http://127.0.0.1:5001/predict", {
           method: "POST",
           body: formData,
         });
@@ -130,7 +130,7 @@ const Upload = () => {
     formData.append("file", videoFile);
 
     try {
-      const response = await fetch("http://127.0.0.1:5000/analyze-video", {
+      const response = await fetch("http://127.0.0.1:5001/analyze-video", {
         method: "POST",
         body: formData,
       });
@@ -189,7 +189,7 @@ const Upload = () => {
     });
 
     try {
-      const response = await fetch("http://127.0.0.1:5000/process-drone-images", {
+      const response = await fetch("http://127.0.0.1:5001/process-drone-images", {
         method: "POST",
         body: formData,
       });
@@ -272,12 +272,12 @@ const Upload = () => {
 
         {/* RIGHT SIDE PANEL */}
         <div className="mt-6 md:mt-0 w-full md:w-1/3 bg-gray-100 p-5 rounded-xl shadow-inner border border-gray-200 flex flex-col space-y-6">
-          
+
           {videoAnalysis ? (
             // VIDEO ANALYSIS RESULTS
             <div>
               <h3 className="text-emerald-800 font-semibold mb-4 text-center">Video Analysis Results</h3>
-              
+
               {/* Coconut Trees Found */}
               <div className="mb-4 bg-white p-4 rounded-lg border border-gray-300">
                 <p className="text-sm text-gray-600 mb-1">Coconut Trees Found</p>
@@ -414,49 +414,49 @@ const Upload = () => {
 
               <div className="space-y-6">
                 {/* Statistics */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-emerald-50 p-4 rounded-lg border border-emerald-200">
-                  <p className="text-sm text-emerald-600 mb-1">Trees Detected</p>
-                  <div className="text-3xl font-bold text-emerald-700">{droneResult.num_trees}</div>
-                </div>
-                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                  <p className="text-sm text-blue-600 mb-1">Images Processed</p>
-                  <div className="text-3xl font-bold text-blue-700">{selectedFiles.length}</div>
-                </div>
-                <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                  <p className="text-sm text-green-600 mb-1">Healthy Trees</p>
-                  <div className="text-3xl font-bold text-green-700">
-                    {droneResult.segmentation_stats?.healthy_trees || 0}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="bg-emerald-50 p-4 rounded-lg border border-emerald-200">
+                    <p className="text-sm text-emerald-600 mb-1">Trees Detected</p>
+                    <div className="text-3xl font-bold text-emerald-700">{droneResult.num_trees}</div>
+                  </div>
+                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                    <p className="text-sm text-blue-600 mb-1">Images Processed</p>
+                    <div className="text-3xl font-bold text-blue-700">{selectedFiles.length}</div>
+                  </div>
+                  <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                    <p className="text-sm text-green-600 mb-1">Healthy Trees</p>
+                    <div className="text-3xl font-bold text-green-700">
+                      {droneResult.segmentation_stats?.healthy_trees || 0}
+                    </div>
+                  </div>
+                  <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+                    <p className="text-sm text-red-600 mb-1">Diseased Trees</p>
+                    <div className="text-3xl font-bold text-red-700">
+                      {droneResult.segmentation_stats?.diseased_trees || 0}
+                    </div>
                   </div>
                 </div>
-                <div className="bg-red-50 p-4 rounded-lg border border-red-200">
-                  <p className="text-sm text-red-600 mb-1">Diseased Trees</p>
-                  <div className="text-3xl font-bold text-red-700">
-                    {droneResult.segmentation_stats?.diseased_trees || 0}
-                  </div>
-                </div>
-              </div>
 
-              {/* Health Percentage */}
-              {droneResult.segmentation_stats && (
-                <div className="bg-gray-50 p-4 rounded-lg border border-gray-300">
-                  <div className="flex justify-between mb-2">
-                    <p className="text-sm text-gray-600">Overall Farm Health</p>
-                    <span className="font-semibold text-emerald-700">
-                      {droneResult.segmentation_stats.health_percentage?.toFixed(1)}%
-                    </span>
+                {/* Health Percentage */}
+                {droneResult.segmentation_stats && (
+                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-300">
+                    <div className="flex justify-between mb-2">
+                      <p className="text-sm text-gray-600">Overall Farm Health</p>
+                      <span className="font-semibold text-emerald-700">
+                        {droneResult.segmentation_stats.health_percentage?.toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-3">
+                      <div
+                        className="bg-emerald-600 h-3 rounded-full"
+                        style={{ width: `${droneResult.segmentation_stats.health_percentage}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Estimated Farm Size: {droneResult.segmentation_stats.estimated_farm_size?.toFixed(1)} hectares
+                    </p>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-3">
-                    <div
-                      className="bg-emerald-600 h-3 rounded-full"
-                      style={{ width: `${droneResult.segmentation_stats.health_percentage}%` }}
-                    />
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Estimated Farm Size: {droneResult.segmentation_stats.estimated_farm_size?.toFixed(1)} hectares
-                  </p>
-                </div>
-              )}
+                )}
                 {/* Annotated Image */}
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <h3 className="text-lg font-semibold text-gray-800 mb-3">Annotated Panorama</h3>
@@ -495,11 +495,10 @@ const Upload = () => {
                                 [{tree.bbox.join(', ')}]
                               </td>
                               <td className="px-4 py-2 text-sm">
-                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                  tree.disease?.toLowerCase() === 'healthy'
+                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${tree.disease?.toLowerCase() === 'healthy'
                                     ? 'bg-green-100 text-green-800'
                                     : 'bg-red-100 text-red-800'
-                                }`}>
+                                  }`}>
                                   {tree.disease || 'Unknown'}
                                 </span>
                               </td>
