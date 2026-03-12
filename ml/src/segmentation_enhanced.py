@@ -108,21 +108,23 @@ def segment_individual_trees_watershed(
     Primary segmentation: watershed + distance transform.
     Splits touching/overlapping tree crowns into individual instances.
 
-    Tuned for coconut palm drone imagery where crowns are 15-80px diameter.
+    Tuned for coconut palm drone imagery — crowns are 80-250px diameter from drone altitude.
     """
     h, w = image.shape[:2]
     # Use vegetation pixel count (not full image area) so black borders don't inflate thresholds
     veg_pixels = int(np.sum(vegetation_mask > 0))
     effective_area = max(veg_pixels, h * w // 4)  # fallback: at least 25% of image
-    min_tree_area = min_tree_area or max(100, int(effective_area * 0.0002))
-    max_tree_area = max_tree_area or int(effective_area * 0.10)
+    # Coconut tree crowns from drone altitude are LARGE — 80-250px across = 5000-50000 px²
+    # Set minimum high enough to reject small bushes/grass/weeds
+    min_tree_area = min_tree_area or max(3000, int(effective_area * 0.001))
+    max_tree_area = max_tree_area or int(effective_area * 0.08)
 
     # Distance transform → local maxima = tree centers
     dist = cv2.distanceTransform(vegetation_mask, cv2.DIST_L2, 5)
     cv2.normalize(dist, dist, 0, 1.0, cv2.NORM_MINMAX)
 
     # Lower threshold (0.20) splits adjacent crowns more aggressively
-    _, sure_fg = cv2.threshold(dist, 0.20, 1.0, cv2.THRESH_BINARY)
+    _, sure_fg = cv2.threshold(dist, 0.30, 1.0, cv2.THRESH_BINARY)
     sure_fg = np.uint8(sure_fg * 255)
 
     k7 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
@@ -151,7 +153,7 @@ def segment_individual_trees_watershed(
 
         x, y, bw, bh = cv2.boundingRect(contour)
         ar = float(bw) / (bh + 1e-5)
-        if ar < 0.2 or ar > 5.0:
+        if ar < 0.3 or ar > 3.5:
             rejected['aspect'] += 1
             continue
 
@@ -198,8 +200,8 @@ def segment_individual_trees_contour(
     h, w = image.shape[:2]
     veg_pixels = int(np.sum(vegetation_mask > 0))
     effective_area = max(veg_pixels, h * w // 4)
-    min_tree_area = min_tree_area or max(100, int(effective_area * 0.0002))
-    max_tree_area = max_tree_area or int(effective_area * 0.10)
+    min_tree_area = min_tree_area or max(3000, int(effective_area * 0.001))
+    max_tree_area = max_tree_area or int(effective_area * 0.08)
 
     contours, _ = cv2.findContours(vegetation_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     tree_regions = []
@@ -379,15 +381,23 @@ def annotate_trees(
 
 def stitch_panorama(image_paths: List[str], max_width: int = 4000) -> Optional[np.ndarray]:
     """
-    Stitch multiple images into a high-resolution panorama.
-    Tries PANORAMA then SCANS mode with automatic fallback.
+    Create an orthomosaic from top-down aerial drone images.
 
-    For robustness with many frames:
-      - Limits input to MAX_STITCH_IMAGES (stitchers struggle with >25 images)
-      - Auto-reduces max_width when many images are provided
-      - Catches OpenCV internal errors gracefully
+    Uses three approaches in order:
+      1. **Homography-based sequential mosaicing** — best for top-down drone images.
+         Matches features between consecutive pairs, computes perspective transforms,
+         and composites them onto a single canvas with blending.
+      2. **OpenCV Stitcher SCANS mode** — designed for planar-motion (scanning) images.
+      3. **Grid composite** — simple fallback that tiles images in a grid.
+
+    Args:
+        image_paths: list of image file paths
+        max_width: max width to resize each input image to
+
+    Returns:
+        Stitched panoramic image or None if all methods fail.
     """
-    MAX_STITCH_IMAGES = 25  # OpenCV stitcher is unreliable with too many images
+    MAX_STITCH_IMAGES = 25
 
     if len(image_paths) < 2:
         return None
@@ -420,21 +430,273 @@ def stitch_panorama(image_paths: List[str], max_width: int = 4000) -> Optional[n
     if len(images) < 2:
         return None
 
-    for mode in [cv2.Stitcher_PANORAMA, cv2.Stitcher_SCANS]:
-        try:
-            stitcher = cv2.Stitcher_create(mode)
-            status, panorama = stitcher.stitch(images)
-            if status == cv2.Stitcher_OK:
-                print(f"[INFO] Stitching succeeded (mode={mode}, "
-                      f"{len(images)} images → {panorama.shape[1]}×{panorama.shape[0]})")
-                return panorama
-            print(f"[WARN] Stitching failed (mode={mode}, status={status})")
-        except cv2.error as e:
-            print(f"[WARN] OpenCV stitcher error (mode={mode}): {e}")
-        except Exception as e:
-            print(f"[WARN] Unexpected stitcher error (mode={mode}): {e}")
+    # ── Method 1: Homography-based sequential mosaicing ────────────
+    mosaic = _homography_mosaic(images)
+    if mosaic is not None:
+        print(f"[INFO] Homography mosaic succeeded "
+              f"({len(images)} images → {mosaic.shape[1]}×{mosaic.shape[0]})")
+        return mosaic
 
-    return None
+    # ── Method 2: OpenCV Stitcher SCANS mode (planar) ──────────────
+    print("[INFO] Homography mosaic failed, trying OpenCV SCANS stitcher...")
+    try:
+        stitcher = cv2.Stitcher_create(cv2.Stitcher_SCANS)
+        status, panorama = stitcher.stitch(images)
+        if status == cv2.Stitcher_OK:
+            print(f"[INFO] SCANS stitching succeeded "
+                  f"({len(images)} images → {panorama.shape[1]}×{panorama.shape[0]})")
+            return panorama
+        print(f"[WARN] SCANS stitching failed (status={status})")
+    except Exception as e:
+        print(f"[WARN] SCANS stitcher error: {e}")
+
+    # ── Method 3: Grid composite fallback ──────────────────────────
+    print("[INFO] All stitching methods failed, creating grid composite...")
+    return _grid_composite(images)
+
+
+def _homography_mosaic(images: List[np.ndarray]) -> Optional[np.ndarray]:
+    """
+    Create an orthomosaic using affine (similarity) transform estimation.
+
+    For top-down drone images the camera moves in a 2D plane looking straight
+    down, so between consecutive frames only translation + rotation + scale
+    change — NOT perspective.  Using cv2.estimateAffinePartial2D (4-DOF
+    similarity) instead of full homography prevents the severe warping that
+    perspective transforms cause on planar aerial imagery.
+
+    Uses SIFT features (more robust than ORB for aerial naturescenes) with
+    a FLANN-based matcher.
+    """
+    try:
+        n = len(images)
+        if n < 2:
+            return None
+
+        # ── Feature detector + matcher ────────────────────────────
+        sift = cv2.SIFT_create(nfeatures=5000)
+        FLANN_INDEX_KDTREE = 1
+        flann_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
+        search_params = dict(checks=50)
+        flann = cv2.FlannBasedMatcher(flann_params, search_params)
+
+        # ── Compute cumulative affines relative to center image ───
+        center_idx = n // 2
+        # Store as 3×3 matrices (last row [0,0,1]) so we can chain them
+        transforms = [None] * n
+        transforms[center_idx] = np.eye(3, dtype=np.float64)
+
+        def _match_affine(img_a, img_b):
+            """Estimate similarity transform from img_b → img_a."""
+            gray_a = cv2.cvtColor(img_a, cv2.COLOR_BGR2GRAY)
+            gray_b = cv2.cvtColor(img_b, cv2.COLOR_BGR2GRAY)
+            kp_a, des_a = sift.detectAndCompute(gray_a, None)
+            kp_b, des_b = sift.detectAndCompute(gray_b, None)
+
+            if des_a is None or des_b is None or len(kp_a) < 15 or len(kp_b) < 15:
+                return None
+
+            matches = flann.knnMatch(des_b, des_a, k=2)
+
+            # Lowe's ratio test
+            good = []
+            for pair in matches:
+                if len(pair) == 2:
+                    m, nm = pair
+                    if m.distance < 0.7 * nm.distance:
+                        good.append(m)
+
+            if len(good) < 10:
+                return None
+
+            src_pts = np.float32([kp_b[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
+            dst_pts = np.float32([kp_a[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)
+
+            # 4-DOF similarity: translation + rotation + uniform scale
+            M, inliers = cv2.estimateAffinePartial2D(
+                src_pts, dst_pts, method=cv2.RANSAC, ransacReprojThreshold=4.0
+            )
+            if M is None:
+                return None
+
+            inlier_count = int(inliers.sum()) if inliers is not None else 0
+            if inlier_count < 8:
+                return None
+
+            # Convert 2×3 affine to 3×3
+            M33 = np.eye(3, dtype=np.float64)
+            M33[:2, :] = M
+            return M33
+
+        # Chain transforms outward from center
+        success_count = 0
+
+        # Forward: center → center+1 → center+2 → ...
+        for i in range(center_idx + 1, n):
+            M = _match_affine(images[i - 1], images[i])
+            if M is not None:
+                transforms[i] = transforms[i - 1] @ M
+                success_count += 1
+            else:
+                print(f"[WARN] No match for pair ({i-1}, {i}) — shifting by overlap estimate")
+                h, w = images[i].shape[:2]
+                fallback = np.eye(3, dtype=np.float64)
+                fallback[0, 2] = w * 0.3  # shift right ~30% of width
+                transforms[i] = transforms[i - 1] @ fallback
+
+        # Backward: center → center-1 → center-2 → ...
+        for i in range(center_idx - 1, -1, -1):
+            M = _match_affine(images[i + 1], images[i])
+            if M is not None:
+                transforms[i] = transforms[i + 1] @ M
+                success_count += 1
+            else:
+                print(f"[WARN] No match for pair ({i+1}, {i}) — shifting by overlap estimate")
+                h, w = images[i].shape[:2]
+                fallback = np.eye(3, dtype=np.float64)
+                fallback[0, 2] = -w * 0.3
+                transforms[i] = transforms[i + 1] @ fallback
+
+        print(f"[INFO] Affine matching: {success_count}/{n-1} pairs matched successfully")
+
+        if success_count == 0:
+            return None
+
+        # ── Compute bounding box of final mosaic ──────────────────
+        corners_list = []
+        for i, img in enumerate(images):
+            h, w = img.shape[:2]
+            corners = np.float64([[0, 0], [w, 0], [w, h], [0, h]]).reshape(-1, 1, 2)
+            # Apply affine (use only the 2×3 part for transform)
+            M23 = transforms[i][:2, :]
+            warped_corners = cv2.transform(corners, M23)
+            corners_list.append(warped_corners)
+
+        all_corners = np.concatenate(corners_list, axis=0)
+        x_min = int(np.floor(all_corners[:, 0, 0].min()))
+        y_min = int(np.floor(all_corners[:, 0, 1].min()))
+        x_max = int(np.ceil(all_corners[:, 0, 0].max()))
+        y_max = int(np.ceil(all_corners[:, 0, 1].max()))
+
+        canvas_w = x_max - x_min
+        canvas_h = y_max - y_min
+
+        # Limit canvas to prevent OOM
+        MAX_CANVAS = 8000
+        if canvas_w > MAX_CANVAS or canvas_h > MAX_CANVAS:
+            scale_down = MAX_CANVAS / max(canvas_w, canvas_h)
+            canvas_w = int(canvas_w * scale_down)
+            canvas_h = int(canvas_h * scale_down)
+            S = np.array([[scale_down, 0, 0],
+                          [0, scale_down, 0],
+                          [0, 0, 1]], dtype=np.float64)
+            transforms = [S @ T for T in transforms]
+            x_min = int(x_min * scale_down)
+            y_min = int(y_min * scale_down)
+
+        # Translation to shift into positive coordinates
+        T_offset = np.array([[1, 0, -x_min],
+                              [0, 1, -y_min],
+                              [0, 0, 1]], dtype=np.float64)
+
+        # ── Warp and blend each image onto the canvas ─────────────
+        canvas = np.zeros((canvas_h, canvas_w, 3), dtype=np.float32)
+        weight_sum = np.zeros((canvas_h, canvas_w), dtype=np.float32)
+
+        for i, img in enumerate(images):
+            M_full = T_offset @ transforms[i]
+            M23 = M_full[:2, :]  # 2×3 for warpAffine
+
+            warped = cv2.warpAffine(
+                img.astype(np.float32), M23, (canvas_w, canvas_h),
+                flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT
+            )
+
+            # Feather weight mask (higher weight at center of image)
+            h, w = img.shape[:2]
+            weight_img = np.ones((h, w), dtype=np.float32)
+            margin = min(h, w) // 6
+            if margin > 2:
+                # Vertical feathering
+                for row in range(margin):
+                    alpha = row / margin
+                    weight_img[row, :] *= alpha
+                    weight_img[h - 1 - row, :] *= alpha
+                # Horizontal feathering
+                for col in range(margin):
+                    alpha = col / margin
+                    weight_img[:, col] *= alpha
+                    weight_img[:, w - 1 - col] *= alpha
+
+            warped_weight = cv2.warpAffine(
+                weight_img, M23, (canvas_w, canvas_h),
+                flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT
+            )
+
+            for c in range(3):
+                canvas[:, :, c] += warped[:, :, c] * warped_weight
+            weight_sum += warped_weight
+
+        # Normalize
+        mask = weight_sum > 0
+        for c in range(3):
+            canvas[:, :, c][mask] /= weight_sum[mask]
+
+        mosaic = np.clip(canvas, 0, 255).astype(np.uint8)
+
+        # ── Crop to content (remove black borders) ────────────────
+        gray = cv2.cvtColor(mosaic, cv2.COLOR_BGR2GRAY)
+        _, binary = cv2.threshold(gray, 5, 255, cv2.THRESH_BINARY)
+        contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if contours:
+            largest = max(contours, key=cv2.contourArea)
+            rx, ry, rw, rh = cv2.boundingRect(largest)
+            if rw > 100 and rh > 100:
+                mosaic = mosaic[ry:ry + rh, rx:rx + rw]
+
+        return mosaic
+
+    except Exception as e:
+        print(f"[WARN] Affine mosaic failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+def _grid_composite(images: List[np.ndarray]) -> Optional[np.ndarray]:
+    """
+    Simple grid composite fallback — tiles images in a grid layout.
+    Used when all stitching methods fail.
+    """
+    try:
+        n = len(images)
+        cols = int(np.ceil(np.sqrt(n)))
+        rows = int(np.ceil(n / cols))
+
+        # Resize all to same dimensions
+        target_h = min(img.shape[0] for img in images)
+        target_w = min(img.shape[1] for img in images)
+
+        grid_rows = []
+        idx = 0
+        for r in range(rows):
+            row_imgs = []
+            for c in range(cols):
+                if idx < n:
+                    resized = cv2.resize(images[idx], (target_w, target_h))
+                    row_imgs.append(resized)
+                else:
+                    row_imgs.append(np.zeros((target_h, target_w, 3), dtype=np.uint8))
+                idx += 1
+            grid_rows.append(np.hstack(row_imgs))
+
+        grid = np.vstack(grid_rows)
+        print(f"[INFO] Grid composite: {cols}×{rows} = {grid.shape[1]}×{grid.shape[0]}")
+        return grid
+
+    except Exception as e:
+        print(f"[WARN] Grid composite failed: {e}")
+        return None
 
 
 def process_panoramic_images(
@@ -446,7 +708,8 @@ def process_panoramic_images(
     transform=None,
     class_names=None,
     device=None,
-    verbose: bool = True
+    verbose: bool = True,
+    geo_data: Dict = None
 ) -> Dict:
     """
     Full pipeline: stitch → preprocess → detect vegetation → segment → classify → annotate.
@@ -457,7 +720,8 @@ def process_panoramic_images(
       - GPU half-precision (AMP) is used when available
 
     Returns:
-        panorama, annotated, tree_data, num_trees, vegetation_mask, tree_regions, disease_counts
+        panorama, annotated, tree_data, num_trees, vegetation_mask, tree_regions,
+        disease_counts, geo_metadata (if geo_data provided)
     """
     import time as _time
     _t0 = _time.time()
@@ -465,7 +729,7 @@ def process_panoramic_images(
     if verbose:
         print(f"[INFO] Processing {len(image_paths)} images...")
 
-    # ── Stitch ────────────────────────────────────────────────────
+    # ── Stitch all images into a panorama ─────────────────────────
     if len(image_paths) >= 2:
         panorama = stitch_panorama(image_paths)
         if panorama is None:
@@ -494,61 +758,91 @@ def process_panoramic_images(
     if verbose:
         print(f"[INFO] Non-black content area: {content_pct:.1f}%")
 
-    # ── Downscale for segmentation if large ───────────────────────
-    SEG_MAX_EDGE = 3000  # max longest edge for segmentation ops
-    longest = max(orig_h, orig_w)
-    scale = 1.0
-    if longest > SEG_MAX_EDGE:
-        scale = SEG_MAX_EDGE / longest
-        seg_img = cv2.resize(panorama,
-                             (int(orig_w * scale), int(orig_h * scale)),
-                             interpolation=cv2.INTER_AREA)
-        seg_content_mask = cv2.resize(content_mask,
-                                      (int(orig_w * scale), int(orig_h * scale)),
-                                      interpolation=cv2.INTER_NEAREST)
+    # ── Detect trees on EACH frame individually (then dedup on panorama) ──
+    # Running detection per-frame ensures every tree in every image is found.
+    # Trees in the overlap region are deduplicated later.
+
+    all_tree_regions = []
+    veg_mask = np.zeros((orig_h, orig_w), dtype=np.uint8)
+
+    try:
+        from tree_detector import detect_coconut_trees
+
+        # Detect on the full stitched panorama
+        tree_regions = detect_coconut_trees(panorama, conf=0.10, verbose=verbose)
+
+        if tree_regions:
+            all_tree_regions.extend(tree_regions)
+            if verbose:
+                print(f"[INFO] Detected {len(tree_regions)} trees on panorama")
+        else:
+            if verbose:
+                print("[INFO] YOLO detected 0 on panorama — falling back to vegetation segmentation")
+            raise ImportError("YOLO found nothing")
+
+    except Exception as yolo_err:
         if verbose:
-            print(f"[PERF] Downscaled {orig_w}×{orig_h} → {seg_img.shape[1]}×{seg_img.shape[0]} (scale={scale:.3f})")
-    else:
-        seg_img = panorama
-        seg_content_mask = content_mask
+            print(f"[INFO] YOLO unavailable or failed ({yolo_err}) — using vegetation segmentation")
 
-    preprocessed = preprocess_for_trees(seg_img)
+        # ── Fallback: vegetation segmentation ─────────────────────
+        SEG_MAX_EDGE = 3000
+        longest = max(orig_h, orig_w)
+        scale = 1.0
+        if longest > SEG_MAX_EDGE:
+            scale = SEG_MAX_EDGE / longest
+            seg_img = cv2.resize(panorama,
+                                 (int(orig_w * scale), int(orig_h * scale)),
+                                 interpolation=cv2.INTER_AREA)
+            seg_content_mask = cv2.resize(content_mask,
+                                          (int(orig_w * scale), int(orig_h * scale)),
+                                          interpolation=cv2.INTER_NEAREST)
+            if verbose:
+                print(f"[PERF] Downscaled for segmentation: scale={scale:.3f}")
+        else:
+            seg_img = panorama
+            seg_content_mask = content_mask
 
-    veg_mask = detect_vegetation_mask(preprocessed)
-    # Zero out vegetation in black border areas
-    veg_mask = cv2.bitwise_and(veg_mask, seg_content_mask)
+        preprocessed = preprocess_for_trees(seg_img)
+        veg_mask = detect_vegetation_mask(preprocessed)
+        veg_mask = cv2.bitwise_and(veg_mask, seg_content_mask)
+
+        tree_regions = segment_individual_trees_watershed(
+            preprocessed, veg_mask, min_tree_area, max_tree_area)
+        contour_regions = segment_individual_trees_contour(
+            preprocessed, veg_mask, min_tree_area, max_tree_area)
+        tree_regions = tree_regions + contour_regions
+        tree_regions = remove_duplicate_trees(tree_regions, overlap_threshold=0.40)
+
+        # Map bboxes back to full resolution
+        if scale < 1.0:
+            inv = 1.0 / scale
+            for r in tree_regions:
+                x, y, w, h = r['bbox']
+                r['bbox'] = (int(x * inv), int(y * inv), int(w * inv), int(h * inv))
+                cx, cy = r['centroid']
+                r['centroid'] = (int(cx * inv), int(cy * inv))
+                r['area'] *= (inv * inv)
+            veg_mask = cv2.resize(veg_mask, (orig_w, orig_h), interpolation=cv2.INTER_NEAREST)
+
+        all_tree_regions = tree_regions
+
+    # ── Deduplicate close detections (from stitched overlap area) ──
+    # Remove trees whose centroids are within 60px of each other
+    all_tree_regions = sorted(all_tree_regions,
+                               key=lambda r: r.get('confidence', 0.5), reverse=True)
+    deduped = []
+    for det in all_tree_regions:
+        cx, cy = det['centroid']
+        too_close = any(
+            ((cx - k['centroid'][0])**2 + (cy - k['centroid'][1])**2)**0.5 < 60
+            for k in deduped
+        )
+        if not too_close:
+            deduped.append(det)
+    tree_regions = deduped
+
     if verbose:
-        veg_pct = (np.sum(veg_mask > 0) / np.sum(seg_content_mask > 0)) * 100 if np.sum(seg_content_mask > 0) > 0 else 0
-        print(f"[INFO] Vegetation coverage (of content area): {veg_pct:.1f}%")
-
-    # ── Watershed (primary) ───────────────────────────────────────
-    tree_regions = segment_individual_trees_watershed(
-        preprocessed, veg_mask, min_tree_area, max_tree_area)
-    if verbose:
-        print(f"[INFO] Watershed: {len(tree_regions)} trees")
-
-    # ── Contour (always runs as complement, not just fallback) ────
-    contour_regions = segment_individual_trees_contour(
-        preprocessed, veg_mask, min_tree_area, max_tree_area)
-    if verbose:
-        print(f"[INFO] Contour: {len(contour_regions)} trees")
-    tree_regions = tree_regions + contour_regions
-
-    tree_regions = remove_duplicate_trees(tree_regions, overlap_threshold=0.50)
-    if verbose:
-        print(f"[INFO] After deduplication: {len(tree_regions)} trees")
-
-    # ── Map bounding boxes back to full resolution ────────────────
-    if scale < 1.0:
-        inv = 1.0 / scale
-        for r in tree_regions:
-            x, y, w, h = r['bbox']
-            r['bbox'] = (int(x * inv), int(y * inv), int(w * inv), int(h * inv))
-            cx, cy = r['centroid']
-            r['centroid'] = (int(cx * inv), int(cy * inv))
-            r['area'] *= (inv * inv)
-        # Upscale vegetation mask for stats
-        veg_mask = cv2.resize(veg_mask, (orig_w, orig_h), interpolation=cv2.INTER_NEAREST)
+        print(f"[INFO] Final tree count after dedup: {len(tree_regions)} trees")
 
     # Sort left-to-right, top-to-bottom for consistent numbering
     tree_regions = sorted(tree_regions,
@@ -640,7 +934,7 @@ def process_panoramic_images(
         if verbose:
             print(f"[INFO] Outputs saved to {output_dir}")
 
-    return {
+    result = {
         'panorama': panorama,
         'annotated': annotated,
         'tree_data': tree_data,
@@ -649,6 +943,7 @@ def process_panoramic_images(
         'tree_regions': tree_regions,
         'disease_counts': disease_counts
     }
+    return result
 
 
 def annotate_trees_enhanced(
@@ -656,13 +951,16 @@ def annotate_trees_enhanced(
     tree_regions: List[Dict]
 ) -> Tuple[np.ndarray, List[Dict]]:
     """
-    Annotate with tree numbers only — red circles, no disease labels.
+    Annotate detected trees with bold red circles around the canopy
+    and 'Tree_XX' labels.
     """
     annotated = image.copy()
     tree_data = []
 
-    RED = (0, 0, 255)  # BGR red
+    RED = (0, 0, 255)       # BGR bright red
+    DARK_RED = (0, 0, 180)
     WHITE = (255, 255, 255)
+    BLACK = (0, 0, 0)
     font = cv2.FONT_HERSHEY_SIMPLEX
 
     for idx, region in enumerate(tree_regions):
@@ -670,22 +968,27 @@ def annotate_trees_enhanced(
         x, y, bw, bh = region['bbox']
         cx, cy = region['centroid']
 
-        label = str(tree_num)
+        # Circle radius from detector (canopy-matched) or bbox fallback
+        radius = region.get('radius', max(30, int(max(bw, bh) / 2)))
+
+        # Draw DARK RED bold circle around the tree canopy
+        cv2.circle(annotated, (cx, cy), radius, (0, 0, 180), 4, cv2.LINE_AA)   # dark red, 4px thick
+
+        # Label: "Tree_XX" in red, positioned above the circle
+        label = f"Tree_{tree_num}"
         font_scale = 0.55
         thickness = 2
         (tw, th), _ = cv2.getTextSize(label, font, font_scale, thickness)
 
-        # Circle radius — big enough to contain the number
-        radius = max(14, tw // 2 + 10, th // 2 + 10)
-
-        # Draw filled red circle with white border
-        cv2.circle(annotated, (cx, cy), radius, RED, -1)
-        cv2.circle(annotated, (cx, cy), radius, WHITE, 2)
-
-        # Centre the number text inside the circle
+        # Position label above the circle
         tx = cx - tw // 2
-        ty = cy + th // 2
-        cv2.putText(annotated, label, (tx, ty), font, font_scale, WHITE, thickness, cv2.LINE_AA)
+        ty = cy - radius - 8
+
+        # Text with black outline for readability on any background
+        cv2.putText(annotated, label, (tx, ty),
+                    font, font_scale, BLACK, thickness + 3, cv2.LINE_AA)   # thick black outline
+        cv2.putText(annotated, label, (tx, ty),
+                    font, font_scale, RED, thickness, cv2.LINE_AA)          # red text on top
 
         tree_data.append({
             'id': f'Tree_{tree_num}',

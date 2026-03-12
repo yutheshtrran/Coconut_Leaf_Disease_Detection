@@ -253,9 +253,20 @@ def process_drone_images():
             from segmentation_enhanced import process_panoramic_images
             from inference import device, _base_transform as transform, class_names
 
+            # ── Extract GPS for image ordering ────────────────────
+            ordered_paths = image_paths
+            try:
+                from geo_utils import extract_and_process_image_gps
+                geo_items, geo_metadata = extract_and_process_image_gps(image_paths, verbose=True)
+                if geo_items:
+                    ordered_paths = [item['path'] for item in geo_items]
+                    print(f"[GEO] Ordered {len(ordered_paths)} images by GPS position")
+            except Exception as geo_err:
+                print(f"[GEO][WARN] GPS extraction skipped: {geo_err}")
+
             t0 = time.time()
             result = process_panoramic_images(
-                image_paths=image_paths,
+                image_paths=ordered_paths,
                 output_dir=None,
                 classification_model=CLASSIFICATION_MODEL,
                 transform=transform,
@@ -279,7 +290,7 @@ def process_drone_images():
             annotated_b64 = _img_to_b64(annotated)
             panorama_b64  = _img_to_b64(panorama)
 
-            return jsonify({
+            response_data = {
                 "success": True,
                 "annotated_image": annotated_b64,
                 "panorama_image":  panorama_b64,
@@ -292,7 +303,9 @@ def process_drone_images():
                     "total_trees_segmented": num_trees,
                     "vegetation_coverage_px": int(np.sum(result['vegetation_mask'] > 0)),
                 }
-            })
+            }
+
+            return jsonify(response_data)
 
         finally:
             for path in image_paths:
@@ -403,6 +416,24 @@ def process_drone_video():
             except Exception:
                 clf_transform = clf_class_names = clf_device = None
 
+            # ── Geolocation extraction from video frame OSD ────────
+            geo_data = None
+            try:
+                from geo_utils import extract_and_process_video_frame_gps
+                geo_items, geo_metadata, has_osd = extract_and_process_video_frame_gps(
+                    frame_paths, sample_rate=5, verbose=True
+                )
+                if geo_items:
+                    geo_data = {
+                        'geo_items': geo_items,
+                        'geo_metadata': geo_metadata,
+                        'crop_osd': has_osd,  # crop OSD strip if detected
+                    }
+            except Exception as geo_err:
+                print(f"[GEO][WARN] Video GPS extraction skipped: {geo_err}")
+                import traceback as _tb
+                _tb.print_exc()
+
             t1 = time.time()
             result = process_panoramic_images(
                 image_paths=frame_paths,
@@ -412,6 +443,7 @@ def process_drone_video():
                 class_names=clf_class_names,
                 device=clf_device,
                 verbose=True,
+                geo_data=geo_data,
             )
             t_pipeline = time.time() - t1
             print(f"[PERF] Panoramic pipeline: {t_pipeline:.2f}s")
@@ -452,7 +484,10 @@ def process_drone_video():
             "segmentation_stats": {
                 "total_trees_segmented": num_trees,
                 "vegetation_coverage_px": int(np.sum(result['vegetation_mask'] > 0)),
-            }
+            },
+            **({
+                "geo_metadata": result['geo_metadata']
+            } if result.get('geo_metadata') else {})
         })
 
     except Exception as e:
