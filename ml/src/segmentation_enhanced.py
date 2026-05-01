@@ -430,28 +430,32 @@ def stitch_panorama(image_paths: List[str], max_width: int = 4000) -> Optional[n
     if len(images) < 2:
         return None
 
-    # ── Method 1: Homography-based sequential mosaicing ────────────
+    # ── Method 1: OpenCV Stitcher (Highest Quality First) ──────────────
+    print(f"[INFO] Attempting OpenCV Stitcher with {len(images)} frames...")
+    try:
+        # PANO gives the widest perspective, SCANS is for planar motion, but PANO handles large drone sweeps better
+        stitcher = cv2.Stitcher_create(cv2.Stitcher_PANORAMA)
+        # Increase confidence thresholds to aggressively filter bad matches that cause blurring
+        stitcher.setPanoConfidenceThresh(1.0) 
+        status, panorama = stitcher.stitch(images)
+        if status == cv2.Stitcher_OK:
+            print(f"[INFO] OpenCV Stitching succeeded "
+                  f"({len(images)} images → {panorama.shape[1]}×{panorama.shape[0]})")
+            return panorama
+        print(f"[WARN] OpenCV stitching failed (status={status})")
+    except Exception as e:
+        print(f"[WARN] OpenCV stitcher error: {e}")
+
+    # ── Method 2: Homography-based sequential mosaicing (Fallback) ────────────
+    print("[INFO] Falling back to custom affine mosaicing...")
     mosaic = _homography_mosaic(images)
     if mosaic is not None:
         print(f"[INFO] Homography mosaic succeeded "
               f"({len(images)} images → {mosaic.shape[1]}×{mosaic.shape[0]})")
         return mosaic
 
-    # ── Method 2: OpenCV Stitcher SCANS mode (planar) ──────────────
-    print("[INFO] Homography mosaic failed, trying OpenCV SCANS stitcher...")
-    try:
-        stitcher = cv2.Stitcher_create(cv2.Stitcher_SCANS)
-        status, panorama = stitcher.stitch(images)
-        if status == cv2.Stitcher_OK:
-            print(f"[INFO] SCANS stitching succeeded "
-                  f"({len(images)} images → {panorama.shape[1]}×{panorama.shape[0]})")
-            return panorama
-        print(f"[WARN] SCANS stitching failed (status={status})")
-    except Exception as e:
-        print(f"[WARN] SCANS stitcher error: {e}")
-
     # ── Method 3: Grid composite fallback ──────────────────────────
-    print("[INFO] All stitching methods failed, creating grid composite...")
+    print("[INFO] All true stitching methods failed, creating grid composite...")
     return _grid_composite(images)
 
 
@@ -766,9 +770,9 @@ def process_panoramic_images(
     veg_mask = np.zeros((orig_h, orig_w), dtype=np.uint8)
 
     try:
-        from tree_detector import detect_coconut_trees
+        from yolo_tree_detector import detect_coconut_trees
 
-        # Detect on the full stitched panorama
+        # Detect on the full stitched panorama using YOLO Segment
         tree_regions = detect_coconut_trees(panorama, conf=0.10, verbose=verbose)
 
         if tree_regions:
@@ -968,25 +972,36 @@ def annotate_trees_enhanced(
         x, y, bw, bh = region['bbox']
         cx, cy = region['centroid']
 
-        # Circle radius from detector (canopy-matched) or bbox fallback
-        radius = region.get('radius', max(30, int(max(bw, bh) / 2)))
+        # Fallback to circle if no polygon is provided
+        if 'polygon' in region and region['polygon'] is not None and len(region['polygon']) > 2:
+            pts = np.array(region['polygon'], dtype=np.int32)
+            # Draw precise YOLO polygon contour outlining the exact canopy
+            cv2.polylines(annotated, [pts], isClosed=True, color=(0, 255, 0), thickness=3, lineType=cv2.LINE_AA)
+            # Add a light semi-transparent green fill
+            overlay = annotated.copy()
+            cv2.fillPoly(overlay, [pts], (0, 200, 0))
+            cv2.addWeighted(overlay, 0.3, annotated, 0.7, 0, annotated)
+        else:
+            # Circle radius from detector (canopy-matched) or bbox fallback
+            radius = region.get('radius', max(30, int(max(bw, bh) / 2)))
+            cv2.circle(annotated, (cx, cy), radius, (0, 255, 0), 3, cv2.LINE_AA)
 
-        # Draw DARK RED bold circle around the tree canopy
-        cv2.circle(annotated, (cx, cy), radius, (0, 0, 180), 4, cv2.LINE_AA)   # dark red, 4px thick
+        # Draw a small center dot
+        cv2.circle(annotated, (cx, cy), 4, (0, 0, 255), -1)
 
-        # Label: "Tree_XX" in red, positioned above the circle
+        # Label: "Tree_XX" in red, positioned exactly at centroid for clear association
         label = f"Tree_{tree_num}"
         font_scale = 0.55
         thickness = 2
         (tw, th), _ = cv2.getTextSize(label, font, font_scale, thickness)
 
-        # Position label above the circle
+        # Position label slightly above the center dot
         tx = cx - tw // 2
-        ty = cy - radius - 8
+        ty = cy - 10
 
         # Text with black outline for readability on any background
         cv2.putText(annotated, label, (tx, ty),
-                    font, font_scale, BLACK, thickness + 3, cv2.LINE_AA)   # thick black outline
+                    font, font_scale, BLACK, thickness + 2, cv2.LINE_AA)   # thick black outline
         cv2.putText(annotated, label, (tx, ty),
                     font, font_scale, RED, thickness, cv2.LINE_AA)          # red text on top
 
