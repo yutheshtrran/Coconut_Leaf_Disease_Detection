@@ -81,3 +81,9 @@ Thumbs.db
 # TEMP FILES
 # ==============================
 docs/md_workflow
+
+ml/experiments/
+ml/datasets/
+ml/annotated
+ml/coconut_dataset
+

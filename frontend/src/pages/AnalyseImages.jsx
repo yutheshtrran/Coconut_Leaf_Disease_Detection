@@ -63,7 +63,7 @@ const AnalyseImages = () => {
                 const formData = new FormData();
                 formData.append("file", file); // Ensure backend expects 'file'
 
-                const response = await fetch("http://127.0.0.1:5000/predict", {
+                const response = await fetch("http://127.0.0.1:5001/predict", {
                     method: "POST",
                     body: formData,
                 });

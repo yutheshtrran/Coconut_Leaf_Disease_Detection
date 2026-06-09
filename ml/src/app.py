@@ -253,9 +253,20 @@ def process_drone_images():
             from segmentation_enhanced import process_panoramic_images
             from inference import device, _base_transform as transform, class_names
 
+            # ── Extract GPS for image ordering ────────────────────
+            ordered_paths = image_paths
+            try:
+                from geo_utils import extract_and_process_image_gps
+                geo_items, geo_metadata = extract_and_process_image_gps(image_paths, verbose=True)
+                if geo_items:
+                    ordered_paths = [item['path'] for item in geo_items]
+                    print(f"[GEO] Ordered {len(ordered_paths)} images by GPS position")
+            except Exception as geo_err:
+                print(f"[GEO][WARN] GPS extraction skipped: {geo_err}")
+
             t0 = time.time()
             result = process_panoramic_images(
-                image_paths=image_paths,
+                image_paths=ordered_paths,
                 output_dir=None,
                 classification_model=CLASSIFICATION_MODEL,
                 transform=transform,
@@ -279,7 +290,7 @@ def process_drone_images():
             annotated_b64 = _img_to_b64(annotated)
             panorama_b64  = _img_to_b64(panorama)
 
-            return jsonify({
+            response_data = {
                 "success": True,
                 "annotated_image": annotated_b64,
                 "panorama_image":  panorama_b64,
@@ -292,7 +303,9 @@ def process_drone_images():
                     "total_trees_segmented": num_trees,
                     "vegetation_coverage_px": int(np.sum(result['vegetation_mask'] > 0)),
                 }
-            })
+            }
+
+            return jsonify(response_data)
 
         finally:
             for path in image_paths:
@@ -305,6 +318,14 @@ def process_drone_images():
 # ------------------------------------------------------------------
 # Drone Video Processing API
 # ------------------------------------------------------------------
+drone_progress = {}
+
+@app.route("/drone-video-progress/<session_id>", methods=["GET"])
+def get_drone_video_progress(session_id):
+    """Endpoint for frontend to poll actual processing state."""
+    status = drone_progress.get(session_id, "Processing...")
+    return jsonify({"success": True, "status": status})
+
 @app.route("/process-drone-video", methods=["POST"])
 def process_drone_video():
     """
@@ -320,13 +341,15 @@ def process_drone_video():
     Returns JSON with annotated_image, panorama_image, tree_data,
     disease_counts, farm_health_score — same shape as /process-drone-images.
     """
-    FRAME_STEP    = 30    # save every Nth frame (≈1 fps at 30fps video)
-    MAX_FRAMES    = 40    # hard cap on extracted frames
-    FRAME_MAX_DIM = 1500  # downscale each frame so longest edge ≤ this
+    # Extract one frame every 2 seconds at full native resolution
+    FRAME_INTERVAL_SEC = 2    # seconds between extracted frames
+    MAX_FRAMES         = 40   # hard cap to control memory usage
 
-    session_id = str(uuid.uuid4())
+    # Support specific session ID provided by frontend for status tracking
+    session_id = request.form.get("session_id", str(uuid.uuid4()))
     video_path = None
     frame_dir  = os.path.join(VIDEOFRAMES_DIR, session_id)
+    drone_progress[session_id] = "Uploading video..."
 
     try:
         # ── Validate upload ───────────────────────────────────────
@@ -341,7 +364,8 @@ def process_drone_video():
         file.save(video_path)
         os.makedirs(frame_dir, exist_ok=True)
 
-        # ── Seek-based frame extraction + downscale ───────────────
+        # ── Seek-based frame extraction at full resolution ────────
+        drone_progress[session_id] = "Extracting frames..."
         t0 = time.time()
         frame_paths = []
 
@@ -353,8 +377,12 @@ def process_drone_video():
         fps = cap.get(cv2.CAP_PROP_FPS) or 30
         print(f"[INFO] Video: {total_frames} frames @ {fps:.1f} fps")
 
+        # One frame every FRAME_INTERVAL_SEC seconds
+        frame_step = max(1, int(round(fps * FRAME_INTERVAL_SEC)))
+        print(f"[INFO] Frame step: {frame_step} (every {FRAME_INTERVAL_SEC}s at {fps:.1f} fps)")
+
         # Compute target frame indices upfront, then seek directly
-        target_indices = list(range(0, total_frames, FRAME_STEP))[:MAX_FRAMES]
+        target_indices = list(range(0, total_frames, frame_step))[:MAX_FRAMES]
 
         for saved_idx, frame_idx in enumerate(target_indices):
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
@@ -362,23 +390,20 @@ def process_drone_video():
             if not ret:
                 continue
 
-            # Downscale frame if too large (saves memory + speeds stitching)
-            fh, fw = frame.shape[:2]
-            longest = max(fh, fw)
-            if longest > FRAME_MAX_DIM:
-                s = FRAME_MAX_DIM / longest
-                frame = cv2.resize(frame,
-                                   (int(fw * s), int(fh * s)),
-                                   interpolation=cv2.INTER_AREA)
-
+            # Save at full native resolution — no downscale
+            # The grid panorama builder will handle uniform sizing
             frame_filename = os.path.join(frame_dir, f"frame_{saved_idx:04d}.jpg")
-            cv2.imwrite(frame_filename, frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
+            cv2.imwrite(frame_filename, frame, [cv2.IMWRITE_JPEG_QUALITY, 92])
             frame_paths.append(frame_filename)
+
+            # Update progress string
+            prog = int((saved_idx + 1) / len(target_indices) * 100)
+            drone_progress[session_id] = f"Extracting frames... {prog}%"
 
         cap.release()
         t_extract = time.time() - t0
         print(f"[PERF] Frame extraction: {len(frame_paths)} frames "
-              f"(downscaled to ≤{FRAME_MAX_DIM}px) in {t_extract:.2f}s")
+              f"(full resolution, every {FRAME_INTERVAL_SEC}s) in {t_extract:.2f}s")
 
         # Delete the raw video immediately to free disk space
         if video_path and os.path.exists(video_path):
@@ -403,6 +428,27 @@ def process_drone_video():
             except Exception:
                 clf_transform = clf_class_names = clf_device = None
 
+            def prog_callback(msg):
+                drone_progress[session_id] = msg
+
+            # ── Geolocation extraction from video frame OSD ────────
+            geo_data = None
+            try:
+                from geo_utils import extract_and_process_video_frame_gps
+                geo_items, geo_metadata, has_osd = extract_and_process_video_frame_gps(
+                    frame_paths, sample_rate=5, verbose=True
+                )
+                if geo_items:
+                    geo_data = {
+                        'geo_items': geo_items,
+                        'geo_metadata': geo_metadata,
+                        'crop_osd': has_osd,  # crop OSD strip if detected
+                    }
+            except Exception as geo_err:
+                print(f"[GEO][WARN] Video GPS extraction skipped: {geo_err}")
+                import traceback as _tb
+                _tb.print_exc()
+
             t1 = time.time()
             result = process_panoramic_images(
                 image_paths=frame_paths,
@@ -412,6 +458,8 @@ def process_drone_video():
                 class_names=clf_class_names,
                 device=clf_device,
                 verbose=True,
+                progress_callback=prog_callback,
+                geo_data=geo_data,
             )
             t_pipeline = time.time() - t1
             print(f"[PERF] Panoramic pipeline: {t_pipeline:.2f}s")
@@ -452,7 +500,10 @@ def process_drone_video():
             "segmentation_stats": {
                 "total_trees_segmented": num_trees,
                 "vegetation_coverage_px": int(np.sum(result['vegetation_mask'] > 0)),
-            }
+            },
+            **({
+                "geo_metadata": result['geo_metadata']
+            } if result.get('geo_metadata') else {})
         })
 
     except Exception as e:
@@ -571,12 +622,12 @@ def install_deps():
 def test_endpoints():
     print_header("Testing Endpoints")
     import requests
-    print("Make sure API is running on http://127.0.0.1:5000")
+    print("Make sure API is running on http://127.0.0.1:5001")
     time.sleep(3)
     try:
-        r = requests.get("http://127.0.0.1:5000/")
+        r = requests.get("http://127.0.0.1:5001/")
         print(f"GET /           -> Status {r.status_code}, Response {r.json()}")
-        r = requests.get("http://127.0.0.1:5000/health")
+        r = requests.get("http://127.0.0.1:5001/health")
         print(f"GET /health     -> Status {r.status_code}, Response {r.json()}")
         print("✓ Basic tests passed")
     except Exception as e:
@@ -584,9 +635,9 @@ def test_endpoints():
 
 def start_api():
     print_header("Starting Flask API Server")
-    print("API Server running at http://127.0.0.1:5000")
+    print("API Server running at http://127.0.0.1:5001")
     print("Press Ctrl+C to stop\n")
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5001, debug=True)
 
 # ------------------------------------------------------------------
 # Main CLI interface
