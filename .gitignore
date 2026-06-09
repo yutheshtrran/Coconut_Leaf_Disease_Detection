@@ -82,5 +82,8 @@ Thumbs.db
 # ==============================
 docs/md_workflow
 
-ml/experiments/  
+ml/experiments/
 ml/datasets/
+ml/annotated
+ml/coconut_dataset
+
