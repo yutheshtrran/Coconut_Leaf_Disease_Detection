@@ -305,6 +305,14 @@ def process_drone_images():
 # ------------------------------------------------------------------
 # Drone Video Processing API
 # ------------------------------------------------------------------
+drone_progress = {}
+
+@app.route("/drone-video-progress/<session_id>", methods=["GET"])
+def get_drone_video_progress(session_id):
+    """Endpoint for frontend to poll actual processing state."""
+    status = drone_progress.get(session_id, "Processing...")
+    return jsonify({"success": True, "status": status})
+
 @app.route("/process-drone-video", methods=["POST"])
 def process_drone_video():
     """
@@ -324,9 +332,11 @@ def process_drone_video():
     FRAME_INTERVAL_SEC = 2    # seconds between extracted frames
     MAX_FRAMES         = 40   # hard cap to control memory usage
 
-    session_id = str(uuid.uuid4())
+    # Support specific session ID provided by frontend for status tracking
+    session_id = request.form.get("session_id", str(uuid.uuid4()))
     video_path = None
     frame_dir  = os.path.join(VIDEOFRAMES_DIR, session_id)
+    drone_progress[session_id] = "Uploading video..."
 
     try:
         # ── Validate upload ───────────────────────────────────────
@@ -342,6 +352,7 @@ def process_drone_video():
         os.makedirs(frame_dir, exist_ok=True)
 
         # ── Seek-based frame extraction at full resolution ────────
+        drone_progress[session_id] = "Extracting frames..."
         t0 = time.time()
         frame_paths = []
 
@@ -372,6 +383,10 @@ def process_drone_video():
             cv2.imwrite(frame_filename, frame, [cv2.IMWRITE_JPEG_QUALITY, 92])
             frame_paths.append(frame_filename)
 
+            # Update progress string
+            prog = int((saved_idx + 1) / len(target_indices) * 100)
+            drone_progress[session_id] = f"Extracting frames... {prog}%"
+
         cap.release()
         t_extract = time.time() - t0
         print(f"[PERF] Frame extraction: {len(frame_paths)} frames "
@@ -400,6 +415,9 @@ def process_drone_video():
             except Exception:
                 clf_transform = clf_class_names = clf_device = None
 
+            def prog_callback(msg):
+                drone_progress[session_id] = msg
+
             t1 = time.time()
             result = process_panoramic_images(
                 image_paths=frame_paths,
@@ -409,6 +427,7 @@ def process_drone_video():
                 class_names=clf_class_names,
                 device=clf_device,
                 verbose=True,
+                progress_callback=prog_callback
             )
             t_pipeline = time.time() - t1
             print(f"[PERF] Panoramic pipeline: {t_pipeline:.2f}s")
