@@ -37,7 +37,7 @@ const Upload = () => {
   const [activeTab, setActiveTab] = useState('upload'); // 'upload' | 'drone-video'
   const [droneVideoFile, setDroneVideoFile] = useState(null);
   const [droneVideoLoading, setDroneVideoLoading] = useState(false);
-  const [droneVideoStatusIdx, setDroneVideoStatusIdx] = useState(0);
+  const [droneVideoStatusText, setDroneVideoStatusText] = useState('Preparing...');
   const [droneVideoResult, setDroneVideoResult] = useState(null);
   const [droneVideoError, setDroneVideoError] = useState(null);
   const [droneVideoPanoView, setDroneVideoPanoView] = useState('annotated'); // 'annotated'|'panorama'
@@ -354,16 +354,23 @@ const Upload = () => {
     setDroneVideoError(null);
   };
 
-  const startDroneVideoStatusCycle = () => {
-    let i = 0;
-    setDroneVideoStatusIdx(0);
-    droneVideoStatusTimer.current = setInterval(() => {
-      i = Math.min(i + 1, DRONE_VIDEO_STATUSES.length - 1);
-      setDroneVideoStatusIdx(i);
-    }, 4000);
+  const startDroneVideoProgressPolling = (sessionId) => {
+    setDroneVideoStatusText('Uploading video...');
+    if (droneVideoStatusTimer.current) clearInterval(droneVideoStatusTimer.current);
+    droneVideoStatusTimer.current = setInterval(async () => {
+      try {
+        const res = await fetch(`http://127.0.0.1:5001/drone-video-progress/${sessionId}`);
+        const data = await res.json();
+        if (data.success && data.status) {
+          setDroneVideoStatusText(data.status);
+        }
+      } catch (err) {
+        // silently ignore fetch errors during polling
+      }
+    }, 1000);
   };
 
-  const stopDroneVideoStatusCycle = () => {
+  const stopDroneVideoProgressPolling = () => {
     if (droneVideoStatusTimer.current) {
       clearInterval(droneVideoStatusTimer.current);
       droneVideoStatusTimer.current = null;
@@ -375,10 +382,15 @@ const Upload = () => {
     setDroneVideoLoading(true);
     setDroneVideoError(null);
     setDroneVideoResult(null);
-    startDroneVideoStatusCycle();
+
+    // Generate a session ID to track progress
+    const sessionId = Date.now().toString();
+    startDroneVideoProgressPolling(sessionId);
+
     try {
       const fd = new FormData();
       fd.append('file', droneVideoFile);
+      fd.append('session_id', sessionId);
       const res = await fetch('http://127.0.0.1:5001/process-drone-video', { method: 'POST', body: fd });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || `Server error ${res.status}`);
@@ -387,7 +399,7 @@ const Upload = () => {
     } catch (err) {
       setDroneVideoError(err.message || 'Analysis failed. Make sure the ML server is running.');
     } finally {
-      stopDroneVideoStatusCycle();
+      stopDroneVideoProgressPolling();
       setDroneVideoLoading(false);
     }
   };
@@ -834,7 +846,7 @@ const Upload = () => {
               <div className="mt-5 p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-3">
                 <Loader2 size={22} className="text-emerald-600 animate-spin flex-shrink-0" />
                 <div>
-                  <p className="font-medium text-emerald-700">{DRONE_VIDEO_STATUSES[droneVideoStatusIdx]}</p>
+                  <p className="font-medium text-emerald-700">{droneVideoStatusText}</p>
                   <p className="text-xs text-emerald-600/70 mt-0.5">This may take a minute for longer videos…</p>
                 </div>
               </div>

@@ -45,8 +45,7 @@ ml/uploads/
 # ML MODELS & EXPERIMENTS
 # ==============================
 ml/models/
-ml/experiments/  
-ml/datasets/
+ml/experiments/
 ml/runs/
 ml/checkpoints/
 ml/logs/
@@ -82,3 +81,6 @@ Thumbs.db
 # TEMP FILES
 # ==============================
 docs/md_workflow
+
+ml/experiments/  
+ml/datasets/

@@ -377,7 +377,7 @@ def annotate_trees(
     return annotated, tree_data
 
 
-def create_grid_panorama(image_paths: List[str], target_frame_height: int = 1080) -> Optional[np.ndarray]:
+def create_grid_panorama(image_paths: List[str]) -> Optional[np.ndarray]:
     """
     Build a high-resolution panorama by arranging frames in a grid layout.
 
@@ -385,13 +385,12 @@ def create_grid_panorama(image_paths: List[str], target_frame_height: int = 1080
     survey video where adjacent frames do not have enough texture overlap for
     the OpenCV stitcher to find matches).
 
-    - All frames are resized to `target_frame_height` (aspect ratio preserved)
+    - ZERO resizing is applied; images are kept at exact native resolution
     - Frames are arranged into a near-square grid (cols ≈ sqrt(n))
     - Returns a single high-resolution numpy array covering the full farm area
 
     Args:
         image_paths: Ordered list of frame image paths
-        target_frame_height: Pixel height each frame is resized to (default 1080)
 
     Returns:
         Grid panorama as a numpy BGR array, or None on failure
@@ -405,12 +404,6 @@ def create_grid_panorama(image_paths: List[str], target_frame_height: int = 1080
         if img is None:
             print(f"[WARN] Grid panorama: could not read {path}")
             continue
-        h, w = img.shape[:2]
-        # Resize to target height, preserve aspect ratio
-        if h != target_frame_height:
-            scale = target_frame_height / h
-            img = cv2.resize(img, (int(w * scale), target_frame_height),
-                             interpolation=cv2.INTER_LANCZOS4)
         images.append(img)
 
     if not images:
@@ -421,12 +414,17 @@ def create_grid_panorama(image_paths: List[str], target_frame_height: int = 1080
     cols = int(np.ceil(np.sqrt(n)))
     rows = int(np.ceil(n / cols))
 
-    # Uniform frame width = most-common width (avoids thin strips)
+    # To build a grid reliably with np.hstack/vstack without errors,
+    # images MUST be the same dimension.
+    # We find the dominant width/height and force any irregular frames 
+    # (like the very last frame of a video which might be cropped) to match.
+    # We don't downscale, just uniformize based on the native resolution.
     widths = [img.shape[1] for img in images]
+    heights = [img.shape[0] for img in images]
     frame_w = int(np.median(widths))
-    frame_h = target_frame_height
+    frame_h = int(np.median(heights))
 
-    # Resize all frames to exactly (frame_w, frame_h) for a clean grid
+    # Ensure all frames are EXACTLY (frame_w, frame_h)
     resized = []
     for img in images:
         h, w = img.shape[:2]
@@ -447,12 +445,12 @@ def create_grid_panorama(image_paths: List[str], target_frame_height: int = 1080
         row_imgs.append(np.hstack(row_frames))
     panorama = np.vstack(row_imgs)
 
-    print(f"[INFO] Grid panorama: {n} frames in {rows}×{cols} grid "
+    print(f"[INFO] Grid panorama: {n} frames (native resolution {frame_w}x{frame_h}) in {rows}×{cols} grid "
           f"→ {panorama.shape[1]}×{panorama.shape[0]} px")
     return panorama
 
 
-def stitch_panorama(image_paths: List[str], max_width: int = 4000) -> Optional[np.ndarray]:
+def stitch_panorama(image_paths: List[str]) -> Optional[np.ndarray]:
     """
     Stitch multiple images into a high-resolution panorama.
 
@@ -490,12 +488,6 @@ def stitch_panorama(image_paths: List[str], max_width: int = 4000) -> Optional[n
         if img is None:
             print(f"[WARN] Could not read: {path}")
             continue
-        h, w = img.shape[:2]
-        # Only downscale if extremely large to avoid OOM in stitcher
-        if w > max_width:
-            scale = max_width / w
-            img = cv2.resize(img, (int(w * scale), int(h * scale)),
-                             interpolation=cv2.INTER_AREA)
         images.append(img)
 
     feature_stitch_ok = False
@@ -532,7 +524,8 @@ def process_panoramic_images(
     transform=None,
     class_names=None,
     device=None,
-    verbose: bool = True
+    verbose: bool = True,
+    progress_callback=None
 ) -> Dict:
     """
     Full pipeline: stitch → preprocess → detect vegetation → segment → classify → annotate.
@@ -547,10 +540,17 @@ def process_panoramic_images(
     """
     import time as _time
     _t0 = _time.time()
+    
+    def report_progress(msg):
+        if progress_callback:
+            progress_callback(msg)
+        if verbose:
+            print(f"[PROGRESS] {msg}")
 
     if verbose:
         print(f"[INFO] Processing {len(image_paths)} images...")
 
+    report_progress("Generating panoramic image...")
     # ── Stitch / Grid panorama ─────────────────────────────────────
     if len(image_paths) >= 2:
         panorama = stitch_panorama(image_paths)
@@ -568,6 +568,7 @@ def process_panoramic_images(
     if verbose:
         print(f"[INFO] Panorama: {orig_w}×{orig_h}")
 
+    report_progress("Detecting vegetation and segmenting...")
     # ── Mask out black stitching borders ──────────────────────────
     # Stitched panoramas have large black (0,0,0) regions that inflate
     # area calculations and pollute vegetation detection.
@@ -593,7 +594,7 @@ def process_panoramic_images(
                                       (int(orig_w * scale), int(orig_h * scale)),
                                       interpolation=cv2.INTER_NEAREST)
         if verbose:
-            print(f"[PERF] Downscaled {orig_w}×{orig_h} → {seg_img.shape[1]}×{seg_img.shape[0]} (scale={scale:.3f})")
+            print(f"[INFO] Downscaled {orig_w}×{orig_h} → {seg_img.shape[1]}×{seg_img.shape[0]} (scale={scale:.3f})")
     else:
         seg_img = panorama
         seg_content_mask = content_mask
@@ -640,6 +641,7 @@ def process_panoramic_images(
     tree_regions = sorted(tree_regions,
                           key=lambda r: (r['centroid'][1] // 100, r['centroid'][0]))
 
+    report_progress("Performing disease classification...")
     # ── Classify diseases (batched + AMP) ─────────────────────────
     disease_counts = {}
     if classification_model and transform and class_names:
