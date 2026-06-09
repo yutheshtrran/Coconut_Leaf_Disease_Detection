@@ -87,3 +87,19 @@ ml/datasets/
 ml/annotated
 ml/coconut_dataset
 
+# ==============================
+# MODEL WEIGHTS (never commit — share via Drive/LFS)
+# ==============================
+*.pt
+*.pth
+*.onnx
+*.bin
+!**/.gitkeep
+
+# ==============================
+# BACKEND RUNTIME UPLOADS
+# ==============================
+backend/uploads/
+!backend/uploads/.gitkeep
+!backend/uploads/ml/.gitkeep
+
