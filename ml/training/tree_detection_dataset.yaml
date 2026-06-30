@@ -1,0 +1,18 @@
+# YOLO dataset config — coconut tree detection (aerial / drone)
+# Model used: YOLOv8 instance segmentation (coconut_tree_v6-3.pt)
+# nc: 1 class (coconut tree crown, top-down view)
+#
+# Dataset source: Roboflow — coco-guard-2 v1 (YOLOv8 export)
+# Place exported dataset at ml/training/tree_dataset/ with structure:
+#   ml/training/tree_dataset/images/train/
+#   ml/training/tree_dataset/images/val/
+#   ml/training/tree_dataset/labels/train/
+#   ml/training/tree_dataset/labels/val/
+
+path: ../training/tree_dataset
+train: images/train
+val:   images/val
+
+nc: 1
+names:
+  0: coconut_tree

@@ -12,14 +12,8 @@ mixup_alpha: 0.2
 accumulation_steps: 2
 device: cuda
 class_names:
-  - Bud Root Dropping
-  - Bud Rot
-  - Caterpillars
-  - DryingofLeaflets
-  - Flaccidity
-  - Gray Leaf Spot
-  - Healthy_Leaves
-  - Leaf Rot
-  - Leaflets
-  - Yellowing
-  
+  - Black Beetle Attack
+  - Magnesium Deficiency
+  - Potassium Deficiency
+  - Yellow Patches
+
