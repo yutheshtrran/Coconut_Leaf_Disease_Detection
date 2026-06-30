@@ -26,7 +26,7 @@ def calculate_metrics(y_true, y_pred):
 # =========================
 # Model Saving
 # =========================
-def save_model(model, filename="best_model.pth"):
+def save_model(model, filename="coconut_disease_v5.pt"):
     """
     Save model weights to ml/weights/
     """
@@ -40,7 +40,7 @@ def save_model(model, filename="best_model.pth"):
 # =========================
 # Model Loading
 # =========================
-def load_model(model, filename="best_model.pth", device="cpu"):
+def load_model(model, filename="coconut_disease_v5.pt", device="cpu"):
     """
     Load model weights from ml/weights/
     """

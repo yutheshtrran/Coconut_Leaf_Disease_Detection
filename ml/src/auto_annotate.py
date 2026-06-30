@@ -15,21 +15,20 @@ import json
 import shutil
 import cv2
 import numpy as np
-import torch
-from torchvision import transforms
-from PIL import Image
 from yaml import safe_load
 
-# Ensure src/ is on path so we can import model.py
-sys.path.insert(0, os.path.dirname(__file__))
-from model import MyModel, load_weights
+try:
+    from ultralytics import YOLO
+except ImportError:
+    print("[ERROR] Ultralytics not installed. Run: pip install ultralytics")
+    sys.exit(1)
 
 # ---- Paths ----
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ML_DIR = os.path.dirname(SCRIPT_DIR)
 RAW_DIR = os.path.join(ML_DIR, "data", "raw")
 ORIGINAL_DIR = os.path.join(ML_DIR, "data", "original")
-MODEL_PATH = os.path.join(ML_DIR, "weights", "best_model.pth")
+MODEL_PATH = os.path.join(ML_DIR, "weights", "coconut_disease_v5.pt")
 CONFIG_PATH = os.path.join(SCRIPT_DIR, "config.yaml")
 
 # ---- Load config ----
@@ -37,60 +36,12 @@ with open(CONFIG_PATH) as f:
     config = safe_load(f)
 
 CLASSES = config["class_names"]
-IMAGE_SIZE = config.get("image_size", 300)
-MODEL_NAME = config.get("model_name", "efficientnet_b3")
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-# ---- Detect number of classes from saved weights ----
-print(f"[INFO] Loading trained weights from: {MODEL_PATH}")
-state_dict = torch.load(MODEL_PATH, map_location=DEVICE)
-if isinstance(state_dict, dict):
-    # Find the classifier output layer to detect trained class count
-    for key in state_dict:
-        if 'classifier' in key and 'weight' in key:
-            MODEL_NUM_CLASSES = state_dict[key].shape[0]
-            break
-        elif key.endswith('fc.1.weight'):
-            MODEL_NUM_CLASSES = state_dict[key].shape[0]
-            break
-    else:
-        MODEL_NUM_CLASSES = len(CLASSES)
-else:
-    MODEL_NUM_CLASSES = len(CLASSES)
-
-# Classes the model can predict (first N from config)
-MODEL_CLASSES = CLASSES[:MODEL_NUM_CLASSES]
-
-if MODEL_NUM_CLASSES != len(CLASSES):
-    print(f"[INFO] Model was trained on {MODEL_NUM_CLASSES} classes, config has {len(CLASSES)} classes.")
-    print(f"[INFO] Model can predict: {MODEL_CLASSES}")
-    print(f"[INFO] New classes (manual assignment only): {CLASSES[MODEL_NUM_CLASSES:]}")
-else:
-    print(f"[INFO] Model matches config: {MODEL_NUM_CLASSES} classes.")
-
-# ---- Build model with the trained class count ----
-print(f"[INFO] Building {MODEL_NAME} model with {MODEL_NUM_CLASSES} classes...")
-model = MyModel(
-    num_classes=MODEL_NUM_CLASSES,
-    model_name=MODEL_NAME,
-    pretrained=False,
-    dropout=0.3,
-)
-
-# ---- Load trained weights ----
-model = load_weights(model, MODEL_PATH, map_location=str(DEVICE))
-model.to(DEVICE)
-model.eval()
-print("[INFO] Model ready for inference.")
-
-# ---- Image transform (must match validation transform used in training) ----
-inference_transform = transforms.Compose([
-    transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
-    transforms.ToTensor(),
-    transforms.Normalize([0.485, 0.456, 0.406],
-                         [0.229, 0.224, 0.225]),
-])
+# ---- Load YOLO model ----
+print(f"[INFO] Loading disease model from: {MODEL_PATH}")
+model = YOLO(MODEL_PATH)
+MODEL_CLASSES = list(model.names.values()) if hasattr(model, 'names') and model.names else CLASSES
+print(f"[INFO] Model loaded. Classes: {MODEL_CLASSES}")
 
 # ---- Global state for mouse callback ----
 _drawing = False
@@ -258,13 +209,17 @@ def _save_annotation(img_path, img_file, disease_name, rect, scale, confidence):
 
 # ---- Prediction function ----
 def predict_image(img_path):
-    img = Image.open(img_path).convert("RGB")
-    input_tensor = inference_transform(img).unsqueeze(0).to(DEVICE)
-    with torch.no_grad():
-        output = model(input_tensor)
-        probs = torch.softmax(output, dim=1)
-        conf, pred = torch.max(probs, 1)
-    return MODEL_CLASSES[pred.item()], conf.item()
+    """Run YOLO disease model on image, return (class_name, confidence)."""
+    results = model(img_path, verbose=False)
+    for r in results:
+        if r.boxes is not None and len(r.boxes) > 0:
+            confs = r.boxes.conf.cpu().numpy()
+            cls_ids = r.boxes.cls.cpu().numpy().astype(int)
+            best_idx = int(np.argmax(confs))
+            cls_id = cls_ids[best_idx]
+            cls_name = MODEL_CLASSES[cls_id] if cls_id < len(MODEL_CLASSES) else "Unknown"
+            return cls_name, float(confs[best_idx])
+    return "Healthy", 1.0
 
 
 # ---- Main annotation loop ----
