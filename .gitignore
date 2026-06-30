@@ -103,3 +103,10 @@ backend/uploads/
 !backend/uploads/.gitkeep
 !backend/uploads/ml/.gitkeep
 
+# ==============================
+# FARM MAP JOB OUTPUTS
+# ==============================
+ml/farm_map_jobs/
+ml/uploads/farm_map/
+
+award_submission/
