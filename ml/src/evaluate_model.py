@@ -95,10 +95,10 @@ def evaluate():
         print(f"   {cls:30s}: {count:5d}")
 
     # ── Load model ────────────────────────────────────────────────────────
-    weights_path = os.path.join(os.path.dirname(__file__), "..", "weights", "best_model.pth")
+    weights_path = os.path.join(os.path.dirname(__file__), "..", "weights", "coconut_disease_v5.pt")
     if not os.path.exists(weights_path):
         print(f"\n[ERROR] Model weights not found: {weights_path}")
-        print("   Run 'python src/train.py' first to train the model.")
+        print("   Ensure coconut_disease_v5.pt is in ml/weights/")
         return
 
     checkpoint = torch.load(weights_path, map_location=device)

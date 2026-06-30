@@ -1,0 +1,21 @@
+# YOLO dataset config — coconut leaf disease detection
+# nc: 4 classes (instance segmentation, YOLOv8-seg)
+#
+# Place your dataset at ml/training/dataset/ with the structure:
+#   ml/training/dataset/images/train/
+#   ml/training/dataset/images/val/
+#   ml/training/dataset/labels/train/
+#   ml/training/dataset/labels/val/
+#
+# Roboflow export format: YOLOv8 (segmentation)
+
+path: ../training/dataset
+train: images/train
+val:   images/val
+
+nc: 4
+names:
+  0: Black Beetle Attack
+  1: Magnesium Deficiency
+  2: Potassium Deficiency
+  3: Yellow Patches
