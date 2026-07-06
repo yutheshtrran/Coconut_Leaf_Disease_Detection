@@ -1,4 +1,4 @@
-const ML = 'http://127.0.0.1:5001';
+const ML = import.meta.env.VITE_ML_URL || 'http://127.0.0.1:5001';
 
 export const startFarmMap = async (videoFile, conf = 0.35) => {
   const fd = new FormData();
@@ -25,5 +25,14 @@ export const getFarmMapResult = async (sessionId) => {
 export const analyseTreeDisease = async (sessionId, treeId) => {
   const r = await fetch(`${ML}/farm-map/disease/${sessionId}/${treeId}`, { method: 'POST' });
   if (!r.ok) throw new Error(`Disease analysis failed (${r.status})`);
+  return r.json();
+};
+
+export const analyzeDroneImage = async (imageFile, conf = 0.35) => {
+  const fd = new FormData();
+  fd.append('file', imageFile);
+  fd.append('conf', String(conf));
+  const r = await fetch(`${ML}/farm-map/analyze-image`, { method: 'POST', body: fd });
+  if (!r.ok) throw new Error(`Image analysis failed (${r.status})`);
   return r.json();
 };
