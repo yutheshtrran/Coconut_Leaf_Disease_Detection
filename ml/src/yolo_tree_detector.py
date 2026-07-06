@@ -15,7 +15,7 @@ import os
 from pathlib import Path
 
 # Fix path to load correctly from ml/weights/
-DEFAULT_WEIGHTS = str(Path(__file__).parent.parent / "weights" / "best_yolo_seg.pt")
+DEFAULT_WEIGHTS = str(Path(__file__).parent.parent / "weights" / "coconut_tree_v6-3.pt")
 
 def detect_coconut_trees(
     image: np.ndarray,

@@ -12,7 +12,7 @@ Features for SIGNIFICANTLY improved accuracy:
 - Adaptive threshold tuning
 
 Usage:
-    python drone_pipeline_enhanced.py --input_dir /path/to/drone/images --output_dir /path/to/output --model yolov8m-seg.pt
+    python drone_pipeline_enhanced.py --input_dir /path/to/drone/images --output_dir /path/to/output
 """
 
 import os
@@ -24,6 +24,8 @@ from ultralytics import YOLO
 from pathlib import Path
 import matplotlib.pyplot as plt
 from typing import Tuple, List, Dict
+
+_TREE_WEIGHTS = str(Path(__file__).parent.parent / "weights" / "coconut_tree_v6-3.pt")
 
 
 def stitch_images(image_paths: List[str], method='panorama') -> np.ndarray:
@@ -129,7 +131,7 @@ def preprocess_image_enhanced(image: np.ndarray) -> np.ndarray:
     return sharpened
 
 
-def detect_trees_yolo_enhanced(image: np.ndarray, model_path: str = 'yolov8m-seg.pt',
+def detect_trees_yolo_enhanced(image: np.ndarray, model_path: str = None,
                               conf_threshold: float = 0.3, iou_threshold: float = 0.45,
                               max_detections: int = 500) -> Dict:
     """
@@ -145,6 +147,8 @@ def detect_trees_yolo_enhanced(image: np.ndarray, model_path: str = 'yolov8m-seg
     Returns:
         Dictionary with detection results and metrics
     """
+    if model_path is None:
+        model_path = _TREE_WEIGHTS
     # Preprocess image
     processed_image = preprocess_image_enhanced(image)
     
@@ -385,7 +389,7 @@ def save_outputs_enhanced(panorama: np.ndarray, annotated: np.ndarray,
     print(f"✓ Saved tree data to: {output_dir / 'tree_data.json'}")
 
 
-def process_drone_images(input_dir: str, output_dir: str, model_path: str = 'yolov8m-seg.pt',
+def process_drone_images(input_dir: str, output_dir: str, model_path: str = None,
                         min_confidence: float = 0.35, verbose: bool = True):
     """
     Main processing function for drone images.
@@ -397,8 +401,10 @@ def process_drone_images(input_dir: str, output_dir: str, model_path: str = 'yol
         min_confidence: Minimum confidence threshold
         verbose: Print progress messages
     """
+    if model_path is None:
+        model_path = _TREE_WEIGHTS
     input_path = Path(input_dir)
-    
+
     # Find all image files
     image_formats = ['*.jpg', '*.jpeg', '*.png', '*.JPG', '*.JPEG']
     image_paths = []
@@ -481,7 +487,7 @@ def main():
     parser = argparse.ArgumentParser(description="Enhanced Drone Image Pipeline for Coconut Tree Detection")
     parser.add_argument('--input_dir', type=str, required=True, help='Input directory with drone images')
     parser.add_argument('--output_dir', type=str, required=True, help='Output directory for results')
-    parser.add_argument('--model', type=str, default='yolov8m-seg.pt', help='YOLO model to use')
+    parser.add_argument('--model', type=str, default=_TREE_WEIGHTS, help='YOLO model to use')
     parser.add_argument('--confidence', type=float, default=0.35, help='Minimum confidence threshold')
     parser.add_argument('--verbose', action='store_true', default=True, help='Print progress')
     

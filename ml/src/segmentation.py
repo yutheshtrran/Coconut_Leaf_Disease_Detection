@@ -13,8 +13,6 @@ Enhanced with:
 import cv2
 import numpy as np
 import torch
-from torchvision import transforms
-from PIL import Image
 import os
 from yaml import safe_load
 import json
@@ -394,40 +392,14 @@ class TreeSegmenter:
         self.class_names = self._load_class_names()
         self.disease_model = self._load_disease_model()
 
-        self.transform = transforms.Compose([
-            transforms.Resize((self.image_size, self.image_size)),
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-        ])
-
     def _load_disease_model(self):
-        from torchvision import models
         try:
-            model = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
-            weights_path = os.path.join(os.path.dirname(__file__), "..", "weights", "best_model.pth")
-
+            from ultralytics import YOLO
+            weights_path = os.path.join(os.path.dirname(__file__), "..", "weights", "coconut_disease_v5.pt")
             if os.path.exists(weights_path):
-                checkpoint = torch.load(weights_path, map_location=self.device)
-                if isinstance(checkpoint, dict):
-                    if 'fc.weight' in checkpoint:
-                        num_classes_in_checkpoint = checkpoint['fc.weight'].shape[0]
-                        if num_classes_in_checkpoint != len(self.class_names):
-                            print(f"Warning: Checkpoint has {num_classes_in_checkpoint} classes, "
-                                  f"config has {len(self.class_names)}. Adjusting.")
-                            if len(self.class_names) > num_classes_in_checkpoint:
-                                self.class_names = self.class_names[:num_classes_in_checkpoint]
-                            else:
-                                while len(self.class_names) < num_classes_in_checkpoint:
-                                    self.class_names.append(f"Class_{len(self.class_names)}")
-                    model.fc = torch.nn.Linear(model.fc.in_features, len(self.class_names))
-                    model.load_state_dict(
-                        {k.replace('module.', ''): v for k, v in checkpoint.items()}, strict=False)
-                else:
-                    model = checkpoint
-
-            model.to(self.device)
-            model.eval()
-            return model
+                return YOLO(weights_path)
+            print(f"Warning: Disease model not found at {weights_path}")
+            return None
         except Exception as e:
             print(f"Warning: Could not load disease model: {e}")
             return None
@@ -478,7 +450,7 @@ class TreeSegmenter:
         return tree_regions, centroids, green_mask
 
     def classify_tree_health(self, frame: np.ndarray, tree_region: Dict):
-        """Classify the health status of a tree region."""
+        """Classify the health status of a tree region using YOLO."""
         try:
             if self.disease_model is None:
                 return 'Unknown', 0.0
@@ -489,21 +461,21 @@ class TreeSegmenter:
             y1 = max(0, y - pad)
             x2 = min(frame.shape[1], x + w + pad)
             y2 = min(frame.shape[0], y + h + pad)
-            tree_img = frame[y1:y2, x1:x2]
+            crop = frame[y1:y2, x1:x2]
 
-            if tree_img.size == 0:
+            if crop.size == 0:
                 return 'Unknown', 0.0
 
-            pil_img = Image.fromarray(cv2.cvtColor(tree_img, cv2.COLOR_BGR2RGB))
-            img_tensor = self.transform(pil_img).unsqueeze(0).to(self.device)
-
-            with torch.no_grad():
-                outputs = self.disease_model(img_tensor)
-                pred_idx = torch.argmax(outputs, 1).item()
-                confidence = torch.softmax(outputs, dim=1)[0][pred_idx].item()
-                disease_name = (self.class_names[pred_idx]
-                                if pred_idx < len(self.class_names) else 'Unknown')
-                return disease_name, float(confidence)
+            results = self.disease_model(crop, verbose=False)
+            for r in results:
+                if r.boxes is not None and len(r.boxes) > 0:
+                    confs = r.boxes.conf.cpu().numpy()
+                    cls_ids = r.boxes.cls.cpu().numpy().astype(int)
+                    best_idx = int(np.argmax(confs))
+                    cls_id = cls_ids[best_idx]
+                    cls_name = self.disease_model.names.get(cls_id, 'Unknown')
+                    return cls_name, float(confs[best_idx])
+            return 'Healthy', 1.0
         except Exception as e:
             print(f"Error classifying tree health: {e}")
             return 'Unknown', 0.0
