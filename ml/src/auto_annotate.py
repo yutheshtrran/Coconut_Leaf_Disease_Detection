@@ -28,7 +28,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ML_DIR = os.path.dirname(SCRIPT_DIR)
 RAW_DIR = os.path.join(ML_DIR, "data", "raw")
 ORIGINAL_DIR = os.path.join(ML_DIR, "data", "original")
-MODEL_PATH = os.path.join(ML_DIR, "weights", "coconut_disease_v5.pt")
+MODEL_PATH = os.path.join(ML_DIR, "weights", "disease_v5", "weights", "best.pt")
 CONFIG_PATH = os.path.join(SCRIPT_DIR, "config.yaml")
 
 # ---- Load config ----

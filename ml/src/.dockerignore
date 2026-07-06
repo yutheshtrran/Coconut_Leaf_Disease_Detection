@@ -1,0 +1,8 @@
+__pycache__
+*.pyc
+*.pyo
+.env
+uploads/
+farm_map_jobs/
+runs/
+*.ipynb

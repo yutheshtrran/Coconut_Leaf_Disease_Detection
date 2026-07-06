@@ -1,44 +1,74 @@
-version: '3.8'
+version: '3.9'
 
 services:
+  # ── Frontend (React + Vite → nginx) ──────────────────────────────────────────
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:5000/api}
+        VITE_ML_URL: ${VITE_ML_URL:-http://localhost:5001}
     ports:
-      - "3000:3000"
-    volumes:
-      - ./frontend:/app
-    environment:
-      - NODE_ENV=development
+      - "80:80"
+    depends_on:
+      - backend
+      - ml
+    restart: unless-stopped
 
+  # ── Backend (Express / Node) ──────────────────────────────────────────────────
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     ports:
       - "5000:5000"
-    volumes:
-      - ./backend:/app
+    env_file:
+      - ./backend/.env
     environment:
-      - NODE_ENV=development
-      - MONGODB_URI=mongodb://mongo:27017/coconut_leaf_detection
+      NODE_ENV: production
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost}
+    depends_on:
+      - mongo
+    restart: unless-stopped
 
+  # ── ML API (Flask + PyTorch/CUDA) ─────────────────────────────────────────────
+  ml:
+    build:
+      context: ./ml/src
+      dockerfile: Dockerfile
+    ports:
+      - "5001:5001"
+    volumes:
+      # Model weights — bind-mounted read-only; must exist on the host at ./ml/weights/
+      - ./ml/weights:/app/weights:ro
+      # Persistent storage for stitched maps and job results
+      - ml_jobs:/app/farm_map_jobs
+      # Persistent storage for uploaded videos/images
+      - ml_uploads:/app/uploads
+    environment:
+      FLASK_ENV: production
+    restart: unless-stopped
+    # Remove the 'deploy' block below if you do not have the NVIDIA Container Toolkit installed.
+    # Install it from: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # ── MongoDB ───────────────────────────────────────────────────────────────────
   mongo:
-    image: mongo
+    image: mongo:7
     ports:
       - "27017:27017"
     volumes:
       - mongo_data:/data/db
-
-  ai_api:
-    build:
-      context: ./ml/ai_api
-      dockerfile: Dockerfile
-    ports:
-      - "5001:5000"
-    volumes:
-      - ./ml/ai_api:/app
+    restart: unless-stopped
 
 volumes:
   mongo_data:
+  ml_jobs:
+  ml_uploads:
