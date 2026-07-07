@@ -27,6 +27,9 @@ router.get('/:id', reportController.getReportById);
 // Route to update a report by ID
 router.put('/:id', reportController.updateReport);
 
+// Route to delete ALL reports (admin only) — must be before /:id
+router.delete('/all', reportController.deleteAllReports);
+
 // Route to delete a report by ID
 router.delete('/:id', reportController.deleteReport);
 

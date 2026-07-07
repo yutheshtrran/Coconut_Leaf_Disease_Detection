@@ -1,7 +1,7 @@
 import { MapContainer, TileLayer, Marker, Popup, Tooltip, useMap } from "react-leaflet";
 import L from "leaflet";
 import { useState, useEffect } from "react";
-import { Loader, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle } from "lucide-react";
 import { useTheme } from "../context/ThemeContext";
 import * as farmService from "../services/farmService";
 import API from "../services/api";
@@ -308,7 +308,7 @@ const FarmMap = () => {
           }}
         >
           <div className="text-center">
-            <Loader size={48} className="animate-spin mx-auto mb-4 text-green-500" />
+            <Loader2 size={48} className="animate-spin mx-auto mb-4 text-green-600" />
             <p style={{ color: theme === "dark" ? "#d0d0d0" : "#374151" }}>Loading farms...</p>
           </div>
         </div>
