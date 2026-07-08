@@ -12,12 +12,16 @@ const farmSchema = new mongoose.Schema({
     trim: true,
   },
   location: {
-    type: String,
-    default: '', // Format: "7.29° N, 80.64° E"
+    lat:     { type: Number },
+    lon:     { type: Number },
+    address: { type: String, default: '' },
   },
   area: {
-    type: String, // Stored as string to preserve formatting (e.g., "15 Ha")
-    required: true,
+    type: String,
+    default: '',
+  },
+  areaHectares: {
+    type: Number,
   },
   admin: {
     type: mongoose.Schema.Types.ObjectId,
@@ -33,20 +37,6 @@ const farmSchema = new mongoose.Schema({
     enum: ['active', 'inactive'],
     default: 'active',
   },
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now,
-  },
-});
-
-// Update the updatedAt timestamp before saving
-farmSchema.pre('save', function (next) {
-  this.updatedAt = Date.now();
-  next();
-});
+}, { timestamps: true });
 
 module.exports = mongoose.model('Farm', farmSchema);

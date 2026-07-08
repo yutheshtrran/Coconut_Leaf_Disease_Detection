@@ -66,7 +66,6 @@ CORS(app)
 # ------------------------------------------------------------------
 # Paths
 # ------------------------------------------------------------------
-MODEL_PATH = os.path.join(ML_DIR, "weights", "best_model.pth")
 CONFIG_PATH = os.path.join(BASE_DIR, "config.yaml")
 DISEASE_INFO_PATH = os.path.join(ML_DIR, "logs", "disease_info.json")
 UPLOAD_DIR = os.path.join(ML_DIR, "uploads")
@@ -89,23 +88,225 @@ if os.path.exists(DISEASE_INFO_PATH):
     except Exception as e:
         print(f"[WARNING] Could not load disease_info.json: {e}")
 
-# ------------------------------------------------------------------
-# Check model existence & Load Model
-# ------------------------------------------------------------------
-CLASSIFICATION_MODEL = None
+print("✅ Disease model: using disease_v5 (YOLO) for all predictions")
+CLASSIFICATION_MODEL = None  # legacy EfficientNet slot — no longer used
 
-if not os.path.exists(MODEL_PATH):
-    print(f"[ERROR] Model NOT found at {MODEL_PATH}")
-else:
-    print("✅ Model file found")
+# ------------------------------------------------------------------
+# Farm Map pipeline routes (YOLO-based, independent of best_model.pth)
+# ------------------------------------------------------------------
+FARM_MAP_AVAILABLE = False
+try:
+    from map_pipeline import (
+        farm_map_jobs,
+        run_farm_map,
+        analyze_tree_disease,
+        analyze_drone_image,
+    )
+    FARM_MAP_AVAILABLE = True
+    print("✅ Farm map pipeline loaded")
+except Exception as _fme:
+    print(f"[WARNING] Farm map pipeline unavailable: {_fme}")
+
+try:
+    from gps_extractor import extract_dji_gps
+    GPS_AVAILABLE = True
+except Exception as _ge:
+    print(f"[WARNING] GPS extractor unavailable: {_ge}")
+    GPS_AVAILABLE = False
+    def extract_dji_gps(_path): return None
+
+
+def _dms_to_dd(dms, ref):
+    """Convert degrees/minutes/seconds tuple + hemisphere ref to decimal degrees."""
+    d, m, s = float(dms[0]), float(dms[1]), float(dms[2])
+    dd = d + m / 60 + s / 3600
+    return -dd if ref in ('S', 'W') else dd
+
+
+def extract_exif_gps_image(image_path: str):
+    """Extract GPS coordinates from JPEG EXIF data (e.g. DJI drone photos).
+    Returns {lat, lon, altitude, source:'exif'} or None."""
     try:
-        # Pre-load the model to avoid first-request latency
-        # We need to import the build function or use the one from inference
-        from inference import model as loaded_model
-        CLASSIFICATION_MODEL = loaded_model
-        print("✅ Classification model loaded into memory")
+        from PIL import Image
+        from PIL.ExifTags import TAGS
+        img = Image.open(image_path)
+        exif = img._getexif()
+        if not exif:
+            return None
+        gps_info = next(
+            (v for tag_id, v in exif.items() if TAGS.get(tag_id) == 'GPSInfo'),
+            None
+        )
+        if not gps_info:
+            return None
+        lat_dms = gps_info.get(2)   # GPSLatitude
+        lat_ref = gps_info.get(1)   # GPSLatitudeRef  ('N'/'S')
+        lon_dms = gps_info.get(4)   # GPSLongitude
+        lon_ref = gps_info.get(3)   # GPSLongitudeRef ('E'/'W')
+        if not (lat_dms and lon_dms and lat_ref and lon_ref):
+            return None
+        lat = _dms_to_dd(lat_dms, lat_ref)
+        lon = _dms_to_dd(lon_dms, lon_ref)
+        if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+            return None
+        result = {'lat': round(lat, 7), 'lon': round(lon, 7), 'source': 'exif'}
+        alt = gps_info.get(6)   # GPSAltitude
+        if alt is not None:
+            result['altitude'] = round(float(alt), 1)
+        return result
+    except Exception as _e:
+        print(f'[GPS] EXIF extraction error: {_e}')
+        return None
+
+@app.route("/farm-map/start", methods=["POST"])
+def farm_map_start():
+    if not FARM_MAP_AVAILABLE:
+        return jsonify({"success": False, "error": "Farm map pipeline not available"}), 500
+    if "file" not in request.files:
+        return jsonify({"success": False, "error": "No video file uploaded"}), 400
+    f = request.files["file"]
+    if f.filename == "":
+        return jsonify({"success": False, "error": "Empty filename"}), 400
+
+    sid = str(uuid.uuid4())
+    video_path = os.path.join(UPLOAD_DIR, f"{sid}_{f.filename}")
+    f.save(video_path)
+
+    settings = {k: request.form.get(k) for k in request.form if k != "file"}
+    farm_map_jobs[sid] = {
+        "stage": "stitch", "status": "queued", "progress": 0, "detail": "Queued…",
+        "gps": None, "gps_status": "extracting",
+    }
+
+    import threading as _th
+
+    def _run_gps(sid, path):
+        try:
+            result = extract_dji_gps(path)
+            farm_map_jobs[sid]['gps']        = result
+            farm_map_jobs[sid]['gps_status'] = 'done' if result else 'unavailable'
+        except Exception as _e:
+            print(f"[GPS] extraction error: {_e}")
+            farm_map_jobs[sid]['gps_status'] = 'unavailable'
+
+    _th.Thread(target=run_farm_map,  args=(sid, video_path, settings), daemon=True).start()
+    _th.Thread(target=_run_gps,      args=(sid, video_path),           daemon=True).start()
+
+    return jsonify({"success": True, "session_id": sid})
+
+@app.route("/farm-map/progress/<session_id>", methods=["GET"])
+def farm_map_progress(session_id):
+    if not FARM_MAP_AVAILABLE:
+        return jsonify({"success": False, "error": "Farm map pipeline not available"}), 500
+    job = farm_map_jobs.get(session_id)
+    if job is None:
+        return jsonify({"success": False, "error": "Session not found"}), 404
+    return jsonify({
+        "success":    True,
+        "stage":      job.get("stage", "stitch"),
+        "status":     job.get("status", "queued"),
+        "progress":   job.get("progress", 0),
+        "detail":     job.get("detail", ""),
+        "error":      job.get("error", ""),
+        "traceback":  job.get("traceback", ""),
+        "gps":        job.get("gps"),
+        "gps_status": job.get("gps_status", "extracting"),
+    })
+
+@app.route("/farm-map/result/<session_id>", methods=["GET"])
+def farm_map_result(session_id):
+    if not FARM_MAP_AVAILABLE:
+        return jsonify({"success": False, "error": "Farm map pipeline not available"}), 500
+    job = farm_map_jobs.get(session_id)
+    if job is None:
+        return jsonify({"success": False, "error": "Session not found"}), 404
+    if job.get("status") == "error":
+        return jsonify({"success": False, "error": job.get("error", "Unknown error")}), 500
+    if job.get("status") != "done" or "result" not in job:
+        return jsonify({"success": False, "status": job.get("status"), "progress": job.get("progress", 0)}), 202
+
+    result = job["result"]
+    import json as _json
+    trees_path = result.get("trees_path", "")
+    trees = []
+    if os.path.exists(trees_path):
+        with open(trees_path) as _f:
+            trees = _json.load(_f)
+
+    return jsonify({
+        "success":    True,
+        "tree_count": result["tree_count"],
+        "map_b64":    result["map_b64"],
+        "trees":      trees,
+        "gps":        job.get("gps"),
+        "gps_status": job.get("gps_status", "unavailable"),
+    })
+
+@app.route("/extract-gps", methods=["POST"])
+def extract_gps_endpoint():
+    """Extract average GPS coordinates from a DJI drone video."""
+    if "file" not in request.files:
+        return jsonify({"success": False, "error": "No file uploaded"}), 400
+    f = request.files["file"]
+    if f.filename == "":
+        return jsonify({"success": False, "error": "Empty filename"}), 400
+    tmp_path = os.path.join(UPLOAD_DIR, f"{uuid.uuid4()}_{f.filename}")
+    try:
+        f.save(tmp_path)
+        gps = extract_dji_gps(tmp_path)
+        if gps:
+            return jsonify({"success": True, **gps})
+        return jsonify({"success": False, "error": "No GPS data found in video"})
     except Exception as e:
-        print(f"❌ Failed to load classification model: {e}")
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        if os.path.exists(tmp_path):
+            try: os.remove(tmp_path)
+            except OSError: pass
+
+@app.route("/farm-map/disease/<session_id>/<int:tree_id>", methods=["POST"])
+def farm_map_disease(session_id, tree_id):
+    if not FARM_MAP_AVAILABLE:
+        return jsonify({"success": False, "error": "Farm map pipeline not available"}), 500
+    try:
+        result = analyze_tree_disease(session_id, tree_id)
+        if result is None:
+            return jsonify({"success": False, "error": "Tree not found"}), 404
+        return jsonify({"success": True, **result})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/farm-map/analyze-image", methods=["POST"])
+def farm_map_analyze_image():
+    """Detect trees in a single drone top-view image, then run disease on each crop."""
+    if not FARM_MAP_AVAILABLE:
+        return jsonify({"success": False, "error": "Farm map pipeline not available"}), 500
+    if "file" not in request.files:
+        return jsonify({"success": False, "error": "No image uploaded"}), 400
+    f = request.files["file"]
+    if f.filename == "":
+        return jsonify({"success": False, "error": "Empty filename"}), 400
+    conf = float(request.form.get("conf", 0.35))
+    img_path = os.path.join(UPLOAD_DIR, f"{uuid.uuid4()}_{f.filename}")
+    f.save(img_path)
+    try:
+        # Extract GPS before analysis (file may be consumed by analysis pipeline)
+        gps = extract_exif_gps_image(img_path)
+        if gps:
+            print(f"[GPS] Image EXIF: lat={gps['lat']:.6f} lon={gps['lon']:.6f}")
+        result = analyze_drone_image(img_path, conf=conf)
+        return jsonify({"success": True, "gps": gps, **result})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        if os.path.exists(img_path):
+            try:
+                os.remove(img_path)
+            except OSError:
+                pass
 
 # ------------------------------------------------------------------
 # Prediction API - image
@@ -155,6 +356,7 @@ def predict_api():
                 "impact": disease_info.get("impact", ""),
                 "remedy": disease_info.get("remedy", "No remedy available"),
                 "top3": top3,
+                "annotated_image": output.get("annotated_image", ""),
             },
             "all_diseases": CLASS_NAMES
         })
@@ -417,16 +619,8 @@ def process_drone_video():
         try:
             from segmentation_enhanced import process_panoramic_images
 
-            clf_model = CLASSIFICATION_MODEL
-            try:
-                from inference import (device as inf_device,
-                                       _base_transform as inf_transform,
-                                       class_names as inf_class_names)
-                clf_transform   = inf_transform
-                clf_class_names = inf_class_names
-                clf_device      = inf_device
-            except Exception:
-                clf_transform = clf_class_names = clf_device = None
+            clf_model = None
+            clf_transform = clf_class_names = clf_device = None
 
             def prog_callback(msg):
                 drone_progress[session_id] = msg
@@ -581,11 +775,16 @@ def run_check():
     else:
         print("⚠ Video analysis module unavailable")
 
-    if os.path.exists(MODEL_PATH):
-        print(f"✓ Model found at {MODEL_PATH}")
+    disease_v5_path = os.path.join(ML_DIR, "weights", "disease_v5", "weights", "best.pt")
+    if os.path.exists(disease_v5_path):
+        print(f"✓ Disease model (disease_v5/best.pt) found")
     else:
-        print(f"✗ Model NOT found at {MODEL_PATH}")
-        success = False
+        print(f"⚠ disease_v5/weights/best.pt not found — predictions will fail")
+
+    if FARM_MAP_AVAILABLE:
+        print("✓ Farm map pipeline ready (YOLO models)")
+    else:
+        print("⚠ Farm map pipeline unavailable")
 
     if DISEASE_INFO:
         print(f"✓ Disease info loaded ({len(DISEASE_INFO)} entries)")
@@ -656,14 +855,8 @@ def main():
     elif args.action == 'test':
         test_endpoints()
     elif args.action == 'run' or args.action is None:
-        # Default: interactive
-        success = run_check()
-        if success:
-            response = input("\nAll checks passed. Start API server? (y/n): ").lower()
-            if response == 'y':
-                start_api()
-        else:
-            print("✗ Pre-flight check failed. Resolve issues before running API.")
+        run_check()
+        start_api()
 
 # ------------------------------------------------------------------
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
+import { Loader2 } from 'lucide-react';
 
 // INLINE ICONS
 const Edit2 = ({ size = 20, className = "" }) => (
@@ -175,7 +176,7 @@ export default function ManageDiseases() {
             </div>
             <div className="flex flex-wrap gap-4 pt-4">
               <button type="submit" disabled={loading} className={`min-w-[140px] px-8 py-3 rounded-xl font-bold text-white shadow-lg shadow-green-200 dark:shadow-green-900/30 transition-all flex items-center justify-center gap-2 ${loading ? 'bg-gray-400 dark:bg-gray-600' : 'bg-green-600 hover:bg-green-700 active:scale-95'}`}>
-                {loading ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <><Save size={18} />{editingId ? 'Update Record' : 'Save Disease'}</>}
+                {loading ? <><Loader2 size={18} className="animate-spin" />{editingId ? 'Updating…' : 'Saving…'}</> : <><Save size={18} />{editingId ? 'Update Record' : 'Save Disease'}</>}
               </button>
               {editingId && <button type="button" onClick={resetForm} className="px-8 py-3 rounded-xl font-bold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all flex items-center gap-2"><X size={18} /> Cancel Edit</button>}
             </div>
