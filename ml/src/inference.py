@@ -1,157 +1,229 @@
+# ML/src/inference.py
 import os
 import re
-import cv2
-import base64
-import numpy as np
+import torch
+import torch.nn.functional as F
+from torchvision import transforms
+from PIL import Image
 from yaml import safe_load
+import json
 
-_SRC_DIR = os.path.dirname(os.path.abspath(__file__))
-_ML_DIR  = os.path.dirname(_SRC_DIR)
+# ── Config ────────────────────────────────────────────────────────────────────
+config_path = os.path.join(os.path.dirname(__file__), "config.yaml")
+with open(config_path) as f:
+    config = safe_load(f)
 
-DISEASE_WEIGHTS = os.path.join(_ML_DIR, 'weights', 'disease_v5', 'weights', 'best.pt')
+device = torch.device(config['device'] if torch.cuda.is_available() else 'cpu')
 
-DISEASE_CLASSES = {
-    0: 'Black Beetle Attack',
-    1: 'Magnesium Deficiency',
-    2: 'Potassium Deficiency',
-    3: 'Yellow Patches',
-}
-ALL_CLASSES = ['Healthy', 'Black Beetle Attack', 'Magnesium Deficiency',
-               'Potassium Deficiency', 'Yellow Patches']
+# ── Class names ───────────────────────────────────────────────────────────────
+class_names = config.get('class_names', [])
+disease_info_path = os.path.join(os.path.dirname(__file__), '..', 'logs', 'disease_info.json')
+try:
+    if os.path.exists(disease_info_path):
+        with open(disease_info_path, 'r') as f:
+            info = json.load(f)
+            if isinstance(info, dict) and len(info) > 0:
+                class_names = list(info.keys())
+except Exception:
+    pass
 
-# BGR colours matching the frontend DISEASE_PALETTE hex values  (R,G,B → B,G,R)
-_CLASS_COLORS_BGR = {
-    0: (68,  68,  239),  # Black Beetle Attack  #ef4444  red
-    1: (247, 85,  168),  # Magnesium Deficiency #a855f7  violet
-    2: (233, 165,  14),  # Potassium Deficiency #0ea5e9  sky-blue
-    3: (8,   179, 234),  # Yellow Patches       #eab308  amber
-}
+# ── Load model ────────────────────────────────────────────────────────────────
+from torchvision import models as tv_models
+import torch.nn as nn
 
-_model = None
+def _build_model(num_classes, model_name='efficientnet_b3'):
+    name = model_name.lower()
+    if name == 'efficientnet_b3':
+        m = tv_models.efficientnet_b3(weights=None)
+        in_f = m.classifier[1].in_features
+        m.classifier = nn.Sequential(nn.Dropout(p=0.3, inplace=True), nn.Linear(in_f, num_classes))
+    elif name == 'efficientnet_b0':
+        m = tv_models.efficientnet_b0(weights=None)
+        in_f = m.classifier[1].in_features
+        m.classifier = nn.Sequential(nn.Dropout(p=0.3, inplace=True), nn.Linear(in_f, num_classes))
+    elif name == 'efficientnet_b4':
+        m = tv_models.efficientnet_b4(weights=None)
+        in_f = m.classifier[1].in_features
+        m.classifier = nn.Sequential(nn.Dropout(p=0.3, inplace=True), nn.Linear(in_f, num_classes))
+    else:
+        # ResNet50 fallback
+        m = tv_models.resnet50(weights=None)
+        in_f = m.fc.in_features
+        m.fc = nn.Sequential(nn.Dropout(p=0.3), nn.Linear(in_f, num_classes))
+    return m
 
-def _load_thresholds():
-    cfg_path = os.path.join(_SRC_DIR, 'config.yaml')
-    try:
-        with open(cfg_path) as _f:
-            cfg = safe_load(_f)
-        base    = float(cfg.get('conf_disease_leaf', 0.15))
-        raw_cls = cfg.get('conf_disease_classes') or {}
-        cls_map = {k: float(v) for k, v in raw_cls.items()}
-        cls_min = min(cls_map.values(), default=base) if cls_map else base
-        return base, cls_map, cls_min
-    except Exception:
-        return 0.15, {}, 0.15
+weights_path = os.path.join(os.path.dirname(__file__), "..", "weights", "best_model.pth")
+model_name_cfg = config.get('model_name', 'efficientnet_b3')
 
-CONF_DISEASE_LEAF, CONF_DISEASE_LEAF_CLASSES, _CONF_LEAF_MIN = _load_thresholds()
+try:
+    checkpoint = torch.load(weights_path, map_location=device)
 
-def _get_model():
-    global _model
-    if _model is None:
-        from ultralytics import YOLO
-        _model = YOLO(DISEASE_WEIGHTS)
-        print(f"[inference] disease_v5 loaded from {DISEASE_WEIGHTS}")
-    return _model
+    if isinstance(checkpoint, dict):
+        # Detect num_classes from checkpoint
+        for key in ('classifier.1.weight', 'backbone.classifier.1.weight', 'fc.weight', 'backbone.fc.weight'):
+            if key in checkpoint:
+                num_classes = checkpoint[key].shape[0]
+                break
+        else:
+            num_classes = len(class_names)
+
+        # Sync class_names length
+        if len(class_names) != num_classes:
+            splits_train = os.path.join(os.path.dirname(__file__), '..', 'data', 'splits', 'train')
+            if os.path.exists(splits_train):
+                dirs = sorted([d for d in os.listdir(splits_train) if os.path.isdir(os.path.join(splits_train, d))])
+                if len(dirs) == num_classes:
+                    class_names = dirs
+
+        model = _build_model(num_classes, model_name_cfg)
+        # Strip 'module.' prefix if saved with DataParallel
+        state = {k.replace('module.', ''): v for k, v in checkpoint.items()}
+        # Also handle 'backbone.' prefix from MyModel wrapper
+        if any(k.startswith('backbone.') for k in state):
+            state = {k.replace('backbone.', ''): v for k, v in state.items()}
+        model.load_state_dict(state, strict=False)
+    else:
+        model = checkpoint
+        num_classes = len(class_names)
+
+except FileNotFoundError:
+    print(f"[WARNING] No weights found at {weights_path}. Model will give random predictions.")
+    num_classes = len(class_names)
+    model = _build_model(num_classes, model_name_cfg)
+except Exception as e:
+    print(f"[WARNING] Could not load checkpoint: {e}")
+    num_classes = len(class_names)
+    model = _build_model(num_classes, model_name_cfg)
+
+model.to(device)
+model.eval()
+
+# ── Transforms ────────────────────────────────────────────────────────────────
+image_size = config.get('image_size', 300)
+
+# Standard inference transform (no augmentation)
+_base_transform = transforms.Compose([
+    transforms.Resize((image_size, image_size)),
+    transforms.ToTensor(),
+    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+])
+
+# TTA transforms — 7 slightly different views of the same image for robust prediction
+_tta_transforms = [
+    # Original
+    transforms.Compose([
+        transforms.Resize((image_size, image_size)),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ]),
+    # Horizontal flip
+    transforms.Compose([
+        transforms.Resize((image_size, image_size)),
+        transforms.RandomHorizontalFlip(p=1.0),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ]),
+    # Vertical flip
+    transforms.Compose([
+        transforms.Resize((image_size, image_size)),
+        transforms.RandomVerticalFlip(p=1.0),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ]),
+    # Slightly larger + center crop
+    transforms.Compose([
+        transforms.Resize((int(image_size * 1.15), int(image_size * 1.15))),
+        transforms.CenterCrop(image_size),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ]),
+    # Rotation +15
+    transforms.Compose([
+        transforms.Resize((image_size, image_size)),
+        transforms.RandomRotation(degrees=(15, 15)),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ]),
+    # Rotation -15
+    transforms.Compose([
+        transforms.Resize((image_size, image_size)),
+        transforms.RandomRotation(degrees=(-15, -15)),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ]),
+    # Slight color shift
+    transforms.Compose([
+        transforms.Resize((image_size, image_size)),
+        transforms.ColorJitter(brightness=0.1, contrast=0.1),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ]),
+]
 
 
-def _plot_clean(image_bgr: np.ndarray, result,
-                class_conf: dict = None, cls_name_map: dict = None) -> np.ndarray:
-    """Draw clean semi-transparent annotations: coloured fills + thin borders, no text.
-    Pass class_conf {name: min_conf} + cls_name_map {id: name} to filter per class."""
-    out = image_bgr.copy()
-    r   = result
-
-    def _skip(cls_id, cnf):
-        if class_conf is None or cls_name_map is None:
-            return False
-        return cnf < class_conf.get(cls_name_map.get(cls_id, ''), 0.0)
-
-    if r.masks is not None and len(r.masks.xy):
-        for i, pts in enumerate(r.masks.xy):
-            cls_id = int(r.boxes.cls[i]) if r.boxes is not None else 0
-            cnf    = float(r.boxes.conf[i]) if r.boxes is not None else 1.0
-            if _skip(cls_id, cnf):
-                continue
-            color  = _CLASS_COLORS_BGR.get(cls_id, (128, 128, 128))
-            poly   = pts.astype(np.int32)
-            ov     = out.copy()
-            cv2.fillPoly(ov, [poly], color)
-            cv2.addWeighted(ov, 0.28, out, 0.72, 0, out)
-            cv2.polylines(out, [poly], isClosed=True, color=color, thickness=2)
-    elif r.boxes is not None:
-        for box in r.boxes:
-            cls_id = int(box.cls[0])
-            cnf    = float(box.conf[0])
-            if _skip(cls_id, cnf):
-                continue
-            color         = _CLASS_COLORS_BGR.get(cls_id, (128, 128, 128))
-            x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
-            ov = out.copy()
-            cv2.rectangle(ov, (x1, y1), (x2, y2), color, -1)
-            cv2.addWeighted(ov, 0.25, out, 0.75, 0, out)
-            cv2.rectangle(out, (x1, y1), (x2, y2), color, 2)
-
-    return out
+def _to_snake(name: str) -> str:
+    """Convert a class name like 'Gray Leaf Spot' → 'gray_leaf_spot' for disease_info lookup."""
+    return re.sub(r'[\s\-]+', '_', name.strip()).lower()
 
 
 def predict(image_path: str, use_tta: bool = True) -> dict:
-    model   = _get_model()
-    results = model.predict(source=image_path, conf=_CONF_LEAF_MIN, verbose=False)
-    r       = results[0]
+    """
+    Predict disease from an image file.
 
-    annotated_bgr = _plot_clean(r.orig_img.copy(), r, CONF_DISEASE_LEAF_CLASSES, DISEASE_CLASSES)
-    _, buf = cv2.imencode('.jpg', annotated_bgr, [cv2.IMWRITE_JPEG_QUALITY, 88])
-    annotated_b64 = 'data:image/jpeg;base64,' + base64.b64encode(buf.tobytes()).decode()
-
-    detections = []
-    if r.boxes is not None:
-        for box in r.boxes:
-            cls_id   = int(box.cls[0])
-            cnf      = float(box.conf[0])
-            cls_name = DISEASE_CLASSES.get(cls_id, f'Class {cls_id}')
-            if cnf < CONF_DISEASE_LEAF_CLASSES.get(cls_name, CONF_DISEASE_LEAF):
-                continue
-            detections.append({
-                'disease':    cls_name,
-                'confidence': round(cnf, 4),
-            })
-
-    if not detections:
-        return {
-            'disease':         'Healthy',
-            'confidence':      1.0,
-            'top3':            [{'disease': 'Healthy', 'confidence': 1.0}],
-            'annotated_image': annotated_b64,
+    Returns:
+        {
+            "disease": str,           # top-1 predicted class name
+            "confidence": float,      # 0.0 – 1.0
+            "top3": [                 # top-3 predictions
+                {"disease": str, "confidence": float}, ...
+            ]
         }
+    """
+    image = Image.open(image_path).convert("RGB")
 
-    class_best = {}
-    for d in detections:
-        name = d['disease']
-        if name not in class_best or d['confidence'] > class_best[name]:
-            class_best[name] = d['confidence']
+    with torch.no_grad():
+        if use_tta:
+            # Average softmax probabilities over all TTA views
+            probs_sum = None
+            for tfm in _tta_transforms:
+                tensor = tfm(image).unsqueeze(0).to(device)
+                logits = model(tensor)
+                probs = F.softmax(logits, dim=1)[0]
+                probs_sum = probs if probs_sum is None else probs_sum + probs
+            avg_probs = probs_sum / len(_tta_transforms)
+        else:
+            tensor = _base_transform(image).unsqueeze(0).to(device)
+            logits = model(tensor)
+            avg_probs = F.softmax(logits, dim=1)[0]
 
-    top3 = sorted(
-        [{'disease': k, 'confidence': v} for k, v in class_best.items()],
-        key=lambda x: x['confidence'],
-        reverse=True,
-    )[:3]
+    # Top-3
+    top3_vals, top3_idxs = torch.topk(avg_probs, k=min(3, len(class_names)))
+    top3 = [
+        {"disease": class_names[idx.item()], "confidence": round(val.item(), 4)}
+        for val, idx in zip(top3_vals, top3_idxs)
+    ]
 
+    best = top3[0]
     return {
-        'disease':         top3[0]['disease'],
-        'confidence':      top3[0]['confidence'],
-        'top3':            top3,
-        'annotated_image': annotated_b64,
+        "disease": best["disease"],
+        "confidence": best["confidence"],
+        "top3": top3,
     }
 
 
-# ── Compat helpers used by app.py ─────────────────────────────────────────────
-
-def _to_snake(name: str) -> str:
-    return re.sub(r'[\s\-]+', '_', name.strip()).lower()
-
-def load_config(path=None) -> dict:
-    p = path or os.path.join(_SRC_DIR, 'config.yaml')
+def load_config(path=None):
+    """Load YAML config from given path or default config_path."""
+    p = path or config_path
     with open(p) as f:
         return safe_load(f)
 
-def load_class_names(cfg=None) -> list:
-    return ALL_CLASSES
+
+def load_class_names(cfg=None):
+    """Return class names list from a config dict or from module config."""
+    cfg = cfg or config
+    cfg_names = cfg.get('class_names', []) or []
+    if len(cfg_names) >= len(class_names):
+        return cfg_names
+    if len(class_names) > 0:
+        return class_names
+    return cfg_names

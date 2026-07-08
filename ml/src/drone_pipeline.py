@@ -28,8 +28,6 @@ from ultralytics import YOLO
 from pathlib import Path
 import matplotlib.pyplot as plt
 
-_TREE_WEIGHTS = str(Path(__file__).parent.parent / "weights" / "coconut_tree_v6-3.pt")
-
 
 def stitch_images(image_paths):
     """
@@ -118,19 +116,17 @@ def preprocess_image(image):
     return sharpened
 
 
-def detect_trees_yolo(panorama, model_path=None):
+def detect_trees_yolo(panorama, model_path='yolov8m-seg.pt'):
     """
     Perform object detection and segmentation on the panoramic image using YOLO.
 
     Args:
         panorama (numpy.ndarray): Input panoramic image
-        model_path (str): Path to YOLO model weights (default: coconut_tree_v6-3.pt)
+        model_path (str): Path to YOLO model weights (default: yolov8m-seg.pt for better accuracy)
 
     Returns:
         dict: Results containing detections, masks, etc.
     """
-    if model_path is None:
-        model_path = _TREE_WEIGHTS
     # Preprocess image for better detection
     processed_panorama = preprocess_image(panorama)
 
@@ -275,8 +271,8 @@ def main():
     parser = argparse.ArgumentParser(description="Drone Image Pipeline for Coconut Farm Analysis")
     parser.add_argument('--input_dir', required=True, help='Directory containing drone images')
     parser.add_argument('--output_dir', default='output', help='Output directory for results')
-    parser.add_argument('--model_path', default=_TREE_WEIGHTS,
-                       help='Path to YOLO model weights (default: coconut_tree_v6-3.pt)')
+    parser.add_argument('--model_path', default='yolov8m-seg.pt',
+                       help='Path to YOLO model weights (default: yolov8m-seg.pt)')
 
     args = parser.parse_args()
 

@@ -94,10 +94,6 @@ ml/coconut_dataset
 *.pth
 *.onnx
 *.bin
-!ml/farm_map_jobs/
-!ml/farm_map_jobs/**
-!ml/yolo26n.pt
-!ml/yolov8n-seg.pt
 !**/.gitkeep
 
 # ==============================

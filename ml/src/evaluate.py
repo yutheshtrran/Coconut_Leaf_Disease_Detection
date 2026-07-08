@@ -24,7 +24,7 @@ def evaluate_model(model, data_loader, device):
 
 def main():
     # Load the model
-    model = torch.load(str(Path(__file__).parent.parent / 'weights' / 'disease_v5' / 'weights' / 'best.pt'))
+    model = torch.load(str(Path(__file__).parent.parent / 'weights' / 'coconut_disease_v5.pt'))
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model.to(device)
 

@@ -236,14 +236,13 @@ function MapViewer({ mapImage, trees, selectedTree, onTreeClick }) {
 
 // ── Stage stepper (processing) ─────────────────────────────────────────────
 const STAGES = [
-  { key: 'stitch',  label: 'Stitching Frames',   icon: '🛸', desc: 'Aligning drone footage into orthomosaic' },
-  { key: 'detect',  label: 'Detecting Trees',     icon: '🌴', desc: 'Running YOLO on video frames' },
-  { key: 'disease', label: 'Analysing Disease',   icon: '🔬', desc: 'Pre-computing disease for all trees' },
+  { key: 'stitch', label: 'Stitching Frames', icon: '🛸', desc: 'Aligning drone footage into orthomosaic' },
+  { key: 'detect', label: 'Detecting Trees',  icon: '🌴', desc: 'Running YOLO tiled inference' },
 ];
 
 function StageStepper({ progressData }) {
   const { stage, progress = 0, detail } = progressData;
-  const STAGE_MAP = { stitch: 1, detect: 2, disease: 3, complete: 4 };
+  const STAGE_MAP = { stitch: 1, detect: 2, complete: 3 };
   const cur = STAGE_MAP[stage] || 1;
 
   return (
@@ -410,22 +409,6 @@ const FarmMapAnalysis = () => {
     } catch (err) { setErrorMsg(err.message); setPhase('error'); }
   };
 
-  // ── Auto-populate disease result when a pre-analysed tree is selected ────────
-  useEffect(() => {
-    if (!selectedTree) { setDiseaseResult(null); return; }
-    if (selectedTree.crop_image && selectedTree.disease) {
-      setDiseaseResult({
-        tree_id:            selectedTree.tree_id,
-        crop_image:         selectedTree.crop_image,
-        disease:            selectedTree.disease,
-        disease_confidence: selectedTree.disease_confidence ?? 1.0,
-        all_detections:     selectedTree.all_detections || [],
-      });
-    } else {
-      setDiseaseResult(null);
-    }
-  }, [selectedTree]);
-
   // ── Disease ────────────────────────────────────────────────────────────────
   const handleAnalyseDisease = async () => {
     if (!selectedTree || !sessionId) return;
@@ -450,9 +433,9 @@ const FarmMapAnalysis = () => {
   };
 
   // ── Derived stats ──────────────────────────────────────────────────────────
-  const healthyCount    = trees.filter(t => t.disease === 'Healthy').length;
+  const healthyCount    = trees.filter(t => !t.disease || t.disease === 'Healthy').length;
   const atRiskCount     = trees.filter(t => t.disease && t.disease !== 'Healthy').length;
-  const unanalysedCount = trees.filter(t => !t.disease).length; // 0 when frame-based pipeline ran
+  const unanalysedCount = trees.filter(t => !t.disease).length;
 
   // ═══════════════════════════════════════════════════════════════════════════
   return (
@@ -682,7 +665,7 @@ const FarmMapAnalysis = () => {
             <div className="flex-1 min-h-0 h-[50vh] lg:h-auto rounded-2xl overflow-hidden shadow-2xl">
               <MapViewer
                 mapImage={mapImage} trees={trees}
-                selectedTree={selectedTree} onTreeClick={t => { setSelectedTree(t); setDiseaseError(''); }}
+                selectedTree={selectedTree} onTreeClick={t => { setSelectedTree(t); setDiseaseResult(null); setDiseaseError(''); }}
               />
             </div>
           </div>
@@ -726,7 +709,7 @@ const FarmMapAnalysis = () => {
                 <div>
                   <p className="text-sm font-semibold text-gray-600 dark:text-gray-400">No tree selected</p>
                   <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 leading-relaxed">
-                    Click any numbered marker on the map to see its disease result instantly
+                    Click any numbered marker on the map to select a tree and run disease analysis
                   </p>
                 </div>
               </div>
@@ -767,19 +750,18 @@ const FarmMapAnalysis = () => {
                     </div>
                   </div>
 
-                  {/* Analyse button — only shown when disease wasn't pre-computed */}
-                  {!diseaseResult && !diseaseLoading && !selectedTree?.disease && (
-                    <button onClick={handleAnalyseDisease}
+                  {/* Analyse button */}
+                  {!diseaseResult && (
+                    <button onClick={handleAnalyseDisease} disabled={diseaseLoading}
                       className="w-full py-2.5 rounded-xl font-semibold text-sm text-white
-                        flex items-center justify-center gap-2 transition-all"
-                      style={{ background: 'linear-gradient(135deg,#22c55e,#16a34a)', boxShadow: '0 2px 12px rgba(34,197,94,0.3)' }}>
-                      <Microscope size={15} /> Analyse Disease
+                        disabled:opacity-50 flex items-center justify-center gap-2 transition-all"
+                      style={!diseaseLoading
+                        ? { background: 'linear-gradient(135deg,#22c55e,#16a34a)', boxShadow: '0 2px 12px rgba(34,197,94,0.3)' }
+                        : { background: '#86efac' }}>
+                      {diseaseLoading
+                        ? <><Loader2 size={15} className="animate-spin" /> Analysing…</>
+                        : <><Microscope size={15} /> Analyse Disease</>}
                     </button>
-                  )}
-                  {diseaseLoading && (
-                    <div className="w-full py-2.5 flex items-center justify-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-                      <Loader2 size={15} className="animate-spin text-green-500" /> Analysing…
-                    </div>
                   )}
 
                   {diseaseError && (
@@ -841,7 +823,7 @@ const FarmMapAnalysis = () => {
                       )}
 
                       {/* Re-analyse */}
-                      <button onClick={() => { setDiseaseResult(null); setDiseaseError(''); handleAnalyseDisease(); }}
+                      <button onClick={() => { setDiseaseResult(null); setDiseaseError(''); }}
                         className="w-full py-2 rounded-lg border border-gray-200 dark:border-gray-600 text-xs
                           text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 transition flex items-center justify-center gap-1.5">
                         <RefreshCw size={12} /> Re-analyse
@@ -859,7 +841,7 @@ const FarmMapAnalysis = () => {
               </p>
               <div className="space-y-2">
                 {[
-                  { label: 'Healthy',               color: '#16a34a' },
+                  { label: 'Unanalysed / Healthy', color: '#16a34a' },
                   { label: 'Black Beetle Attack',   color: '#dc2626' },
                   { label: 'Magnesium Deficiency',  color: '#ea580c' },
                   { label: 'Potassium Deficiency',  color: '#d97706' },
