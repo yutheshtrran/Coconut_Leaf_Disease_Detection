@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Eye, Download, MoreHorizontal, ChevronLeft, ChevronRight, Filter, Plus, Edit2, Trash2 } from 'lucide-react';
+import { Eye, Download, ChevronLeft, ChevronRight, Filter, Edit2, Trash2, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import API from '../services/api';
@@ -66,8 +66,6 @@ const Reports = () => {
   const [previewConfig, setPreviewConfig] = useState({ reportId: null, autoDownload: false });
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
-  const canCreate = user && (user.role === 'agronomist' || user.role === 'admin');
-
   const canModify = user && (user.role === 'agronomist' || user.role === 'admin');
 
   const [newReportData, setNewReportData] = useState({
@@ -106,10 +104,7 @@ const Reports = () => {
   useEffect(() => {
     if (user && !authLoading) {
       fetchReports();
-    }
-    // also load farms for selection in report form
-    if (user && !authLoading) {
-      fetchFarmsForForm();
+      fetchFarmsForForm(); // needed for edit form farm selector
     }
   }, [user, authLoading]);
 
@@ -280,18 +275,11 @@ const Reports = () => {
         status: newReportData.status
       };
 
-      if (editingReportId) {
-        const reportPayload = { ...basePayload, farm: newReportData.farm };
-        if (newReportData.plot) reportPayload.plot = newReportData.plot;
-        await API.put(`/reports/${editingReportId}`, reportPayload);
-      } else {
-        if (!newReportData.farm) throw new Error('Please select a farm for the report');
-        const reportPayload = { ...basePayload, farm: newReportData.farm };
-        if (newReportData.plot) reportPayload.plot = newReportData.plot;
-        await API.post('/reports', reportPayload);
-      }
+      const reportPayload = { ...basePayload, farm: newReportData.farm };
+      if (newReportData.plot) reportPayload.plot = newReportData.plot;
+      await API.put(`/reports/${editingReportId}`, reportPayload);
 
-      setSuccessMessage(editingReportId ? 'Report updated successfully!' : 'Report created successfully!');
+      setSuccessMessage('Report updated successfully!');
       
       setTimeout(() => setSuccessMessage(''), 3000);
 
@@ -341,12 +329,6 @@ const Reports = () => {
     setShowConfirmDelete(true);
   };
 
-  const handleOpenForm = () => {
-    setEditingReportId(null);
-    setNewReportData({ farm: '', plot: '', date: '', issue: '', severityValue: '', severityLabel: 'LOW', status: 'Pending' });
-    setShowReportForm(true);
-  };
-
   const handleCloseForm = () => {
     setShowReportForm(false);
     setEditingReportId(null);
@@ -384,7 +366,10 @@ const Reports = () => {
   if (loading && reports.length === 0) {
     return (
       <div className="pt-4 p-4 sm:p-6 lg:p-8 bg-gray-50 dark:bg-gray-900 min-h-screen flex justify-center items-center">
-        <div className="text-gray-600 dark:text-gray-400">Loading reports...</div>
+        <div className="text-center">
+          <Loader2 size={48} className="animate-spin mx-auto mb-4 text-green-600" />
+          <p className="text-gray-600 dark:text-gray-400">Loading reports...</p>
+        </div>
       </div>
     );
   }
@@ -441,25 +426,10 @@ const Reports = () => {
           </div>
         )}
 
-        {/* Title + Add Report Button */}
-        <div className="flex justify-between items-center mb-8">
+        {/* Title */}
+        <div className="mb-8">
           <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Historical Analysis Reports</h1>
-          {canCreate ? (
-            <button
-              onClick={handleOpenForm}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg shadow-md hover:bg-green-700 transition duration-150"
-            >
-              <Plus className="w-4 h-4" /> Add Report
-            </button>
-          ) : (
-            <button
-              disabled
-              title="Only admin or agronomist can add reports"
-              className="flex items-center gap-2 px-4 py-2 bg-gray-300 text-gray-600 rounded-lg shadow-sm cursor-not-allowed"
-            >
-              <Plus className="w-4 h-4" /> Add Report
-            </button>
-          )}
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Reports are generated automatically from disease analysis sessions.</p>
         </div>
 
         {/* Stats Cards */}
@@ -473,9 +443,7 @@ const Reports = () => {
         {showReportForm && (
           <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50 overflow-auto">
             <div className="bg-white dark:bg-gray-800 p-6 rounded-xl w-full max-w-2xl shadow-lg relative">
-              <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 mb-4">
-                {editingReportId ? 'Edit Report' : 'Add New Report'}
-              </h2>
+              <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 mb-4">Edit Report</h2>
               <form onSubmit={handleReportSubmit} className="flex flex-col gap-4">
 
                 <div>

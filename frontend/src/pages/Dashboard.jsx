@@ -2,312 +2,326 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import API from '../services/api';
-import FarmMap from "./Farmmap.jsx";
+import { getUserFarms } from '../services/farmService';
+import FarmMap from './Farmmap.jsx';
+import { Loader2, AlertTriangle, BarChart2, TrendingUp, TrendingDown, Minus, Leaf, FileText, MapPin } from 'lucide-react';
 
-// Define the custom colors
-const COLORS = {
-    primaryGreen: '#4CAF50',
-    alertRed: '#F44336',
-    infoBlue: '#2196F3',
-    trendYellow: '#FFC107',
-    bgHeader: '#E8F5E9',
-};
-
-// Placeholder data - will be replaced with real data
-const STATS_DATA = [
-    { title: "Total Farms Monitored", value: "0", color: 'border-green-500' },
-    { title: "Critical Alerts", value: "0", color: 'border-red-500' },
-    { title: "New Reports This Week", value: "0", color: 'border-blue-500' },
-    {
-        title: "Overall Health Trend",
-        value: (
-            <div className="flex items-center">
-                <span className="mr-1">↑</span>
-                <span className="text-xl text-green-500">Loading...</span>
-            </div>
-        ),
-        color: 'border-yellow-500'
-    },
-];
-
-// Helper function to get severity color and class
-const getSeverityStyles = (label) => {
+const severityColor = (label) => {
     switch (label) {
-        case 'CRITICAL':
-        case 'HIGH':
-            return { color: COLORS.alertRed, className: 'text-red-600 font-semibold' };
-        case 'MODERATE':
-            return { color: COLORS.trendYellow, className: 'text-yellow-500' };
-        case 'LOW':
-        default:
-            return { color: COLORS.primaryGreen, className: 'text-green-500' };
+        case 'CRITICAL': return { dot: '#EF4444', text: 'text-red-600 font-semibold' };
+        case 'HIGH':     return { dot: '#F97316', text: 'text-orange-500 font-semibold' };
+        case 'MODERATE': return { dot: '#EAB308', text: 'text-yellow-500' };
+        default:         return { dot: '#22C55E', text: 'text-green-500' };
     }
 };
 
-// Status Circle component
-const StatusCircle = ({ color }) => (
-    <svg className="w-3 h-3" viewBox="0 0 100 100">
-        <circle cx="50" cy="50" r="50" fill={color} />
-    </svg>
+const StatCard = ({ icon, label, value, sub, borderColor, loading }) => (
+    <div className={`bg-white dark:bg-gray-800 p-5 rounded-xl shadow-md border-b-4 ${borderColor} flex flex-col gap-1`}>
+        <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm">
+            {icon}
+            {label}
+        </div>
+        <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+            {loading ? <Loader2 size={24} className="animate-spin text-gray-400" /> : value}
+        </p>
+        {sub && !loading && <p className="text-xs text-gray-400">{sub}</p>}
+    </div>
 );
-
 
 const Dashboard = () => {
     const navigate = useNavigate();
     const { user, loading: authLoading } = useAuth();
-    const [reports, setReports] = useState([]);
-    const [reportsLoading, setReportsLoading] = useState(true);
-    const [reportsError, setReportsError] = useState(null);
 
-    // Stats state
-    const [stats, setStats] = useState({
-        totalFarms: 0,
-        criticalAlerts: 0,
-        reportsThisWeek: 0,
-        healthTrend: 'Neutral',
-        trendDirection: '→'
-    });
-    const [statsLoading, setStatsLoading] = useState(true);
+    const [loading, setLoading]   = useState(true);
+    const [error,   setError]     = useState(null);
 
-    // Fetch latest reports from backend
+    // Derived data
+    const [farms,   setFarms]   = useState([]);
+    const [reports, setReports] = useState([]);   // user's own reports
+
+    // Computed stats
+    const [stats, setStats] = useState(null);
+
     useEffect(() => {
         if (!user || authLoading) return;
+        let cancelled = false;
 
-        const fetchDashboardData = async () => {
+        const load = async () => {
             try {
-                setStatsLoading(true);
+                setLoading(true);
+                setError(null);
 
-                // Fetch all reports
-                const reportsResponse = await API.get('/reports');
-                const allReports = reportsResponse.data.data || [];
+                const [farmsRes, reportsRes] = await Promise.all([
+                    getUserFarms(),
+                    API.get('/reports'),
+                ]);
 
-                // Calculate stats
-                const totalFarms = new Set(allReports.map(r => r.farm)).size || 0;
+                if (cancelled) return;
 
-                const criticalAlerts = allReports.filter(r =>
-                    r.severity?.label === 'CRITICAL' || r.severity?.label === 'HIGH'
-                ).length;
+                const allFarms = farmsRes.farms || [];
 
-                // Get reports from this week
-                const today = new Date();
-                const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-                const reportsThisWeek = allReports.filter(r =>
-                    new Date(r.createdAt) >= weekAgo
-                ).length;
+                // Filter reports that belong to this user
+                const userId = user._id?.toString();
+                const allReports = (reportsRes.data.data || []).filter(r => {
+                    const rid = r.userId?._id?.toString() || r.userId?.toString();
+                    return rid === userId;
+                });
 
-                // Calculate health trend
-                const criticalCount = allReports.filter(r => r.severity?.label === 'CRITICAL').length;
-                const highCount = allReports.filter(r => r.severity?.label === 'HIGH').length;
-                const moderateCount = allReports.filter(r => r.severity?.label === 'MODERATE').length;
-                const lowCount = allReports.filter(r => r.severity?.label === 'LOW').length;
+                // Sort newest-first for the recent list
+                const sorted = [...allReports].sort(
+                    (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+                );
 
-                let healthTrend = 'Neutral';
-                let trendDirection = '→';
+                const now = new Date();
+                const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-                if (lowCount + moderateCount > criticalCount + highCount) {
-                    healthTrend = 'Improving';
-                    trendDirection = '↑';
-                } else if (criticalCount + highCount > lowCount + moderateCount) {
-                    healthTrend = 'Declining';
-                    trendDirection = '↓';
-                }
+                const scansThisWeek = allReports.filter(r => new Date(r.createdAt) >= weekAgo).length;
+                const criticalCount = allReports.filter(r => ['CRITICAL', 'HIGH'].includes(r.severity?.label)).length;
 
+                // Aggregate tree data from analysisData
+                let totalTrees = 0, atRiskTrees = 0;
+                allReports.forEach(r => {
+                    const ts = r.analysisData?.treeSummary;
+                    if (ts) {
+                        totalTrees  += ts.total  || 0;
+                        atRiskTrees += ts.atRisk || 0;
+                    }
+                });
+
+                // Health trend: ratio of healthy vs at-risk across all reports
+                const lowCount  = allReports.filter(r => ['LOW',  'MODERATE'].includes(r.severity?.label)).length;
+                const highCount = allReports.filter(r => ['HIGH', 'CRITICAL'].includes(r.severity?.label)).length;
+                let trend = 'Neutral', trendDir = 'neutral';
+                if (lowCount > highCount)  { trend = 'Improving'; trendDir = 'up'; }
+                if (highCount > lowCount)  { trend = 'Declining'; trendDir = 'down'; }
+
+                // Top diseases across all reports
+                const diseaseMap = {};
+                allReports.forEach(r => {
+                    (r.analysisData?.diseases || []).forEach(d => {
+                        diseaseMap[d.name] = (diseaseMap[d.name] || 0) + d.count;
+                    });
+                });
+                const topDiseases = Object.entries(diseaseMap)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 5);
+
+                setFarms(allFarms);
+                setReports(sorted);
                 setStats({
-                    totalFarms,
-                    criticalAlerts,
-                    reportsThisWeek,
-                    healthTrend,
-                    trendDirection
+                    totalFarms: allFarms.length,
+                    totalReports: allReports.length,
+                    scansThisWeek,
+                    criticalCount,
+                    totalTrees,
+                    atRiskTrees,
+                    healthyTrees: totalTrees - atRiskTrees,
+                    trend,
+                    trendDir,
+                    topDiseases,
                 });
             } catch (err) {
-                console.error('Error fetching dashboard data:', err);
-            } finally {
-                setStatsLoading(false);
-            }
-        };
-
-        fetchDashboardData();
-    }, [user, authLoading]);
-
-    // Fetch latest reports from backend
-    useEffect(() => {
-        if (!user || authLoading) return;
-
-        const fetchLatestReports = async () => {
-            try {
-                setReportsLoading(true);
-                setReportsError(null);
-                const response = await API.get('/reports');
-
-                // Get the latest 3 reports
-                const latestReports = response.data.data
-                    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-                    .slice(0, 3)
-                    .map(report => {
-                        const severityStyles = getSeverityStyles(report.severity.label);
-                        return {
-                            farm: report.farm,
-                            issue: report.issue,
-                            date: new Date(report.date).toISOString().split('T')[0],
-                            color: severityStyles.color,
-                            className: severityStyles.className,
-                            severity: report.severity.label
-                        };
-                    });
-
-                setReports(latestReports);
-            } catch (err) {
-                console.error('Error fetching reports:', err);
-                if (err.response?.status !== 401) {
-                    setReportsError('Failed to fetch latest reports');
+                if (!cancelled) {
+                    console.error('Dashboard load error:', err);
+                    setError('Failed to load dashboard data.');
                 }
-                setReports([]);
             } finally {
-                setReportsLoading(false);
+                if (!cancelled) setLoading(false);
             }
         };
 
-        fetchLatestReports();
+        load();
+        return () => { cancelled = true; };
     }, [user, authLoading]);
+
+    const greeting = user?.username || user?.name || user?.email?.split('@')[0] || 'there';
+
+    const TrendIcon = stats?.trendDir === 'up'
+        ? <TrendingUp size={22} className="text-green-500" />
+        : stats?.trendDir === 'down'
+            ? <TrendingDown size={22} className="text-red-500" />
+            : <Minus size={22} className="text-yellow-500" />;
+
+    const trendColor = stats?.trend === 'Improving' ? 'text-green-500'
+        : stats?.trend === 'Declining' ? 'text-red-500'
+        : 'text-yellow-500';
+
     return (
         <div className="pt-4 p-4 sm:p-6 lg:p-8 bg-gray-100 dark:bg-gray-900 min-h-screen transition-colors duration-300">
-            <div className="max-w-7xl mx-auto">
+            <div className="max-w-7xl mx-auto space-y-8">
 
                 {/* Header */}
-                <header className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md mb-8">
-                    <h1
-                        className="text-xl sm:text-2xl font-semibold flex items-center"
-                        style={{ color: COLORS.primaryGreen }}
-                    >
-                        <svg
-                            className="w-8 h-8 mr-3"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                        >
-                            <path d="M17 19c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z" />
-                            <path d="M17 9l-4-4" />
-                            <path d="M17 9l4 4" />
-                            <path d="M7 21h10" />
-                            <path d="M12 21v-2c0-3.31-2.69-6-6-6H3" />
-                        </svg>
-                        Welcome, Admin!
-                    </h1>
-                    <p className="text-gray-600 dark:text-gray-400 mt-1">
-                        Monitor your plantations and analyze latest flight data.
-                    </p>
+                <header className="bg-white dark:bg-gray-800 px-6 py-5 rounded-xl shadow-md flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center shrink-0">
+                        <Leaf size={20} className="text-green-600 dark:text-green-400" />
+                    </div>
+                    <div>
+                        <h1 className="text-xl sm:text-2xl font-semibold text-green-600 dark:text-green-400">
+                            Welcome back, {greeting}!
+                        </h1>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                            Monitor your plantations and analyse the latest flight data.
+                        </p>
+                    </div>
                 </header>
 
-                {/* Stats */}
-                <section className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                    <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-lg border-b-4 border-green-500">
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                            Total Farms Monitored
-                        </p>
-                        <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">
-                            {statsLoading ? '...' : stats.totalFarms}
-                        </p>
+                {error && (
+                    <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-400 rounded-xl px-5 py-3 text-sm flex items-center gap-2">
+                        <AlertTriangle size={16} /> {error}
                     </div>
-                    <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-lg border-b-4 border-red-500">
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                            Critical Alerts
-                        </p>
-                        <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">
-                            {statsLoading ? '...' : stats.criticalAlerts}
-                        </p>
-                    </div>
-                    <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-lg border-b-4 border-blue-500">
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                            New Reports This Week
-                        </p>
-                        <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">
-                            {statsLoading ? '...' : stats.reportsThisWeek}
-                        </p>
-                    </div>
-                    <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-lg border-b-4 border-yellow-500">
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                            Overall Health Trend
-                        </p>
-                        <div className="flex items-center">
-                            <span className="mr-1 text-2xl">{statsLoading ? '...' : stats.trendDirection}</span>
-                            <span className={`text-xl font-semibold ${stats.healthTrend === 'Improving' ? 'text-green-500' :
-                                    stats.healthTrend === 'Declining' ? 'text-red-500' :
-                                        'text-yellow-500'
-                                }`}>
-                                {statsLoading ? 'Loading...' : stats.healthTrend}
-                            </span>
+                )}
+
+                {/* Primary stat cards */}
+                <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    <StatCard
+                        icon={<MapPin size={14} />}
+                        label="My Farms"
+                        value={stats?.totalFarms ?? 0}
+                        sub={stats?.totalFarms === 1 ? '1 farm registered' : `${stats?.totalFarms ?? 0} farms registered`}
+                        borderColor="border-green-500"
+                        loading={loading}
+                    />
+                    <StatCard
+                        icon={<AlertTriangle size={14} />}
+                        label="Active Alerts"
+                        value={stats?.criticalCount ?? 0}
+                        sub="Critical or High severity"
+                        borderColor="border-red-500"
+                        loading={loading}
+                    />
+                    <StatCard
+                        icon={<FileText size={14} />}
+                        label="Scans This Week"
+                        value={stats?.scansThisWeek ?? 0}
+                        sub={`${stats?.totalReports ?? 0} total reports`}
+                        borderColor="border-blue-500"
+                        loading={loading}
+                    />
+                    <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-md border-b-4 border-yellow-500 flex flex-col gap-1">
+                        <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm">
+                            {loading ? <Loader2 size={14} className="animate-spin" /> : TrendIcon}
+                            Health Trend
                         </div>
+                        <p className={`text-2xl font-bold ${loading ? 'text-gray-300' : trendColor}`}>
+                            {loading ? <Loader2 size={24} className="animate-spin text-gray-400" /> : stats?.trend}
+                        </p>
+                        {!loading && stats && (
+                            <p className="text-xs text-gray-400">
+                                Based on {stats.totalReports} report{stats.totalReports !== 1 ? 's' : ''}
+                            </p>
+                        )}
                     </div>
                 </section>
 
-                {/* Main Content */}
+                {/* Secondary stat cards — tree data */}
+                {!loading && stats && stats.totalTrees > 0 && (
+                    <section className="grid grid-cols-3 gap-4">
+                        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 text-center">
+                            <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Trees Analysed</p>
+                            <p className="text-2xl font-bold text-gray-800 dark:text-gray-100">{stats.totalTrees.toLocaleString()}</p>
+                        </div>
+                        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 text-center">
+                            <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">At Risk</p>
+                            <p className="text-2xl font-bold text-red-500">{stats.atRiskTrees.toLocaleString()}</p>
+                        </div>
+                        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 text-center">
+                            <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Healthy</p>
+                            <p className="text-2xl font-bold text-green-500">{stats.healthyTrees.toLocaleString()}</p>
+                        </div>
+                    </section>
+                )}
+
+                {/* Main content: map + reports */}
                 <main className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
-                    {/* MAP CARD */}
+                    {/* Map */}
                     <div className="lg:col-span-2 bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg">
-                        <h2 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-4">
-                            Farm Overview Map
+                        <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-4 flex items-center gap-2">
+                            <MapPin size={18} className="text-green-500" /> Farm Overview Map
                         </h2>
-
-                        {/* FIXED MAP CONTAINER */}
                         <div className="relative h-96 w-full overflow-hidden rounded-lg isolate">
                             <FarmMap />
                         </div>
                     </div>
 
-                    {/* REPORTS */}
-                    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg">
-                        <h2 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-4">
-                            Latest Analysis Reports
+                    {/* Recent reports */}
+                    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg flex flex-col">
+                        <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-4 flex items-center gap-2">
+                            <FileText size={18} className="text-blue-500" /> Latest Reports
                         </h2>
 
-                        {reportsError && (
-                            <p className="text-red-500 text-sm mb-4">{reportsError}</p>
+                        {loading ? (
+                            <div className="flex-1 flex items-center justify-center">
+                                <Loader2 size={32} className="animate-spin text-green-600" />
+                            </div>
+                        ) : reports.length === 0 ? (
+                            <p className="text-gray-400 dark:text-gray-500 text-sm flex-1 flex items-center justify-center text-center">
+                                No reports yet.<br />Run an analysis to get started.
+                            </p>
+                        ) : (
+                            <ul className="space-y-4 flex-1">
+                                {reports.slice(0, 4).map((report, i) => {
+                                    const { dot, text } = severityColor(report.severity?.label);
+                                    return (
+                                        <li key={report._id || i} className={`pb-4 ${i < Math.min(reports.length, 4) - 1 ? 'border-b border-gray-100 dark:border-gray-700' : ''}`}>
+                                            <div className="flex items-start gap-2">
+                                                <svg className="w-3 h-3 mt-1.5 shrink-0" viewBox="0 0 100 100">
+                                                    <circle cx="50" cy="50" r="50" fill={dot} />
+                                                </svg>
+                                                <div className="min-w-0">
+                                                    <p className="font-medium text-gray-800 dark:text-gray-200 text-sm truncate">
+                                                        {report.farm}
+                                                    </p>
+                                                    <p className={`text-xs ${text} truncate`}>{report.issue}</p>
+                                                    <p className="text-xs text-gray-400 mt-0.5">
+                                                        {new Date(report.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </li>
+                                    );
+                                })}
+                            </ul>
                         )}
 
-                        {reportsLoading ? (
-                            <p className="text-gray-500 dark:text-gray-400 text-sm">Loading reports...</p>
-                        ) : reports.length > 0 ? (
-                            <ul className="space-y-4">
-                                {reports.map((report, index) => (
-                                    <li
-                                        key={index}
-                                        className={`pb-4 ${index < reports.length - 1 ? 'border-b' : ''}`}
-                                    >
-                                        <div className="flex items-start">
-                                            <span className="mr-2 mt-1">
-                                                <StatusCircle color={report.color} />
-                                            </span>
-
-                                            <div>
-                                                <p className="font-medium text-gray-800 dark:text-gray-200">
-                                                    {report.farm}:{' '}
-                                                    <span className={report.className}>
-                                                        {report.issue}
-                                                    </span>
-                                                </p>
-                                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                                                    {report.date}
-                                                </p>
-                                                <a
-                                                    href="/reports"
-                                                    className="text-sm font-medium flex items-center"
-                                                    style={{ color: COLORS.infoBlue }}
-                                                >
-                                                    View Report →
-                                                </a>
-                                            </div>
-                                        </div>
-                                    </li>
-                                ))}
-                            </ul>
-                        ) : (
-                            <p className="text-gray-500 dark:text-gray-400 text-sm">No reports available. Create one to get started!</p>
+                        {!loading && reports.length > 0 && (
+                            <button
+                                onClick={() => navigate('/reports')}
+                                className="mt-4 text-sm text-blue-600 dark:text-blue-400 font-medium hover:underline text-right"
+                            >
+                                View all reports →
+                            </button>
                         )}
                     </div>
-
                 </main>
+
+                {/* Top diseases breakdown */}
+                {!loading && stats?.topDiseases?.length > 0 && (
+                    <section className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg">
+                        <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-4 flex items-center gap-2">
+                            <BarChart2 size={18} className="text-red-500" /> Most Detected Diseases
+                        </h2>
+                        <div className="space-y-3">
+                            {stats.topDiseases.map(([name, count], i) => {
+                                const maxCount = stats.topDiseases[0][1];
+                                const pct = maxCount > 0 ? Math.round((count / maxCount) * 100) : 0;
+                                return (
+                                    <div key={i} className="flex items-center gap-3">
+                                        <span className="text-sm text-gray-600 dark:text-gray-300 w-44 truncate shrink-0">{name}</span>
+                                        <div className="flex-1 h-2.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                                            <div
+                                                className="h-full rounded-full bg-red-400"
+                                                style={{ width: `${pct}%` }}
+                                            />
+                                        </div>
+                                        <span className="text-sm font-semibold text-gray-700 dark:text-gray-300 w-10 text-right shrink-0">{count}</span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </section>
+                )}
+
             </div>
         </div>
     );

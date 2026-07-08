@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Search, Plus, Pencil, X, Check, Map, Calendar, AlertCircle, Loader, Trash } from 'lucide-react';
+import { Search, Plus, Pencil, X, Check, Map, Calendar, AlertCircle, Loader2, Trash, FileText, ChevronDown, ChevronUp, Image } from 'lucide-react';
 import * as farmService from '../services/farmService';
+import { fetchReportsByFarm } from '../services/reportService';
 
 // --- Utility ---
 const getStatusBadge = (status) => {
@@ -195,7 +196,7 @@ const AddFarmForm = ({ onAdd, onCancel, isLoading }) => {
         </div>
         <div className="md:col-span-2 flex gap-3 pt-4 border-t">
           <button type="submit" disabled={isLoading} className="bg-green-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-green-700 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-            {isLoading ? <Loader size={18} className="animate-spin" /> : <Check size={18} />}
+            {isLoading ? <Loader2 size={18} className="animate-spin" /> : <Check size={18} />}
             {isLoading ? 'Saving...' : 'Save Farm'}
           </button>
           <button type="button" onClick={onCancel} disabled={isLoading} className="bg-gray-100 text-gray-600 px-6 py-2 rounded-lg font-semibold hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed">Cancel</button>
@@ -206,10 +207,13 @@ const AddFarmForm = ({ onAdd, onCancel, isLoading }) => {
 };
 
 const EditFarmForm = ({ farm, onUpdate, onCancel, isLoading }) => {
+  const locStr = typeof farm.location === 'object' && farm.location
+    ? (farm.location.lat != null ? `${farm.location.lat}, ${farm.location.lon}` : farm.location.address || '')
+    : (farm.location || '');
   const [formData, setFormData] = useState({
     name: farm.name || '',
     subtitle: farm.subtitle || '',
-    location: farm.location || '',
+    location: locStr,
     area: farm.area || '',
     description: farm.description || '',
   });
@@ -264,7 +268,7 @@ const EditFarmForm = ({ farm, onUpdate, onCancel, isLoading }) => {
         </div>
         <div className="md:col-span-2 flex gap-3 pt-4 border-t">
           <button type="submit" disabled={isLoading} className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-            {isLoading ? <Loader size={18} className="animate-spin" /> : <Check size={18} />}
+            {isLoading ? <Loader2 size={18} className="animate-spin" /> : <Check size={18} />}
             {isLoading ? 'Updating...' : 'Update Farm'}
           </button>
           <button type="button" onClick={onCancel} disabled={isLoading} className="bg-gray-100 text-gray-600 px-6 py-2 rounded-lg font-semibold hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed">Cancel</button>
@@ -324,7 +328,7 @@ const AddPlotForm = ({ farmId, onAdd, onCancel, isLoading }) => {
         </div>
         <div className="flex items-end gap-2">
           <button type="submit" disabled={isLoading} className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-indigo-700 flex-1 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-            {isLoading ? <Loader size={16} className="animate-spin" /> : <Check size={16} />}
+            {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
             {isLoading ? 'Saving...' : 'Add Plot'}
           </button>
           <button type="button" onClick={onCancel} disabled={isLoading} className="bg-gray-100 p-2 rounded-lg text-gray-500 hover:text-gray-700 disabled:opacity-50"><X size={20} /></button>
@@ -382,7 +386,7 @@ const EditPlotForm = ({ farmId, plot, onUpdate, onCancel, isLoading }) => {
         </div>
         <div className="flex items-end gap-2">
           <button type="submit" disabled={isLoading} className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-indigo-700 flex-1 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-            {isLoading ? <Loader size={16} className="animate-spin" /> : <Check size={16} />}
+            {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
             {isLoading ? 'Saving...' : 'Save Changes'}
           </button>
           <button type="button" onClick={onCancel} disabled={isLoading} className="bg-gray-100 p-2 rounded-lg text-gray-500 hover:text-gray-700 disabled:opacity-50"><X size={20} /></button>
@@ -428,13 +432,16 @@ const FarmDetailsCard = ({ farm, onEdit }) => {
     const initMap = async () => {
       try {
         const L = await loadLeaflet();
-        const loc = (farm.location || '').trim();
-        if (!loc) return;
-        const parts = loc.split(',').map(s => s.trim());
-        if (parts.length < 2) return;
-        const lat = parseFloat(parts[0]);
-        const lng = parseFloat(parts[1]);
-        if (Number.isNaN(lat) || Number.isNaN(lng)) return;
+        let lat, lng;
+        if (farm.location && typeof farm.location === 'object') {
+          lat = farm.location.lat;
+          lng = farm.location.lon;
+        } else if (typeof farm.location === 'string' && farm.location.includes(',')) {
+          const parts = farm.location.split(',').map(s => s.trim());
+          lat = parseFloat(parts[0]);
+          lng = parseFloat(parts[1]);
+        }
+        if (lat == null || lng == null || Number.isNaN(lat) || Number.isNaN(lng)) return;
         if (!document.getElementById(mapContainerId)) return;
         mapInstance = L.map(mapContainerId, { zoomControl: false, attributionControl: false }).setView([lat, lng], 13);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' }).addTo(mapInstance);
@@ -454,7 +461,10 @@ const FarmDetailsCard = ({ farm, onEdit }) => {
     };
   }, [farm.location, mapContainerId]);
 
-  const hasCoords = !!farm.location && farm.location.split(',').length >= 2;
+  const hasCoords = farm.location != null && (
+    (typeof farm.location === 'object' && farm.location.lat != null) ||
+    (typeof farm.location === 'string' && farm.location.includes(','))
+  );
 
   return (
     <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700 transition-colors duration-300">
@@ -469,7 +479,23 @@ const FarmDetailsCard = ({ farm, onEdit }) => {
         <div className="space-y-4">
           <div>
             <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Location</p>
-            <p className="text-lg font-mono text-gray-700">{farm.location || 'N/A'}</p>
+            {farm.location && typeof farm.location === 'object' ? (
+              <div>
+                {farm.location.address && (
+                  <p className="text-sm text-gray-700 mb-1">{farm.location.address}</p>
+                )}
+                {farm.location.lat != null && (
+                  <p className="text-xs font-mono text-gray-500">
+                    {farm.location.lat.toFixed(6)}°N, {farm.location.lon.toFixed(6)}°E
+                  </p>
+                )}
+                {!farm.location.address && farm.location.lat == null && (
+                  <p className="text-lg font-mono text-gray-700">N/A</p>
+                )}
+              </div>
+            ) : (
+              <p className="text-lg font-mono text-gray-700">{farm.location || 'N/A'}</p>
+            )}
           </div>
           <div>
             <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Total Area</p>
@@ -546,6 +572,208 @@ const PlotsTable = ({ farm, plots, onAddPlotRequest, onDeletePlot, onEditPlot })
             )}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+};
+
+// --- Severity badge (for reports) ---
+const SeverityBadge = ({ label }) => {
+  const map = {
+    CRITICAL: 'bg-red-100 text-red-700 ring-red-600/20',
+    HIGH:     'bg-orange-100 text-orange-700 ring-orange-600/20',
+    MODERATE: 'bg-yellow-100 text-yellow-700 ring-yellow-600/20',
+    LOW:      'bg-green-100 text-green-700 ring-green-600/20',
+  };
+  return (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${map[label] || 'bg-gray-100 text-gray-700 ring-gray-600/20'}`}>
+      {label || 'UNKNOWN'}
+    </span>
+  );
+};
+
+// --- Farm Reports Section ---
+const FarmReports = ({ farmName }) => {
+  const [reports, setReports] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [expandedId, setExpandedId] = useState(null);
+  const [expandedImageIdx, setExpandedImageIdx] = useState(null);
+
+  useEffect(() => {
+    if (!farmName) return;
+    let cancelled = false;
+    setLoading(true);
+    setError('');
+    fetchReportsByFarm(farmName)
+      .then(res => {
+        if (!cancelled) setReports(res.data || []);
+      })
+      .catch(() => {
+        if (!cancelled) setError('Failed to load reports');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [farmName]);
+
+  const toggleExpand = (id) => {
+    setExpandedId(prev => prev === id ? null : id);
+    setExpandedImageIdx(null);
+  };
+
+  if (loading) {
+    return (
+      <div className="mt-8 flex items-center gap-2 text-gray-500 text-sm">
+        <Loader2 size={16} className="animate-spin" /> Loading reports…
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-8">
+      <div className="flex items-center gap-2 mb-4">
+        <FileText size={18} className="text-indigo-600" />
+        <h3 className="text-lg font-semibold text-gray-800">Analysis Reports</h3>
+        <span className="ml-1 text-xs bg-indigo-100 text-indigo-700 rounded-full px-2 py-0.5 font-semibold">{reports.length}</span>
+      </div>
+
+      {error && (
+        <p className="text-sm text-red-500">{error}</p>
+      )}
+
+      {!error && reports.length === 0 && (
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm px-6 py-10 text-center text-gray-400">
+          <Image size={32} className="mx-auto mb-2 opacity-40" />
+          <p className="text-sm">No reports for this farm yet.</p>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {reports.map(report => {
+          const ad = report.analysisData;
+          const isOpen = expandedId === report._id;
+          const images = ad?.annotatedImages || [];
+          const trees = ad?.allTrees || ad?.affectedTrees || [];
+
+          return (
+            <div key={report._id} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+              {/* Report header row */}
+              <button
+                className="w-full text-left px-5 py-4 flex items-center gap-4 hover:bg-gray-50 transition"
+                onClick={() => toggleExpand(report._id)}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-mono text-gray-400">{report.reportId}</span>
+                    <SeverityBadge label={report.severity?.label} />
+                    {ad?.analysisType && (
+                      <span className="text-xs bg-gray-100 text-gray-600 rounded px-2 py-0.5">
+                        {ad.analysisType === 'leaf' ? 'Leaf' : ad.analysisType === 'drone-image' ? 'Drone Image' : 'Drone Video'}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm font-medium text-gray-800 mt-1 truncate">{report.issue}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {new Date(report.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    {ad?.treeSummary && ` · ${ad.treeSummary.total} trees · ${ad.treeSummary.atRisk} at risk`}
+                    {ad?.totalImages && !ad?.treeSummary && ` · ${ad.totalImages} images`}
+                  </p>
+                </div>
+                {isOpen ? <ChevronUp size={16} className="text-gray-400 shrink-0" /> : <ChevronDown size={16} className="text-gray-400 shrink-0" />}
+              </button>
+
+              {/* Expanded content */}
+              {isOpen && (
+                <div className="border-t border-gray-100 px-5 py-4 space-y-4">
+                  {/* Annotated images */}
+                  {images.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Detection Images</p>
+                      <div className="flex flex-col gap-3">
+                        {images.map((src, i) => (
+                          <div key={i} className="rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
+                            <img
+                              src={src}
+                              alt={`Detection ${i + 1}`}
+                              className="w-full object-contain max-h-96"
+                              crossOrigin="anonymous"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Individual tree crops */}
+                  {trees.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                        Individual Trees ({trees.length})
+                      </p>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+                        {trees.map((tree, idx) => {
+                          const isHealthy = !tree.disease || tree.disease === 'Healthy';
+                          return (
+                            <div
+                              key={idx}
+                              className={`rounded-lg overflow-hidden border text-center ${isHealthy ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}
+                              onClick={() => setExpandedImageIdx(expandedImageIdx === `${report._id}-${idx}` ? null : `${report._id}-${idx}`)}
+                            >
+                              <img
+                                src={tree.crop_image}
+                                alt={`Tree ${tree.tree_id ?? idx + 1}`}
+                                className="w-full aspect-square object-cover cursor-pointer"
+                                crossOrigin="anonymous"
+                              />
+                              <div className="px-1 py-1">
+                                <p className="text-xs font-semibold text-gray-700 truncate">
+                                  #{tree.tree_id ?? idx + 1}
+                                </p>
+                                <p className={`text-xs truncate ${isHealthy ? 'text-green-600' : 'text-red-600'}`}>
+                                  {tree.disease || 'Healthy'}
+                                </p>
+                                {!isHealthy && tree.disease_confidence > 0 && (
+                                  <p className="text-xs text-gray-400">{Math.round(tree.disease_confidence * 100)}%</p>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Disease summary */}
+                  {ad?.diseases?.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Disease Summary</p>
+                      <div className="flex flex-wrap gap-2">
+                        {ad.diseases.map((d, i) => (
+                          <div key={i} className="bg-red-50 border border-red-200 rounded-lg px-3 py-1.5">
+                            <p className="text-xs font-semibold text-red-700">{d.name}</p>
+                            <p className="text-xs text-red-500">{d.count} tree{d.count !== 1 ? 's' : ''} · {d.percentage}%</p>
+                          </div>
+                        ))}
+                        {(ad.treeSummary?.healthy ?? 0) > 0 && (
+                          <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-1.5">
+                            <p className="text-xs font-semibold text-green-700">Healthy</p>
+                            <p className="text-xs text-green-500">{ad.treeSummary.healthy} tree{ad.treeSummary.healthy !== 1 ? 's' : ''}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {images.length === 0 && trees.length === 0 && (
+                    <p className="text-sm text-gray-400 italic">No images available for this report.</p>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -753,7 +981,7 @@ const MyFarms = () => {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900">
         <div className="text-center">
-          <Loader size={48} className="animate-spin mx-auto mb-4 text-green-600" />
+          <Loader2 size={48} className="animate-spin mx-auto mb-4 text-green-600" />
           <p className="text-gray-600 dark:text-gray-300">Loading your farms...</p>
         </div>
       </div>
@@ -853,6 +1081,8 @@ const MyFarms = () => {
                 onEditPlot={(plot) => setEditingPlot(plot)}
               />
             )}
+
+            <FarmReports farmName={selectedFarm.name} />
           </div>
         ) : (
           <div className="text-center py-20 text-gray-500">

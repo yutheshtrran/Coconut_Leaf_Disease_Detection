@@ -1,6 +1,7 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route, useLocation } from "react-router-dom";
 import { ThemeProvider } from "./context/ThemeContext.jsx";
+import { JobProvider } from "./context/JobContext.jsx";
 import "leaflet/dist/leaflet.css";
 
 
@@ -24,6 +25,7 @@ import ManageDiseases from "./pages/ManageDiseases.jsx";
 // Components
 import Sidebar from "./components/Sidebar.jsx";
 import ProtectedRoute from './components/ProtectedRoute.jsx';
+import JobStatusBadge from "./components/JobStatusBadge.jsx";
 
 function AppWrapper() {
   const location = useLocation();
@@ -118,6 +120,7 @@ function AppWrapper() {
           </Routes>
         </main>
       </div>
+      {showLayout && <JobStatusBadge />}
     </div>
   );
 }
@@ -125,9 +128,11 @@ function AppWrapper() {
 function App() {
   return (
     <ThemeProvider>
-      <Router>
-        <AppWrapper />
-      </Router>
+      <JobProvider>
+        <Router>
+          <AppWrapper />
+        </Router>
+      </JobProvider>
     </ThemeProvider>
   );
 }

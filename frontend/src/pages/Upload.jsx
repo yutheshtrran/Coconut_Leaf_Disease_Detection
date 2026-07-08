@@ -1,12 +1,16 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Upload as UploadIcon, AlertCircle, CheckCircle, Video,
   Loader2, Download, RefreshCw, ZoomIn, ZoomOut, Maximize2, Activity,
   TreePine, X, MapPin, Microscope, BarChart3, Eye, Image as ImageIcon,
-  ChevronLeft, ChevronRight, Plus,
+  ChevronLeft, ChevronRight, Plus, FileText,
 } from "lucide-react";
 import API from "../services/api";
 import * as farmMapService from "../services/farmMapService";
+import { useJobs } from "../context/JobContext";
+import GenerateReportModal from "../components/GenerateReportModal";
+import { buildDroneImageAnalysisData, buildDroneVideoAnalysisData } from "../utils/buildAnalysisData";
 
 // ── Farm-map design tokens ─────────────────────────────────────────────────
 const ACCEPTED_VIDEO = '.mp4,.mov,.avi,.mkv,.webm';
@@ -600,6 +604,8 @@ function ZoomableImage({ src, alt }) {
 }
 
 const Upload = () => {
+  const { startJob, jobs } = useJobs();
+  const [searchParams] = useSearchParams();
   const [notes, setNotes] = useState("");
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [isDragActive, setIsDragActive] = useState(false);
@@ -617,7 +623,10 @@ const Upload = () => {
   const [fullscreenImage, setFullscreenImage]   = useState(null); // image shown in full-screen modal
 
   // ── Farm-map (Drone Video tab) state ──────────────────────────────────
-  const [activeTab, setActiveTab] = useState('drone-images'); // 'upload' | 'drone-images' | 'drone-video'
+  const [activeTab, setActiveTab] = useState(() => {
+    const tab = new URLSearchParams(window.location.search).get('tab');
+    return tab === 'drone-video' ? 'drone-video' : 'drone-images';
+  });
   const [fmPhase,        setFmPhase]        = useState('idle'); // idle | processing | done | error
   const [fmVideoFile,    setFmVideoFile]    = useState(null);
   const [fmIsDragActive, setFmIsDragActive] = useState(false);
@@ -633,6 +642,8 @@ const Upload = () => {
   const [fmDiseaseResult,  setFmDiseaseResult]  = useState(null);
   const [fmDiseaseLoading, setFmDiseaseLoading] = useState(false);
   const [fmDiseaseError,   setFmDiseaseError]   = useState('');
+  const [fmDetectedGps,    setFmDetectedGps]    = useState(null);
+  const [showFmReportModal, setShowFmReportModal] = useState(false);
 
   const handleNotesChange = (e) => setNotes(e.target.value);
 
@@ -909,7 +920,15 @@ const Upload = () => {
           setFmErrorMsg(data.error || 'Pipeline failed — check the ML server console for the traceback');
           setFmPhase('error');
         }
-      } catch { /* network hiccup — keep polling */ }
+      } catch (err) {
+        // 404 = session gone (server restarted); stop polling and reset
+        if (err.message?.includes('404')) {
+          clearInterval(fmPollRef.current);
+          setFmErrorMsg('Session expired — the ML server was restarted. Please upload the video again.');
+          setFmPhase('error');
+        }
+        // Other errors (network blip) — keep polling silently
+      }
     };
     poll();
     fmPollRef.current = setInterval(poll, 2000);
@@ -919,9 +938,19 @@ const Upload = () => {
   const fmFetchResult = async (sid) => {
     try {
       const data = await farmMapService.getFarmMapResult(sid);
-      if (!data.success) { setFmErrorMsg(data.error || 'Failed'); setFmPhase('error'); return; }
+      if (!data.success) {
+        // 404 / session-not-found after server restart — just reset quietly
+        if (data.status === 404 || data.error?.toLowerCase().includes('not found')) {
+          setFmPhase('idle');
+          return;
+        }
+        setFmErrorMsg(data.error || 'Failed');
+        setFmPhase('error');
+        return;
+      }
       setFmTreeCount(data.tree_count || 0);
       setFmTrees(data.trees || []);
+      if (data.gps?.lat != null) setFmDetectedGps({ lat: data.gps.lat, lon: data.gps.lon });
       if (data.map_b64) {
         const img = new Image();
         img.onload  = () => { setFmMapImage(img); setFmPhase('done'); };
@@ -943,10 +972,11 @@ const Upload = () => {
   const fmHandleStart = async () => {
     if (!fmVideoFile) return;
     setFmPhase('processing');
-    setFmErrorMsg(''); setFmSelectedTree(null); setFmDiseaseResult(null); setFmMapImage(null); setFmTrees([]);
+    setFmErrorMsg(''); setFmSelectedTree(null); setFmDiseaseResult(null); setFmMapImage(null); setFmTrees([]); setFmDetectedGps(null);
     try {
       const { session_id } = await farmMapService.startFarmMap(fmVideoFile);
       setFmSessionId(session_id);
+      startJob(session_id);
     } catch (err) { setFmErrorMsg(err.message); setFmPhase('error'); }
   };
 
@@ -970,18 +1000,59 @@ const Upload = () => {
     setFmPhase('idle'); setFmVideoFile(null); setFmSessionId(null);
     setFmProgressData({ stage: 'stitch', status: 'queued', progress: 0, detail: '' });
     setFmMapImage(null); setFmTrees([]); setFmSelectedTree(null); setFmDiseaseResult(null); setFmErrorMsg('');
+    setFmDetectedGps(null); setShowFmReportModal(false);
   };
+
+  // ── Deep-link resume: /upload?tab=drone-video&session=<sid> ──────────
+  // Fires when the URL gains a ?session= param OR when jobs updates.
+  // The ref guards against double-applying the resume within the same mount.
+  const fmResumedRef = useRef(false);
+  useEffect(() => {
+    if (fmResumedRef.current) return;
+    const sid = searchParams.get('session');
+    if (!sid) return;
+    const job = jobs[sid];
+    if (!job) return; // context not yet populated — will re-run on next jobs update
+    if (fmPhase !== 'idle') return;
+    fmResumedRef.current = true;
+    setActiveTab('drone-video');
+    if (job.status === 'done') {
+      setFmSessionId(sid);
+      fmFetchResult(sid);
+    } else if (job.status === 'processing') {
+      setFmSessionId(sid);
+      setFmPhase('processing');
+    }
+  }, [searchParams, jobs]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Auto-populate disease when pre-analysed tree is selected ─────────
+  useEffect(() => {
+    if (!fmSelectedTree) { setFmDiseaseResult(null); return; }
+    if (fmSelectedTree.crop_image && fmSelectedTree.disease) {
+      setFmDiseaseResult({
+        tree_id:            fmSelectedTree.tree_id,
+        crop_image:         fmSelectedTree.crop_image,
+        disease:            fmSelectedTree.disease,
+        disease_confidence: fmSelectedTree.disease_confidence ?? 1.0,
+        all_detections:     fmSelectedTree.all_detections || [],
+      });
+    } else {
+      setFmDiseaseResult(null);
+    }
+  }, [fmSelectedTree]);
 
   // ── Drone Images tab state ────────────────────────────────────────────
   const [diPhase,      setDiPhase]      = useState('idle'); // 'idle'|'loading'|'done'
   const [diFiles,      setDiFiles]      = useState([]);
   const [diIsDrag,     setDiIsDrag]     = useState(false);
   const diInputRef = useRef(null);
-  const [diResults,    setDiResults]    = useState([]); // [{filename, tree_count, annotated_b64, trees, error?}]
+  const [diResults,    setDiResults]    = useState([]); // [{filename, tree_count, annotated_b64, trees, gps?, error?}]
   const [diCurrentIdx, setDiCurrentIdx] = useState(0);
   const [diLoadMsg,    setDiLoadMsg]    = useState('');
-  const [diFsImage,    setDiFsImage]    = useState(null); // {src, title, trees} for pan-zoom fullscreen
-  const [diTreeFs,     setDiTreeFs]     = useState(null); // {treeIdx, trees} for crop navigation fullscreen
+  const [diDetectedGps,     setDiDetectedGps]     = useState(null); // averaged GPS from EXIF across all images
+  const [diFsImage,         setDiFsImage]         = useState(null); // {src, title, trees} for pan-zoom fullscreen
+  const [diTreeFs,          setDiTreeFs]          = useState(null); // {treeIdx, trees} for crop navigation fullscreen
+  const [showDiReportModal, setShowDiReportModal] = useState(false);
 
   const diPickFiles = (files) => {
     const valid = Array.from(files).filter(f => f.type.match(/image\/(jpeg|png|webp|tiff|jpg)/));
@@ -1009,6 +1080,7 @@ const Upload = () => {
     if (!diFiles.length) return;
     setDiPhase('loading');
     setDiResults([]);
+    setDiDetectedGps(null);
     const out = [];
     for (let i = 0; i < diFiles.length; i++) {
       const file = diFiles[i];
@@ -1016,13 +1088,22 @@ const Upload = () => {
       try {
         const data = await farmMapService.analyzeDroneImage(file);
         if (!data.success) throw new Error(data.error || 'Analysis failed');
-        out.push({ filename: file.name, tree_count: data.tree_count, annotated_b64: data.annotated_b64, trees: data.trees });
+        out.push({ filename: file.name, tree_count: data.tree_count, annotated_b64: data.annotated_b64, trees: data.trees, gps: data.gps || null });
       } catch (err) {
-        out.push({ filename: file.name, error: err.message, tree_count: 0, annotated_b64: null, trees: [] });
+        out.push({ filename: file.name, error: err.message, tree_count: 0, annotated_b64: null, trees: [], gps: null });
       }
     }
     setDiResults(out);
     setDiCurrentIdx(0);
+    // Average GPS from all images that had EXIF coordinates
+    const gpsPoints = out.filter(r => r.gps?.lat != null);
+    if (gpsPoints.length > 0) {
+      setDiDetectedGps({
+        lat: gpsPoints.reduce((s, r) => s + r.gps.lat, 0) / gpsPoints.length,
+        lon: gpsPoints.reduce((s, r) => s + r.gps.lon, 0) / gpsPoints.length,
+        source: 'exif',
+      });
+    }
     setDiPhase('done');
   };
 
@@ -1490,12 +1571,22 @@ const Upload = () => {
               <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 leading-tight">Drone Image Analysis</h2>
               <p className="text-xs text-gray-400 dark:text-gray-500">Top-view drone photo → detect trees → disease per tree</p>
             </div>
-            {diPhase !== 'idle' && (
-              <button onClick={diHandleReset}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition">
-                <RefreshCw size={13} /> New Analysis
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {diPhase === 'done' && diResults.length > 0 && (
+                <button
+                  onClick={() => setShowDiReportModal(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-600 hover:bg-green-700 text-white transition"
+                >
+                  <FileText size={13} /> Generate Report
+                </button>
+              )}
+              {diPhase !== 'idle' && (
+                <button onClick={diHandleReset}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition">
+                  <RefreshCw size={13} /> New Analysis
+                </button>
+              )}
+            </div>
           </div>
 
           {/* ── IDLE ─────────────────────────────────────────────────── */}
@@ -2000,10 +2091,18 @@ const Upload = () => {
               <p className="text-xs text-gray-400 dark:text-gray-500">Video → orthomosaic → tree detection → disease analysis</p>
             </div>
             {fmPhase !== 'idle' && (
-              <button onClick={fmHandleReset}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition">
-                <RefreshCw size={13} /> New Analysis
-              </button>
+              <div className="flex items-center gap-2">
+                {fmPhase === 'done' && fmTrees.length > 0 && (
+                  <button onClick={() => setShowFmReportModal(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-600 hover:bg-green-700 text-white transition">
+                    <FileText size={13} /> Generate Report
+                  </button>
+                )}
+                <button onClick={fmHandleReset}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition">
+                  <RefreshCw size={13} /> New Analysis
+                </button>
+              </div>
             )}
           </div>
 
@@ -2305,6 +2404,26 @@ const Upload = () => {
             </div>
           )}
         </div>
+      )}
+
+      {/* Drone Images generate report modal */}
+      {showDiReportModal && (
+        <GenerateReportModal
+          analysisData={buildDroneImageAnalysisData(diResults)}
+          detectedGps={diDetectedGps}
+          onClose={() => setShowDiReportModal(false)}
+          onCreated={() => setShowDiReportModal(false)}
+        />
+      )}
+
+      {/* Drone Video generate report modal */}
+      {showFmReportModal && (
+        <GenerateReportModal
+          analysisData={buildDroneVideoAnalysisData(fmTrees, fmDetectedGps)}
+          detectedGps={fmDetectedGps}
+          onClose={() => setShowFmReportModal(false)}
+          onCreated={() => setShowFmReportModal(false)}
+        />
       )}
 
     </div>

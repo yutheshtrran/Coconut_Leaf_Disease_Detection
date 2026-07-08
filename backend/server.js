@@ -24,19 +24,49 @@ app.use(cors({
   credentials: true,
 }));
 app.use(cookieParser());
-app.use(express.json()); // replaces body-parser
+app.use(express.json({ limit: '20mb' }));
+app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
 
-// Connect to MongoDB
+// Connect to MongoDB with reconnection resilience
+const MONGO_OPTS = {
+  serverSelectionTimeoutMS: 30000,  // wait up to 30 s for a server to become available
+  connectTimeoutMS:         15000,  // TLS handshake budget
+  socketTimeoutMS:          60000,  // how long to wait on a slow query
+  // Monitor less frequently so a single slow heartbeat doesn't wipe the pool
+  heartbeatFrequencyMS:     30000,
+  minHeartbeatFrequencyMS:  1000,   // but recover quickly after a failure
+  // M0 free tier: keep pool small to avoid Atlas connection ceiling
+  maxPoolSize:              5,
+  minPoolSize:              1,      // keep 1 warm connection at all times
+  maxIdleTimeMS:            45000,  // retire idle connections before Atlas does (~60 s)
+  retryWrites:              true,
+  retryReads:               true,
+  readPreference:           'primaryPreferred',
+};
+
 const connectDB = async () => {
   try {
-    await mongoose.connect(MONGO_URI);
+    await mongoose.connect(MONGO_URI, MONGO_OPTS);
     console.log('✅ MongoDB connected successfully');
   } catch (error) {
-    console.error('❌ MongoDB connection error:', error.message);
-    process.exit(1); // Exit process with failure
+    console.error('❌ MongoDB initial connection failed:', error.message);
+    process.exit(1);
   }
 };
+
+mongoose.connection.on('disconnected', () => {
+  console.warn('⚠️  MongoDB disconnected — Mongoose will auto-reconnect');
+});
+
+mongoose.connection.on('reconnected', () => {
+  console.log('✅ MongoDB reconnected');
+});
+
+mongoose.connection.on('error', (err) => {
+  console.error('❌ MongoDB connection error:', err.message);
+});
+
 connectDB();
 
 // Routes (check these files exist!)
