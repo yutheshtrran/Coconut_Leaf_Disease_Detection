@@ -1,20 +1,135 @@
 // backend/controllers/reportController.js
 
+const fs       = require('fs');
+const path     = require('path');
+const crypto   = require('crypto');
 const Report   = require('../models/Report');
 const Farm     = require('../models/Farm');
 const { cloudinary } = require('../services/cloudinary');
 const dbRetry  = require('../utils/dbRetry');
 
-// Upload a raw base64 string (with or without data-URI prefix) to Cloudinary
-async function uploadBase64ToCloudinary(b64) {
-    const dataUri = b64.startsWith('data:') ? b64 : `data:image/jpeg;base64,${b64}`;
-    const result = await cloudinary.uploader.upload(dataUri, {
-        folder: 'reports/annotated',
-        resource_type: 'image',
-    });
-    return result.secure_url;
+function getErrorMessage(error) {
+    return error?.response?.data?.message
+        || error?.error?.message
+        || error?.message
+        || 'Unknown error';
+}
+function isInlineImage(value) {
+    if (typeof value !== 'string') return false;
+    if (value.startsWith('data:image/')) return true;
+    if (/^https?:\/\//i.test(value)) return false;
+    return value.length > 500 && /^[A-Za-z0-9+/=\r\n]+$/.test(value);
 }
 
+const CLOUDINARY_UPLOAD_TIMEOUT_MS = Number(process.env.CLOUDINARY_UPLOAD_TIMEOUT_MS || 300000);
+const REPORT_UPLOAD_CONCURRENCY = Number(process.env.REPORT_UPLOAD_CONCURRENCY || 3);
+const LOCAL_REPORT_ASSET_DIR = path.join(__dirname, '..', 'uploads', 'reports');
+const PUBLIC_BASE_URL = (process.env.BACKEND_PUBLIC_URL || process.env.API_PUBLIC_URL || `http://localhost:${process.env.PORT || 5000}`).replace(/\/$/, '');
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function mapLimit(items, limit, mapper) {
+    const input = Array.isArray(items) ? items : [];
+    const out = new Array(input.length);
+    let index = 0;
+
+    async function worker() {
+        while (index < input.length) {
+            const current = index++;
+            out[current] = await mapper(input[current], current);
+        }
+    }
+
+    const workers = Array.from({ length: Math.min(limit, input.length) }, worker);
+    await Promise.all(workers);
+    return out;
+}
+
+function parseDataImage(value) {
+    const match = typeof value === 'string'
+        ? value.match(/^data:image\/(png|jpe?g|webp);base64,(.+)$/i)
+        : null;
+    if (match) {
+        const ext = match[1].toLowerCase().replace('jpeg', 'jpg');
+        return { ext, base64: match[2] };
+    }
+    return { ext: 'jpg', base64: value };
+}
+
+async function saveReportImageLocally(value, folder = 'reports/annotated') {
+    if (!isInlineImage(value)) return value;
+    const { ext, base64 } = parseDataImage(value);
+    const safeFolder = folder.replace(/^reports\/?/, '').replace(/[^a-z0-9/_-]/gi, '') || 'misc';
+    const dir = path.join(LOCAL_REPORT_ASSET_DIR, safeFolder);
+    await fs.promises.mkdir(dir, { recursive: true });
+
+    const filename = `${Date.now()}-${crypto.randomUUID()}.${ext}`;
+    const filePath = path.join(dir, filename);
+    await fs.promises.writeFile(filePath, Buffer.from(base64, 'base64'));
+
+    const urlPath = ['uploads', 'reports', safeFolder, filename]
+        .map(part => encodeURIComponent(part).replace(/%2F/gi, '/'))
+        .join('/');
+    return `${PUBLIC_BASE_URL}/${urlPath}`;
+}
+// Upload a raw base64 string (with or without data-URI prefix) to Cloudinary.
+// URLs are returned unchanged so already-externalized report assets stay stable.
+async function uploadBase64ToCloudinary(value, folder = 'reports/annotated') {
+    if (!isInlineImage(value)) return value;
+    const dataUri = value.startsWith('data:') ? value : `data:image/jpeg;base64,${value}`;
+
+    let lastError;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+        try {
+            const result = await cloudinary.uploader.upload(dataUri, {
+                folder,
+                resource_type: 'image',
+                timeout: CLOUDINARY_UPLOAD_TIMEOUT_MS,
+            });
+            return result.secure_url;
+        } catch (err) {
+            lastError = err;
+            const timedOut = err?.http_code === 499 || /timeout/i.test(err?.message || err?.name || '');
+            if (!timedOut || attempt === 3) break;
+            await sleep(1000 * attempt);
+        }
+    }
+
+    console.warn(`Cloudinary upload failed, saving report image locally: ${getErrorMessage(lastError)}`);
+    return saveReportImageLocally(value, folder);
+}
+
+async function externalizeTreeImages(trees, folder) {
+    if (!Array.isArray(trees)) return trees;
+    return mapLimit(trees, REPORT_UPLOAD_CONCURRENCY, async (tree) => {
+        const copy = { ...tree };
+        if (copy.crop_image) {
+            copy.crop_image = await uploadBase64ToCloudinary(copy.crop_image, folder);
+        }
+        return copy;
+    });
+}
+
+async function externalizeAnalysisDataImages(analysisData) {
+    if (!analysisData) return null;
+
+    const safe = { ...analysisData };
+
+    if (Array.isArray(safe.annotatedImages)) {
+        safe.annotatedImages = await mapLimit(safe.annotatedImages, REPORT_UPLOAD_CONCURRENCY,
+            img => uploadBase64ToCloudinary(img, 'reports/annotated')
+        );
+    }
+
+    if (safe.mapImage) {
+        safe.mapImage = await uploadBase64ToCloudinary(safe.mapImage, 'reports/maps');
+    }
+
+    safe.affectedTrees = await externalizeTreeImages(safe.affectedTrees, 'reports/tree-crops');
+    safe.allTrees      = await externalizeTreeImages(safe.allTrees,      'reports/tree-crops');
+
+    return safe;
+}
 // Helper function to generate unique report ID
 const generateReportId = async () => {
     const count = await dbRetry(() => Report.countDocuments());
@@ -72,19 +187,9 @@ exports.createReport = async (req, res) => {
             return res.status(400).json({ message: 'Severity must have value and label' });
         }
 
-        // Upload annotated images to Cloudinary, store URLs instead of base64
-        let safeAnalysisData = analysisData ? { ...analysisData } : null;
-        if (safeAnalysisData && Array.isArray(safeAnalysisData.annotatedImages) && safeAnalysisData.annotatedImages.length > 0) {
-            const toUpload = safeAnalysisData.annotatedImages.slice(0, 3); // max 3
-            const urls = await Promise.all(
-                toUpload.map(b64 => uploadBase64ToCloudinary(b64).catch(() => null))
-            );
-            safeAnalysisData = {
-                ...safeAnalysisData,
-                annotatedImages: urls.filter(Boolean),
-            };
-        }
-
+        // Upload heavy inline images to Cloudinary, then save lightweight URLs in MongoDB.
+        // This keeps large drone-image reports under MongoDB's 16 MB document limit.
+        const safeAnalysisData = await externalizeAnalysisDataImages(analysisData);
         const reportId = await generateReportId();
         const report = new Report({
             reportId,
@@ -104,7 +209,7 @@ exports.createReport = async (req, res) => {
         res.status(201).json({ message: 'Report created successfully', data: report });
     } catch (error) {
         console.error('Create report error:', error);
-        res.status(400).json({ message: 'Error creating report', error: error.message });
+        res.status(400).json({ message: 'Error creating report', error: getErrorMessage(error) });
     }
 };
 

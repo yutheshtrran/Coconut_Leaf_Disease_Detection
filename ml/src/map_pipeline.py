@@ -909,52 +909,8 @@ def _detect_ortho(session_id: str, map_path: str, job_dir: str, conf: float,
                 f'Pre-analysing disease for {len(trees)} trees…')
         _disease_from_ortho(session_id, trees, map_np, img_h, img_w)
 
-    # ── Draw disease-coloured overlays + centred labels on orthomosaic ───────────
+    # ── Save clean orthomosaic (no annotations — React canvas draws markers) ──
     out  = map_np.copy()
-    _d2c = {v: k for k, v in DISEASE_CLASSES.items()}
-    GREEN = (0, 200, 100)
-
-    for tree in trees:
-        x1, y1, x2, y2 = tree['x1'], tree['y1'], tree['x2'], tree['y2']
-        cx, cy = tree['cx_px'], tree['cy_px']
-        color  = _DISEASE_COLORS_BGR.get(_d2c.get(tree['disease']), GREEN)
-
-        # Semi-transparent fill (10 % opacity) for the tree bounding box
-        ov = out.copy()
-        cv2.rectangle(ov, (x1, y1), (x2, y2), color, -1)
-        cv2.addWeighted(ov, 0.10, out, 0.90, 0, out)
-
-        # Thin border
-        box_h     = max(1, y2 - y1)
-        border_px = max(1, box_h // 80)
-        cv2.rectangle(out, (x1, y1), (x2, y2), color, border_px)
-
-        # Disease segmentation polygons projected onto the orthomosaic
-        for region in tree.get('_map_regions', []):
-            pts       = np.array(region['pts'], dtype=np.int32)
-            dis_color = _DISEASE_COLORS_BGR.get(region['cls_id'], color)
-            ov2 = out.copy()
-            cv2.fillPoly(ov2, [pts], dis_color)
-            cv2.addWeighted(ov2, 0.35, out, 0.65, 0, out)
-            cv2.polylines(out, [pts], True, dis_color, 2)
-
-        # Centred number label with a solid badge background
-        label      = f'#{tree["tree_id"]}'
-        font_scale = max(0.4, min(1.4, box_h / 120))
-        thickness  = max(1, int(font_scale * 1.8))
-        (lw, lh), baseline = cv2.getTextSize(
-            label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness)
-        pad   = max(3, int(font_scale * 5))
-        bx1   = cx - lw // 2 - pad
-        by1   = cy - lh // 2 - pad
-        bx2   = cx + lw // 2 + pad
-        by2   = cy + lh // 2 + pad + baseline
-        cv2.rectangle(out, (bx1, by1), (bx2, by2), color, -1)
-        cv2.rectangle(out, (bx1, by1), (bx2, by2), (255, 255, 255), 1)
-        cv2.putText(out, label,
-                    (cx - lw // 2, cy + lh // 2),
-                    cv2.FONT_HERSHEY_SIMPLEX, font_scale,
-                    (255, 255, 255), thickness, cv2.LINE_AA)
 
     annotated_path = os.path.join(job_dir, 'detected_trees.png')
     cv2.imwrite(annotated_path, cv2.cvtColor(out, cv2.COLOR_RGB2BGR))

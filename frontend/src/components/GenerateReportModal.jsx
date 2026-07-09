@@ -35,6 +35,72 @@ function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function isInlineImage(value) {
+  return typeof value === 'string' && value.startsWith('data:image/');
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new window.Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+async function compressDataUrl(src, maxSide = 720, quality = 0.72) {
+  if (!isInlineImage(src)) return src;
+  try {
+    const img = await loadImage(src);
+    const scale = Math.min(1, maxSide / Math.max(img.naturalWidth || img.width, img.naturalHeight || img.height));
+    const w = Math.max(1, Math.round((img.naturalWidth || img.width) * scale));
+    const h = Math.max(1, Math.round((img.naturalHeight || img.height) * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, w, h);
+    return canvas.toDataURL('image/jpeg', quality);
+  } catch {
+    return src;
+  }
+}
+
+async function compressTreeImages(trees) {
+  if (!Array.isArray(trees)) return trees;
+  const out = [];
+  for (const tree of trees) {
+    out.push({
+      ...tree,
+      crop_image: tree.crop_image
+        ? await compressDataUrl(tree.crop_image, 520, 0.72)
+        : tree.crop_image,
+    });
+  }
+  return out;
+}
+
+async function prepareReportAnalysisData(analysisData) {
+  if (!analysisData) return analysisData;
+  const safe = { ...analysisData };
+
+  if (Array.isArray(safe.annotatedImages)) {
+    safe.annotatedImages = [];
+    for (const img of analysisData.annotatedImages) {
+      safe.annotatedImages.push(await compressDataUrl(img, 1400, 0.74));
+    }
+  }
+
+  if (safe.mapImage) {
+    safe.mapImage = await compressDataUrl(safe.mapImage, 1800, 0.72);
+  }
+
+  safe.affectedTrees = await compressTreeImages(safe.affectedTrees);
+  safe.allTrees = await compressTreeImages(safe.allTrees);
+
+  return safe;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 const GenerateReportModal = ({ analysisData, detectedGps, onClose, onCreated }) => {
   const [farm,     setFarm]     = useState({ name: '', isNew: true, farmId: null });
@@ -123,7 +189,8 @@ const GenerateReportModal = ({ analysisData, detectedGps, onClose, onCreated }) 
         gps = { lat: location.lat, lon: location.lon, source: 'manual' };
       }
 
-      const safeAnalysis = gps ? { ...analysisData, gps } : analysisData;
+      const baseAnalysis = gps ? { ...analysisData, gps } : analysisData;
+      const safeAnalysis = await prepareReportAnalysisData(baseAnalysis);
 
       const payload = {
         farm:         farm.name.trim(),

@@ -630,11 +630,14 @@ const Upload = () => {
   const [fmPhase,        setFmPhase]        = useState('idle'); // idle | processing | done | error
   const [fmVideoFile,    setFmVideoFile]    = useState(null);
   const [fmIsDragActive, setFmIsDragActive] = useState(false);
-  const fmFileInputRef = useRef(null);
+  const fmFileInputRef  = useRef(null);
+  const fmTreeGridRef   = useRef(null);
   const [fmSessionId,    setFmSessionId]    = useState(null);
   const [fmProgressData, setFmProgressData] = useState({ stage: 'stitch', status: 'queued', progress: 0, detail: '' });
   const fmPollRef = useRef(null);
   const [fmMapImage,     setFmMapImage]     = useState(null);
+  const [fmMapSrc,       setFmMapSrc]       = useState(null);
+  const [fmMapDims,      setFmMapDims]      = useState({ w: 0, h: 0 });
   const [fmTrees,        setFmTrees]        = useState([]);
   const [fmTreeCount,    setFmTreeCount]    = useState(0);
   const [fmErrorMsg,     setFmErrorMsg]     = useState('');
@@ -644,6 +647,7 @@ const Upload = () => {
   const [fmDiseaseError,   setFmDiseaseError]   = useState('');
   const [fmDetectedGps,    setFmDetectedGps]    = useState(null);
   const [showFmReportModal, setShowFmReportModal] = useState(false);
+  const [fmFsTree,         setFmFsTree]         = useState(null); // {treeIdx} for fullscreen tree viewer
 
   const handleNotesChange = (e) => setNotes(e.target.value);
 
@@ -953,7 +957,7 @@ const Upload = () => {
       if (data.gps?.lat != null) setFmDetectedGps({ lat: data.gps.lat, lon: data.gps.lon });
       if (data.map_b64) {
         const img = new Image();
-        img.onload  = () => { setFmMapImage(img); setFmPhase('done'); };
+        img.onload  = () => { setFmMapImage(img); setFmMapSrc(data.map_b64); setFmMapDims({ w: img.naturalWidth, h: img.naturalHeight }); setFmPhase('done'); setTimeout(() => fmTreeGridRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 400); };
         img.onerror = () => { setFmErrorMsg('Failed to decode map image'); setFmPhase('error'); };
         img.src = data.map_b64;
       } else { setFmPhase('done'); }
@@ -2225,9 +2229,10 @@ const Upload = () => {
             </div>
           )}
 
-          {/* ── DONE — Map + Side panel ───────────────────────────────── */}
+          {/* ── DONE — Map + Side panel + Tree grid ───────────────────── */}
           {fmPhase === 'done' && (
-            <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0">
+            <div className="flex flex-col gap-5">
+            <div className="flex flex-col lg:flex-row gap-4" style={{ height: 'clamp(380px, 62vh, 700px)' }}>
 
               {/* Map area */}
               <div className="flex flex-col gap-2 flex-1 min-w-0 min-h-0">
@@ -2246,7 +2251,7 @@ const Upload = () => {
                     </span>
                   )}
                 </div>
-                <div className="flex-1 min-h-0 h-[50vh] lg:h-auto rounded-2xl overflow-hidden shadow-2xl">
+                <div className="flex-1 min-h-0 rounded-2xl overflow-hidden shadow-2xl">
                   <MapViewer mapImage={fmMapImage} trees={fmTrees} selectedTree={fmSelectedTree}
                     onTreeClick={t => { setFmSelectedTree(t); setFmDiseaseResult(null); setFmDiseaseError(''); }} />
                 </div>
@@ -2402,7 +2407,147 @@ const Upload = () => {
 
               </div>
             </div>
+
+            {/* ── Individual Tree Analysis grid ──────────────────────── */}
+            {fmTrees.length > 0 && (
+              <div ref={fmTreeGridRef} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-bold text-gray-800 dark:text-gray-200 flex items-center gap-2">
+                    <TreePine size={15} className="text-green-500" /> Individual Tree Analysis
+                  </p>
+                  <span className="text-xs text-gray-400">{fmTrees.length} trees · click to select on map</span>
+                </div>
+                <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-7 lg:grid-cols-9 xl:grid-cols-11 gap-2">
+                  {fmTrees.map((tree, idx) => {
+                    const isSel = fmSelectedTree?.tree_id === tree.tree_id;
+                    const col   = dColor(tree.disease || null);
+                    return (
+                      <div key={tree.tree_id}
+                        onClick={() => { setFmSelectedTree(tree); setFmDiseaseResult(null); setFmDiseaseError(''); }}
+                        className="group cursor-pointer rounded-xl overflow-hidden border-2 transition-all duration-150 hover:shadow-lg"
+                        style={{ borderColor: isSel ? col : 'transparent', boxShadow: isSel ? `0 0 0 2px ${col}40` : undefined, background: 'transparent' }}>
+                        {/* Crop image */}
+                        <div className="relative" style={{ aspectRatio: '1' }}>
+                          {tree.crop_image ? (
+                            <img src={tree.crop_image} alt={`Tree ${tree.tree_id}`}
+                              className="w-full h-full object-cover group-hover:scale-[1.04] transition-transform duration-300" />
+                          ) : (
+                            <div className="w-full h-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
+                              <TreePine size={16} className="text-gray-300 dark:text-gray-600" />
+                            </div>
+                          )}
+                          {/* Tree ID badge */}
+                          <div className="absolute top-1 left-1 min-w-[16px] h-[16px] rounded-full text-white text-[8px] font-extrabold flex items-center justify-center px-1 shadow"
+                            style={{ backgroundColor: col }}>
+                            {tree.tree_id}
+                          </div>
+                          {/* Fullscreen button */}
+                          <button
+                            onClick={e => { e.stopPropagation(); setFmFsTree({ treeIdx: idx }); }}
+                            className="absolute top-1 right-1 w-5 h-5 rounded bg-black/50 hover:bg-black/80 items-center justify-center text-white transition hidden group-hover:flex">
+                            <Maximize2 size={9} />
+                          </button>
+                        </div>
+                        {/* Disease label */}
+                        <div className="px-1 py-1 bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700">
+                          <p className="text-[9px] font-bold truncate leading-tight" style={{ color: col }}>
+                            {tree.disease || '—'}
+                          </p>
+                          {tree.disease_confidence != null && (
+                            <p className="text-[8px] text-gray-400 tabular-nums">{Math.round(tree.disease_confidence * 100)}%</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            </div>
           )}
+        </div>
+      )}
+
+      {/* Drone Video fullscreen tree viewer */}
+      {fmFsTree !== null && (
+        <div className="fixed inset-0 z-50 bg-black/95 flex flex-col" onKeyDown={e => { if (e.key === 'Escape') setFmFsTree(null); }} tabIndex={-1}>
+          {/* Header */}
+          <div className="flex items-center justify-between px-5 py-3 flex-shrink-0 border-b border-white/10">
+            <div className="flex items-center gap-3">
+              <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shadow"
+                style={{ backgroundColor: dColor(fmTrees[fmFsTree.treeIdx]?.disease || null) }}>
+                {fmTrees[fmFsTree.treeIdx]?.tree_id}
+              </div>
+              <div>
+                <p className="text-white font-bold text-sm">Tree #{fmTrees[fmFsTree.treeIdx]?.tree_id}</p>
+                <p className="text-white/50 text-xs">{fmTrees[fmFsTree.treeIdx]?.disease || 'Unanalysed'}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-white/40 text-xs tabular-nums">{fmFsTree.treeIdx + 1} / {fmTrees.length}</span>
+              <button onClick={() => setFmFsTree(null)}
+                className="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition">
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+
+          {/* Image + navigation */}
+          <div className="flex-1 flex min-h-0">
+            <button
+              onClick={() => setFmFsTree(p => ({ treeIdx: Math.max(0, p.treeIdx - 1) }))}
+              disabled={fmFsTree.treeIdx === 0}
+              className="flex-shrink-0 w-12 flex items-center justify-center text-white/50 hover:text-white disabled:opacity-20 transition">
+              <ChevronLeft size={30} />
+            </button>
+            <div className="flex-1 min-w-0 p-4">
+              {fmTrees[fmFsTree.treeIdx]?.crop_image ? (
+                <ZoomableImage src={fmTrees[fmFsTree.treeIdx].crop_image} alt={`Tree #${fmTrees[fmFsTree.treeIdx].tree_id}`} />
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center gap-3 text-white/30">
+                  <TreePine size={48} />
+                  <p className="text-sm">No image — run disease analysis on this tree</p>
+                </div>
+              )}
+            </div>
+            <button
+              onClick={() => setFmFsTree(p => ({ treeIdx: Math.min(fmTrees.length - 1, p.treeIdx + 1) }))}
+              disabled={fmFsTree.treeIdx === fmTrees.length - 1}
+              className="flex-shrink-0 w-12 flex items-center justify-center text-white/50 hover:text-white disabled:opacity-20 transition">
+              <ChevronRight size={30} />
+            </button>
+          </div>
+
+          {/* Footer - disease info */}
+          <div className="flex-shrink-0 border-t border-white/10 px-5 py-3 flex items-center gap-5 flex-wrap">
+            {fmTrees[fmFsTree.treeIdx]?.disease ? (
+              <>
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: dColor(fmTrees[fmFsTree.treeIdx].disease) }} />
+                  <span className="text-white font-semibold text-sm">{fmTrees[fmFsTree.treeIdx].disease}</span>
+                </div>
+                {fmTrees[fmFsTree.treeIdx].disease_confidence != null && (
+                  <span className="text-white/50 text-sm tabular-nums">
+                    {Math.round(fmTrees[fmFsTree.treeIdx].disease_confidence * 100)}% confidence
+                  </span>
+                )}
+                {fmTrees[fmFsTree.treeIdx].all_detections?.length > 1 && (
+                  <div className="flex items-center gap-4 ml-auto">
+                    {fmTrees[fmFsTree.treeIdx].all_detections.slice(0, 3).map((d, i) => (
+                      <div key={i} className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: dColor(d.disease) }} />
+                        <span className="text-white/50 text-xs">{d.disease}</span>
+                        <span className="text-white/40 text-xs tabular-nums">{Math.round(d.confidence * 100)}%</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : (
+              <span className="text-white/30 text-sm">Click "Analyse Disease" on the map to get disease information for this tree.</span>
+            )}
+          </div>
         </div>
       )}
 
@@ -2419,7 +2564,7 @@ const Upload = () => {
       {/* Drone Video generate report modal */}
       {showFmReportModal && (
         <GenerateReportModal
-          analysisData={buildDroneVideoAnalysisData(fmTrees, fmDetectedGps)}
+          analysisData={buildDroneVideoAnalysisData(fmTrees, fmDetectedGps, fmMapSrc ? { src: fmMapSrc, w: fmMapDims.w, h: fmMapDims.h } : null)}
           detectedGps={fmDetectedGps}
           onClose={() => setShowFmReportModal(false)}
           onCreated={() => setShowFmReportModal(false)}

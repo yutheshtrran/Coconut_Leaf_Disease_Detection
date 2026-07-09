@@ -17,7 +17,7 @@ conf_tree:         0.12   # tree-detection model  (coconut_tree_v6-3.pt) — kep
                            # trees with reduced confidence from stitching blending are not dropped
 max_tree_px:       640    # max bounding-box side length in orthomosaic pixels;
                            # boxes larger than this are almost never a single tree crown
-conf_disease:      0.30   # fallback disease confidence when no per-class value is set
+conf_disease:      0.20   # fallback disease confidence when no per-class value is set
 conf_disease_leaf: 0.30   # fallback disease confidence for single uploaded leaf images
 iou_tree:          0.45   # NMS IOU for tree bounding-box deduplication (within a single tile)
 

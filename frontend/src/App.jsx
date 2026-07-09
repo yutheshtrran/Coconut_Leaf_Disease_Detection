@@ -47,7 +47,7 @@ function AppWrapper() {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
-        <main className={`flex-1 p-0 ${showLayout ? 'p-4 md:ml-64' : ''} transition-all duration-300`}>
+        <main className={`flex-1 overflow-y-auto p-0 ${showLayout ? 'p-4 md:ml-64' : ''} transition-all duration-300`}>
           <Routes>
             {/* Public routes */}
             <Route path="/" element={<Login />} />

@@ -157,7 +157,7 @@ function AffectedTreesSection({ ad }) {
                   src={t.crop_image}
                   alt={`Tree ${label}`}
                   crossOrigin="anonymous"
-                  style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', display: 'block' }}
+                  style={{ width: '100%', display: 'block' }}
                 />
                 {/* Tree number badge */}
                 <div style={{
