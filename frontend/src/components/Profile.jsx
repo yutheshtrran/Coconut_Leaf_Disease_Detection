@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { User, Mail, Phone, BookOpen, Camera, Save, CheckCircle } from "lucide-react";
+import { User, Mail, Phone, BookOpen, Camera, Save, CheckCircle, Loader2 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import * as userService from "../services/userService";
@@ -260,10 +260,7 @@ const Profile = () => {
                             )}
                             {uploading && (
                                 <div className="absolute inset-0 bg-white/60 flex items-center justify-center rounded-full">
-                                    <svg className="animate-spin h-8 w-8 text-green-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
-                                    </svg>
+                                    <Loader2 size={32} className="animate-spin text-green-600" />
                                 </div>
                             )}
                             <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
@@ -335,10 +332,7 @@ const Profile = () => {
                             <button className="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-600 dark:text-gray-200" onClick={() => { setShowPasswordModal(false); setCurrentPassword(""); }} disabled={isSaving}>Cancel</button>
                             <button className="px-4 py-2 rounded-lg bg-green-600 text-white flex items-center gap-2" onClick={confirmSaveWithPassword} disabled={isSaving}>
                                 {isSaving && (
-                                    <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
-                                    </svg>
+                                    <Loader2 size={16} className="animate-spin" />
                                 )}
                                 {isSaving ? 'Saving…' : 'Confirm & Save'}
                             </button>

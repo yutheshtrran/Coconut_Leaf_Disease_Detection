@@ -1,0 +1,222 @@
+{
+  "Potassium Deficiency": {
+    "type": "Deficiency",
+    "shortDescription": "Orange-yellow scorching along leaflet margins of older fronds giving a characteristic 'burnt leaf' appearance due to low soil potassium.",
+    "shortRemedy": "Apply Muriate of Potash (MOP/KCl) per CRI schedule using split application. Add 500 g extra MOP if deficiency persists. Improve soil with compost and maintain balanced NPK.",
+    "causes": [
+      "Low potassium content in soil",
+      "Heavy rainfall causing leaching in sandy or lateritic soils",
+      "Continuous harvesting without fertilizer replacement",
+      "Imbalanced fertilization — excess Ca or Mg reduces K uptake",
+      "Poor soil organic matter"
+    ],
+    "symptoms": [
+      "Appears first on older leaves",
+      "Yellowing starts at leaflet tips",
+      "Orange-yellow color along leaf margins",
+      "Rust or brown spotting on leaf edges",
+      "Leaf edges become dry and scorched",
+      "\"Burnt leaf\" appearance in severe cases",
+      "Reduced nut size and yield"
+    ],
+    "remedies": [
+      {
+        "category": "Basic Fertilizer Correction",
+        "steps": [
+          "Apply Muriate of Potash (MOP / KCl) as per CRI fertilizer schedule",
+          "Use split application method"
+        ]
+      },
+      {
+        "category": "If Deficiency Persists",
+        "steps": [
+          "Apply additional 500 g MOP per tree together with the recommended fertilizer mixture",
+          "Add Dolomite if Mg imbalance also exists"
+        ]
+      },
+      {
+        "category": "Soil Improvement",
+        "steps": [
+          "Add organic matter — compost, husk, or coconut waste",
+          "Maintain balanced NPK based on soil testing results"
+        ]
+      }
+    ],
+    "references": [
+      "Coconut Research Institute of Sri Lanka (CRI) — Advisory Circulars – Fertilizer Recommendations. https://cri.gov.lk/en/advisory-circulars/",
+      "Good Hands Initiative — Nutrient Deficiencies in Coconut Trees. https://goodhands.lk/en/nutrient-deficiencies-in-coconut-trees-not-second-to-pests-and-diseases-2/"
+    ]
+  },
+  "Magnesium Deficiency": {
+    "type": "Deficiency",
+    "shortDescription": "Interveinal chlorosis of older fronds with yellow margins and a persistent green midrib giving a striped 'barber pole' appearance.",
+    "shortRemedy": "Apply 500 g Dolomite per tree with the recommended fertilizer mixture. For persistent cases add 500 g MOP. Long term: 1 kg Dolomite per bearing tree per year.",
+    "causes": [
+      "Low magnesium content in soil",
+      "Acidic and sandy soils",
+      "Excess potassium fertilizer blocking Mg uptake",
+      "Nutrient leaching due to heavy rainfall",
+      "Poor soil fertility management"
+    ],
+    "symptoms": [
+      "Appears on older leaves first",
+      "Yellow bands along leaf margins",
+      "Midrib stays green, creating a striped leaf appearance",
+      "Interveinal chlorosis",
+      "Leaf tips turn reddish-brown",
+      "Early drying of leaves",
+      "Reduced yield"
+    ],
+    "remedies": [
+      {
+        "category": "Immediate Correction",
+        "steps": [
+          "Apply Dolomite (500 g per coconut tree or seedling) together with the recommended fertilizer mixture"
+        ]
+      },
+      {
+        "category": "If Deficiency Continues",
+        "steps": [
+          "Apply additional 500 g Muriate of Potash (MOP) per tree along with fertilizer and Dolomite"
+        ]
+      },
+      {
+        "category": "Field Application Method (CRI Practice)",
+        "steps": [
+          "Apply fertilizer around the fertilizer circle",
+          "For Mg deficiency trees: apply fertilizer on one half of circle, apply ~1 kg Kieserite on opposite half"
+        ]
+      },
+      {
+        "category": "Long-term Management",
+        "steps": [
+          "Apply 1 kg Dolomite per bearing tree per year",
+          "Apply 500 g Dolomite per young coconut plant every 6 months"
+        ]
+      }
+    ],
+    "references": [
+      "Coconut Research Institute of Sri Lanka (CRI). https://cri.gov.lk/",
+      "Good Hands Initiative — Nutrient Deficiencies in Coconut Trees. https://goodhands.lk/en/nutrient-deficiencies-in-coconut-trees-not-second-to-pests-and-diseases-2/",
+      "KAU Agricultural Information Portal. https://www.celkau.in/crops/plantation/coconut/deficiency.php"
+    ]
+  },
+  "Yellow Patches": {
+    "type": "Disease",
+    "shortDescription": "Small yellow spots on leaves that enlarge into brown lesions with dark margins and yellow halos, caused by fungal pathogens under humid conditions.",
+    "shortRemedy": "Remove and destroy infected leaves immediately. Improve air circulation through spacing and pruning. Apply copper-based fungicide only in severe cases. Maintain balanced fertilization.",
+    "causes": [
+      "Fungal pathogens: Septoria spp., Colletotrichum spp., Exserohilum spp.",
+      "High humidity and wet leaves for prolonged periods",
+      "Poor air circulation in overcrowded plantations",
+      "Nutrient stress weakening disease resistance"
+    ],
+    "symptoms": [
+      "Small yellow spots on leaves",
+      "Spots enlarge into brown lesions",
+      "Dark brown margins appear around spots",
+      "Yellow halo surrounding lesions",
+      "\"Target-like\" concentric ring pattern",
+      "Spots merge into large dead patches",
+      "Leaf drying and premature leaf fall"
+    ],
+    "remedies": [
+      {
+        "category": "Cultural Control",
+        "steps": [
+          "Remove infected leaves immediately and destroy them",
+          "Collect and destroy fallen infected debris",
+          "Improve air circulation through appropriate plant spacing and pruning",
+          "Avoid overhead irrigation that wets the foliage"
+        ]
+      },
+      {
+        "category": "Chemical Control (Severe Cases Only)",
+        "steps": [
+          "Apply copper-based fungicide as a foliar spray",
+          "Repeat application as per product label if infection persists"
+        ]
+      },
+      {
+        "category": "Nutritional Management",
+        "steps": [
+          "Maintain balanced NPK and micronutrient fertilization to strengthen disease resistance"
+        ]
+      }
+    ],
+    "references": [
+      "Coconut Research Institute of Sri Lanka (CRI) — Pests and Diseases Advisory Circulars. https://cri.gov.lk/en/advisory-circulars/",
+      "Good Hands Initiative — Coconut Leaf Blight Disease. https://goodhands.lk/en/coconut-leaf-blight-disease/",
+      "Coconut Development Board (India). https://coconutboard.gov.in/",
+      "CORD — Coconut Research and Development Journal. https://journal.coconutcommunity.org/"
+    ]
+  },
+  "Black Beetle Attack": {
+    "type": "Pest",
+    "shortDescription": "Oryctes rhinoceros beetles bore into the growing crown and young fronds, causing characteristic V-shaped cuts, frass in the crown, and potential death of young palms.",
+    "shortRemedy": "Remove all decaying logs and organic debris (breeding sites). Inspect palms regularly and extract beetles with a metal hook. Apply coal tar or naphthalene balls in leaf axils as repellents every 2 months.",
+    "causes": [
+      "Oryctes rhinoceros beetles attack coconut crown",
+      "Beetle breeds in decaying organic matter: coconut logs, manure pits, compost heaps, coir dust piles, and dead palms",
+      "Adults bore into spear leaf and growing point"
+    ],
+    "symptoms": [
+      "V-shaped or wedge-shaped cuts on emerging leaves",
+      "Bore holes in young fronds",
+      "Damaged or wilted spear leaf",
+      "Frass (fibrous waste material) visible in crown",
+      "Deformed and tattered fronds after expansion",
+      "Severe infestation can kill young palms"
+    ],
+    "remedies": [
+      {
+        "category": "Sanitation (CRI Primary Control)",
+        "steps": [
+          "Remove and destroy all decaying coconut logs and stumps",
+          "Clean and properly manage manure pits and compost heaps",
+          "Eliminate all potential breeding sites within and around the plantation"
+        ]
+      },
+      {
+        "category": "Mechanical Control",
+        "steps": [
+          "Inspect young palms regularly for signs of attack",
+          "Remove adult beetles from the crown using a metal hook"
+        ]
+      },
+      {
+        "category": "Repellents (CRI Recommended)",
+        "steps": [
+          "Apply coal tar or used engine oil in leaf axils — repeat every ~2 months",
+          "Place 6 naphthalene balls per palm in inner leaf axils"
+        ]
+      },
+      {
+        "category": "Chemical Control (Severe Cases Only — CRI Dosages)",
+        "steps": [
+          "Seedlings: Carbofuran 3% at 15 g per plant, or Carbosulfan 10% at 10 g per plant",
+          "Young palms: Carbofuran 3% at 30 g per plant, or Carbosulfan 10% at 15 g per plant",
+          "Mix insecticide with equal quantity of sand and place in leaf axils — repeat monthly if necessary"
+        ]
+      },
+      {
+        "category": "Biological Control",
+        "steps": [
+          "Apply Metarhizium anisopliae fungus in beetle breeding sites"
+        ]
+      },
+      {
+        "category": "Trapping",
+        "steps": [
+          "Install pheromone traps throughout the plantation to monitor and reduce adult beetle population"
+        ]
+      }
+    ],
+    "references": [
+      "Coconut Research Institute of Sri Lanka (CRI) — Pest Management Advisory Circulars. https://cri.gov.lk/en/advisory-circulars/",
+      "Coconut Development Board (India). https://coconutboard.gov.in/",
+      "University of Hawaiʻi — Coconut Rhinoceros Beetle Research. https://www.crbhawaii.org/",
+      "Good Hands Initiative. https://goodhands.lk/"
+    ]
+  }
+}

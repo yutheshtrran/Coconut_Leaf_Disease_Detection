@@ -18,7 +18,10 @@ export const getFarmMapProgress = async (sessionId) => {
 export const getFarmMapResult = async (sessionId) => {
   const r = await fetch(`${ML}/farm-map/result/${sessionId}`);
   if (r.status === 202) return r.json();
-  if (!r.ok) throw new Error(`Fetching result failed (${r.status})`);
+  if (!r.ok) {
+    const body = await r.json().catch(() => ({}));
+    return { success: false, status: r.status, error: body.error || `Request failed (${r.status})` };
+  }
   return r.json();
 };
 

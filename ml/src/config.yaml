@@ -13,10 +13,13 @@ class_names:
 # ── Detection thresholds ──────────────────────────────────────────────────────
 # Raise a value to require higher certainty (fewer detections, less noise).
 # Lower a value to catch more instances (more detections, more false positives).
-conf_tree:         0.20   # tree-detection model  (coconut_tree_v6-3.pt)
-conf_disease:      0.40   # fallback disease confidence when no per-class value is set
+conf_tree:         0.12   # tree-detection model  (coconut_tree_v6-3.pt) — kept low so
+                           # trees with reduced confidence from stitching blending are not dropped
+max_tree_px:       640    # max bounding-box side length in orthomosaic pixels;
+                           # boxes larger than this are almost never a single tree crown
+conf_disease:      0.20   # fallback disease confidence when no per-class value is set
 conf_disease_leaf: 0.30   # fallback disease confidence for single uploaded leaf images
-iou_tree:          0.40   # NMS IOU for tree bounding-box deduplication
+iou_tree:          0.45   # NMS IOU for tree bounding-box deduplication (within a single tile)
 
 # ── Frame-based deduplication (drone video) ───────────────────────────────────
 # Raise merge_radius if the same tree still appears multiple times.
@@ -29,7 +32,7 @@ merge_radius:      120    # canvas-pixel minimum centroid-distance for tree clus
 # These override conf_disease / conf_disease_leaf for the named class.
 # Remove or comment out a class to use the fallback value instead.
 conf_disease_classes:
-  Black Beetle Attack:   0.50
-  Magnesium Deficiency:  0.20
-  Potassium Deficiency:  0.20
-  Yellow Patches:        0.20
+  Black Beetle Attack:   0.30
+  Magnesium Deficiency:  0.10
+  Potassium Deficiency:  0.10
+  Yellow Patches:        0.10

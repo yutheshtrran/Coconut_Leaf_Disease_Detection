@@ -1,5 +1,12 @@
 import API from './api';
 
+// Fetch all farms for the current user, optionally filtered by name (for combobox)
+export const fetchFarms = async (search = '') => {
+  const params = search ? { search } : {};
+  const res = await API.get('/farms', { params });
+  return res.data;
+};
+
 // Add a new farm
 export const addFarm = async (farmData) => {
   const res = await API.post('/farms', farmData);

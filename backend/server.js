@@ -17,6 +17,7 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGODB_URI;
+const BODY_LIMIT = process.env.REQUEST_BODY_LIMIT || '500mb';
 
 // Middleware
 app.use(cors({
@@ -24,19 +25,50 @@ app.use(cors({
   credentials: true,
 }));
 app.use(cookieParser());
-app.use(express.json()); // replaces body-parser
+app.use(express.json({ limit: BODY_LIMIT }));
+app.use(express.urlencoded({ extended: true, limit: BODY_LIMIT }));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 
-// Connect to MongoDB
+// Connect to MongoDB with reconnection resilience
+const MONGO_OPTS = {
+  serverSelectionTimeoutMS: 30000,  // wait up to 30 s for a server to become available
+  connectTimeoutMS:         15000,  // TLS handshake budget
+  socketTimeoutMS:          60000,  // how long to wait on a slow query
+  // Monitor less frequently so a single slow heartbeat doesn't wipe the pool
+  heartbeatFrequencyMS:     30000,
+  minHeartbeatFrequencyMS:  1000,   // but recover quickly after a failure
+  // M0 free tier: keep pool small to avoid Atlas connection ceiling
+  maxPoolSize:              5,
+  minPoolSize:              1,      // keep 1 warm connection at all times
+  maxIdleTimeMS:            45000,  // retire idle connections before Atlas does (~60 s)
+  retryWrites:              true,
+  retryReads:               true,
+  readPreference:           'primaryPreferred',
+};
+
 const connectDB = async () => {
   try {
-    await mongoose.connect(MONGO_URI);
+    await mongoose.connect(MONGO_URI, MONGO_OPTS);
     console.log('✅ MongoDB connected successfully');
   } catch (error) {
-    console.error('❌ MongoDB connection error:', error.message);
-    process.exit(1); // Exit process with failure
+    console.error('❌ MongoDB initial connection failed:', error.message);
+    process.exit(1);
   }
 };
+
+mongoose.connection.on('disconnected', () => {
+  console.warn('⚠️  MongoDB disconnected — Mongoose will auto-reconnect');
+});
+
+mongoose.connection.on('reconnected', () => {
+  console.log('✅ MongoDB reconnected');
+});
+
+mongoose.connection.on('error', (err) => {
+  console.error('❌ MongoDB connection error:', err.message);
+});
+
 connectDB();
 
 // Routes (check these files exist!)
@@ -57,6 +89,11 @@ try {
 
 // Multer/file upload friendly errors
 app.use((err, req, res, next) => {
+  if (err && err.type === 'entity.too.large') {
+    return res.status(413).json({
+      message: 'Request entity too large. Increase REQUEST_BODY_LIMIT if the configured backend limit is not enough.',
+    });
+  }
   if (err instanceof multer.MulterError) {
     if (err.code === 'LIMIT_FILE_SIZE') {
       return res.status(413).json({ message: 'File too large. Max 5MB.' });

@@ -54,16 +54,19 @@ def _get_model():
 
 
 def _plot_clean(image_bgr: np.ndarray, result,
-                class_conf: dict = None, cls_name_map: dict = None) -> np.ndarray:
+                class_conf: dict = None, cls_name_map: dict = None,
+                base_conf: float = 0.0) -> np.ndarray:
     """Draw clean semi-transparent annotations: coloured fills + thin borders, no text.
-    Pass class_conf {name: min_conf} + cls_name_map {id: name} to filter per class."""
+    base_conf is the global fallback threshold used when a class has no per-class entry."""
     out = image_bgr.copy()
     r   = result
 
     def _skip(cls_id, cnf):
-        if class_conf is None or cls_name_map is None:
-            return False
-        return cnf < class_conf.get(cls_name_map.get(cls_id, ''), 0.0)
+        if cls_name_map is None:
+            return cnf < base_conf
+        name = cls_name_map.get(cls_id, '')
+        threshold = class_conf.get(name, base_conf) if class_conf else base_conf
+        return cnf < threshold
 
     if r.masks is not None and len(r.masks.xy):
         for i, pts in enumerate(r.masks.xy):
@@ -98,7 +101,7 @@ def predict(image_path: str, use_tta: bool = True) -> dict:
     results = model.predict(source=image_path, conf=_CONF_LEAF_MIN, verbose=False)
     r       = results[0]
 
-    annotated_bgr = _plot_clean(r.orig_img.copy(), r, CONF_DISEASE_LEAF_CLASSES, DISEASE_CLASSES)
+    annotated_bgr = _plot_clean(r.orig_img.copy(), r, CONF_DISEASE_LEAF_CLASSES, DISEASE_CLASSES, CONF_DISEASE_LEAF)
     _, buf = cv2.imencode('.jpg', annotated_bgr, [cv2.IMWRITE_JPEG_QUALITY, 88])
     annotated_b64 = 'data:image/jpeg;base64,' + base64.b64encode(buf.tobytes()).decode()
 

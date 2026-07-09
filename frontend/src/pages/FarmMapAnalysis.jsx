@@ -3,10 +3,14 @@ import {
   Upload, Video, Layers, AlertCircle, RefreshCw,
   ZoomIn, ZoomOut, Maximize2, Leaf, Activity,
   CheckCircle, Loader2, TreePine, X, MapPin,
-  ShieldCheck, Microscope, BarChart3, Eye,
+  ShieldCheck, Microscope, BarChart3, Eye, FileText,
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
+import { useJobs } from '../context/JobContext';
+import { useSearchParams } from 'react-router-dom';
 import * as farmMapService from '../services/farmMapService';
+import GenerateReportModal from '../components/GenerateReportModal';
+import { buildDroneVideoAnalysisData } from '../utils/buildAnalysisData';
 
 // ── Design tokens ──────────────────────────────────────────────────────────
 const ACCEPTED_VIDEO = '.mp4,.mov,.avi,.mkv,.webm';
@@ -338,6 +342,8 @@ function StatCard({ label, value, color, bg }) {
 // ── Main Page ──────────────────────────────────────────────────────────────
 const FarmMapAnalysis = () => {
   const { theme } = useTheme();
+  const { startJob, jobs } = useJobs();
+  const [searchParams] = useSearchParams();
 
   const [phase,        setPhase]        = useState('idle');
   const [videoFile,    setVideoFile]    = useState(null);
@@ -357,6 +363,9 @@ const FarmMapAnalysis = () => {
   const [diseaseResult,  setDiseaseResult]  = useState(null);
   const [diseaseLoading, setDiseaseLoading] = useState(false);
   const [diseaseError,   setDiseaseError]   = useState('');
+  const [detectedGps,       setDetectedGps]       = useState(null); // { lat, lon } extracted from video
+  const [showReportModal,   setShowReportModal]   = useState(false);
+  const [reportAnalysisData, setReportAnalysisData] = useState(null);
 
   // ── Polling ───────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -380,6 +389,7 @@ const FarmMapAnalysis = () => {
       if (!data.success) { setErrorMsg(data.error || 'Failed'); setPhase('error'); return; }
       setTreeCount(data.tree_count || 0);
       setTrees(data.trees || []);
+      if (data.gps?.lat != null) setDetectedGps({ lat: data.gps.lat, lon: data.gps.lon });
       if (data.map_b64) {
         const img   = new Image();
         img.onload  = () => { setMapImage(img); setPhase('done'); };
@@ -399,6 +409,29 @@ const FarmMapAnalysis = () => {
   const handleDragLeave = () => setIsDragActive(false);
   const handleDrop = (e) => { e.preventDefault(); setIsDragActive(false); pickFile(e.dataTransfer.files?.[0]); };
 
+  // ── Deep-link resume: ?session=<sid> ─────────────────────────────────────
+  useEffect(() => {
+    const sid = searchParams.get('session');
+    if (!sid || phase !== 'idle') return;
+    const job = jobs[sid];
+    if (job?.status === 'done' && job.result) {
+      // Result already fetched by JobContext — populate directly
+      const data = job.result;
+      setTreeCount(data.tree_count || 0);
+      setTrees(data.trees || []);
+      if (data.gps?.lat != null) setDetectedGps({ lat: data.gps.lat, lon: data.gps.lon });
+      if (data.map_b64) {
+        const img = new Image();
+        img.onload = () => { setMapImage(img); setPhase('done'); };
+        img.src = data.map_b64;
+      } else { setPhase('done'); }
+    } else if (job?.status === 'processing') {
+      // Resume live polling for this session
+      setSessionId(sid);
+      setPhase('processing');
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Start ──────────────────────────────────────────────────────────────────
   const handleStart = async () => {
     if (!videoFile) return;
@@ -407,6 +440,7 @@ const FarmMapAnalysis = () => {
     try {
       const { session_id } = await farmMapService.startFarmMap(videoFile);
       setSessionId(session_id);
+      startJob(session_id); // Register with global JobContext for background polling
     } catch (err) { setErrorMsg(err.message); setPhase('error'); }
   };
 
@@ -446,8 +480,32 @@ const FarmMapAnalysis = () => {
     clearInterval(pollRef.current);
     setPhase('idle'); setVideoFile(null); setSessionId(null);
     setProgressData({ stage: 'stitch', status: 'queued', progress: 0, detail: '' });
-    setMapImage(null); setTrees([]); setSelectedTree(null); setDiseaseResult(null); setErrorMsg('');
+    setMapImage(null); setTrees([]); setSelectedTree(null); setDiseaseResult(null); setErrorMsg(''); setDetectedGps(null);
   };
+
+  // ── Compress orthomosaic + build report analysisData ─────────────────────
+  const handleGenerateReport = useCallback(() => {
+    let mapData = null;
+    if (mapImage) {
+      try {
+        const canvas = document.createElement('canvas');
+        const maxW   = 1400;
+        const scale  = Math.min(1, maxW / mapImage.width);
+        canvas.width  = Math.round(mapImage.width  * scale);
+        canvas.height = Math.round(mapImage.height * scale);
+        canvas.getContext('2d').drawImage(mapImage, 0, 0, canvas.width, canvas.height);
+        mapData = {
+          src: canvas.toDataURL('image/jpeg', 0.75),
+          w:   mapImage.width,
+          h:   mapImage.height,
+        };
+      } catch (_e) {
+        // canvas tainted (cross-origin) — skip map image
+      }
+    }
+    setReportAnalysisData(buildDroneVideoAnalysisData(trees, detectedGps, mapData));
+    setShowReportModal(true);
+  }, [mapImage, trees, detectedGps]);
 
   // ── Derived stats ──────────────────────────────────────────────────────────
   const healthyCount    = trees.filter(t => t.disease === 'Healthy').length;
@@ -475,12 +533,22 @@ const FarmMapAnalysis = () => {
         </div>
 
         {phase !== 'idle' && (
-          <button onClick={handleReset}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
-              border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400
-              hover:bg-gray-50 dark:hover:bg-gray-800 transition">
-            <RefreshCw size={13} /> New Analysis
-          </button>
+          <div className="flex items-center gap-2">
+            {phase === 'done' && trees.length > 0 && (
+              <button
+                onClick={handleGenerateReport}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-600 hover:bg-green-700 text-white transition"
+              >
+                <FileText size={13} /> Generate Report
+              </button>
+            )}
+            <button onClick={handleReset}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
+                border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400
+                hover:bg-gray-50 dark:hover:bg-gray-800 transition">
+              <RefreshCw size={13} /> New Analysis
+            </button>
+          </div>
         )}
       </div>
 
@@ -796,7 +864,7 @@ const FarmMapAnalysis = () => {
                       {diseaseResult.crop_image && (
                         <div className="relative overflow-hidden rounded-xl border border-gray-100 dark:border-gray-700">
                           <img src={diseaseResult.crop_image} alt="Tree crop"
-                            className="w-full object-cover" style={{ maxHeight: 150 }} />
+                            className="w-full object-contain block" />
                           <div className="absolute bottom-0 left-0 right-0 px-3 py-2
                             bg-gradient-to-t from-black/70 to-transparent">
                             <DiseaseBadge disease={diseaseResult.disease} size="md" />
@@ -875,6 +943,14 @@ const FarmMapAnalysis = () => {
 
           </div>
         </div>
+      )}
+      {showReportModal && reportAnalysisData && (
+        <GenerateReportModal
+          analysisData={reportAnalysisData}
+          detectedGps={detectedGps}
+          onClose={() => setShowReportModal(false)}
+          onCreated={() => setShowReportModal(false)}
+        />
       )}
     </div>
   );

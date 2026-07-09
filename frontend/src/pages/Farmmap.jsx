@@ -1,7 +1,7 @@
 import { MapContainer, TileLayer, Marker, Popup, Tooltip, useMap } from "react-leaflet";
 import L from "leaflet";
 import { useState, useEffect } from "react";
-import { Loader, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle } from "lucide-react";
 import { useTheme } from "../context/ThemeContext";
 import * as farmService from "../services/farmService";
 import API from "../services/api";
@@ -26,11 +26,21 @@ const isValidSriLankaCoordinate = (lat, lng) => {
   return lat >= minLat && lat <= maxLat && lng >= minLng && lng <= maxLng;
 };
 
-// Parse location strings
-const parseLocation = (locationString) => {
-  if (!locationString) return null;
+// Parse farm locations saved as either modern objects ({ lat, lon }) or legacy strings.
+const parseLocation = (location) => {
+  if (!location) return null;
   try {
-    const degRegex = /(-?\d+\.?\d*)\s*Â°?\s*([NS])[,\s]+(-?\d+\.?\d*)\s*Â°?\s*([EW])/i;
+    if (typeof location === "object") {
+      const lat = Number(location.lat);
+      const lng = Number(location.lng ?? location.lon);
+      if (Number.isFinite(lat) && Number.isFinite(lng) && isValidSriLankaCoordinate(lat, lng)) {
+        return { lat, lng };
+      }
+      return null;
+    }
+
+    const locationString = String(location);
+    const degRegex = /(-?\d+\.?\d*)\s*°?\s*([NS])[,\s]+(-?\d+\.?\d*)\s*°?\s*([EW])/i;
     const degMatch = locationString.match(degRegex);
     if (degMatch) {
       let lat = parseFloat(degMatch[1]);
@@ -308,7 +318,7 @@ const FarmMap = () => {
           }}
         >
           <div className="text-center">
-            <Loader size={48} className="animate-spin mx-auto mb-4 text-green-500" />
+            <Loader2 size={48} className="animate-spin mx-auto mb-4 text-green-600" />
             <p style={{ color: theme === "dark" ? "#d0d0d0" : "#374151" }}>Loading farms...</p>
           </div>
         </div>

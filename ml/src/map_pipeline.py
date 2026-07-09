@@ -80,9 +80,13 @@ JOBS_DIR        = os.path.join(_ML_DIR, 'farm_map_jobs')
 os.makedirs(JOBS_DIR, exist_ok=True)
 
 # ── Detection constants ────────────────────────────────────────────────────────
-TILE_SIZE = 1280
-OVERLAP   = 256
-CROP_PAD  = 24
+TILE_SIZE     = 1280
+OVERLAP       = 400   # 31 % overlap — trees up to 400 px wide are fully inside ≥1 tile
+CROP_PAD      = 24
+# Run detection at these fractions of the orthomosaic resolution.
+# The second pass at 0.65× catches trees that appear oversized in native tiles
+# (low-altitude shots) and also gives boundary trees a second inference chance.
+DETECT_SCALES = [1.0, 0.65]
 # MERGE_RADIUS loaded from config.yaml (merge_radius key, default 120)
 
 # ── Thresholds — edit config.yaml to change these ─────────────────────────────
@@ -93,6 +97,7 @@ CONF_TREE    = float(_cfg.get('conf_tree',    0.35))
 CONF_DISEASE = float(_cfg.get('conf_disease', 0.20))
 IOU_TREE     = float(_cfg.get('iou_tree',     0.50))
 MERGE_RADIUS = float(_cfg.get('merge_radius', 120))
+MAX_TREE_PX  = int(_cfg.get('max_tree_px',    640))
 
 # Per-class disease thresholds {disease_name: min_conf}.
 # Falls back to CONF_DISEASE for any class not listed.
@@ -137,6 +142,27 @@ def _update(session_id: str, stage: str, status: str, progress: int, detail: str
         'progress': progress,
         'detail':   detail,
     })
+
+# ── Post-detection vegetation filter ──────────────────────────────────────────
+def _valid_tree_crop(crop_rgb: np.ndarray,
+                     min_brightness: float = 22.0,
+                     min_veg_ratio:  float = 0.12) -> bool:
+    """
+    Reject detections that are not vegetation:
+    - Near-black crops → unstitched orthomosaic zones (brightness < 22)
+    - Crops with < 12 % green pixels → bare soil, roads, shadows
+    The excess-green index (2G − R − B > 10) flags vegetation pixels.
+    """
+    if crop_rgb.size == 0:
+        return False
+    if float(np.mean(crop_rgb)) < min_brightness:
+        return False
+    r = crop_rgb[..., 0].astype(np.float32)
+    g = crop_rgb[..., 1].astype(np.float32)
+    b = crop_rgb[..., 2].astype(np.float32)
+    veg_ratio = float(np.mean((2 * g - r - b) > 10))
+    return veg_ratio >= min_veg_ratio
+
 
 # ── NMS ───────────────────────────────────────────────────────────────────────
 def _nms(boxes, scores, iou_thr: float = 0.4):
@@ -452,16 +478,33 @@ def _detect_from_frames(session_id: str, video_path: str, job_dir: str, conf: fl
     _d2c  = {v: k for k, v in DISEASE_CLASSES.items()}
     GREEN = (0, 200, 100)
     for tree in unique_trees:
+        x1 = int(tree['x1_canvas']); y1 = int(tree['y1_canvas'])
+        x2 = int(tree['x2_canvas']); y2 = int(tree['y2_canvas'])
         cx, cy = tree['cx_px'], tree['cy_px']
         color  = _DISEASE_COLORS_BGR.get(_d2c.get(tree['disease']), GREEN)
-        cv2.circle(out, (cx, cy), 14, color, -1)
-        cv2.circle(out, (cx, cy), 14, (255, 255, 255), 2)
-        label = f'#{tree["tree_id"]}'
-        (lw, lh), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
-        cv2.rectangle(out, (cx - lw // 2 - 2, cy - lh - 5),
-                      (cx + lw // 2 + 2, cy - 1), color, -1)
-        cv2.putText(out, label, (cx - lw // 2, cy - 3),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1, cv2.LINE_AA)
+
+        # Semi-transparent fill
+        ov = out.copy()
+        cv2.rectangle(ov, (x1, y1), (x2, y2), color, -1)
+        cv2.addWeighted(ov, 0.20, out, 0.80, 0, out)
+
+        box_h     = max(1, y2 - y1)
+        border_px = max(2, box_h // 40)
+        cv2.rectangle(out, (x1, y1), (x2, y2), color, border_px)
+
+        label      = f'#{tree["tree_id"]}'
+        font_scale = max(0.4, min(1.4, box_h / 120))
+        thickness  = max(1, int(font_scale * 1.8))
+        (lw, lh), baseline = cv2.getTextSize(
+            label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness)
+        pad  = max(3, int(font_scale * 5))
+        bx1  = cx - lw // 2 - pad;  by1 = cy - lh // 2 - pad
+        bx2  = cx + lw // 2 + pad;  by2 = cy + lh // 2 + pad + baseline
+        cv2.rectangle(out, (bx1, by1), (bx2, by2), color, -1)
+        cv2.rectangle(out, (bx1, by1), (bx2, by2), (255, 255, 255), 1)
+        cv2.putText(out, label, (cx - lw // 2, cy + lh // 2),
+                    cv2.FONT_HERSHEY_SIMPLEX, font_scale,
+                    (255, 255, 255), thickness, cv2.LINE_AA)
 
     annotated_path = os.path.join(job_dir, 'detected_trees.png')
     cv2.imwrite(annotated_path, cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
@@ -485,8 +528,274 @@ def _detect_from_frames(session_id: str, video_path: str, job_dir: str, conf: fl
     return annotated_path, trees_path, len(unique_trees)
 
 
-# ── Stage 2 fallback: tile-detect on orthomosaic (used if trajectory.json absent) ──
-def _detect_ortho(session_id: str, map_path: str, job_dir: str, conf: float):
+# ── Shared disease-analysis helpers ───────────────────────────────────────────
+
+def _run_disease_on_crop(tree: dict, crop_bgr, disease_model):
+    """Run disease model on a BGR crop, store results in tree dict, return raw Result."""
+    if crop_bgr is None or crop_bgr.size == 0:
+        tree.update({'disease': 'Healthy', 'disease_confidence': 1.0,
+                     'all_detections': [], 'crop_image': ''})
+        return None
+    try:
+        dr         = disease_model.predict(source=crop_bgr, conf=_CONF_DISEASE_MIN,
+                                           verbose=False)[0]
+        annotated  = _plot_clean(crop_bgr.copy(), dr, CONF_DISEASE_CLASSES, DISEASE_CLASSES)
+        detections = []
+        if dr.boxes is not None:
+            for dbox in dr.boxes:
+                cls_id   = int(dbox.cls[0])
+                cnf      = float(dbox.conf[0])
+                cls_name = DISEASE_CLASSES.get(cls_id, f'Class {cls_id}')
+                if cnf < CONF_DISEASE_CLASSES.get(cls_name, CONF_DISEASE):
+                    continue
+                detections.append({'disease': cls_name, 'confidence': round(cnf, 3)})
+        if detections:
+            top = max(detections, key=lambda d: d['confidence'])
+            disease, disease_conf = top['disease'], top['confidence']
+        else:
+            disease, disease_conf = 'Healthy', 1.0
+        _, buf = cv2.imencode('.jpg', annotated, [cv2.IMWRITE_JPEG_QUALITY, 88])
+        crop_b64 = 'data:image/jpeg;base64,' + base64.b64encode(buf.tobytes()).decode()
+        tree.update({'disease': disease, 'disease_confidence': disease_conf,
+                     'all_detections': detections, 'crop_image': crop_b64})
+        return dr
+    except Exception:
+        tree.update({'disease': 'Healthy', 'disease_confidence': 1.0,
+                     'all_detections': [], 'crop_image': ''})
+        return None
+
+
+def _collect_map_regions_ortho(dr, ox: int, oy: int) -> list:
+    """Convert disease detections (crop-space) to orthomosaic-space polygon list.
+    ox, oy: top-left of the crop in orthomosaic pixel coordinates."""
+    regions = []
+    if dr is None:
+        return regions
+    offset = np.array([ox, oy], dtype=np.float32)
+    if dr.masks is not None and len(dr.masks.xy):
+        for j, pts in enumerate(dr.masks.xy):
+            cls_id = int(dr.boxes.cls[j]) if dr.boxes is not None else 0
+            cnf    = float(dr.boxes.conf[j]) if dr.boxes is not None else 1.0
+            if cnf < CONF_DISEASE_CLASSES.get(DISEASE_CLASSES.get(cls_id, ''), CONF_DISEASE):
+                continue
+            regions.append({'pts': (pts.astype(np.float32) + offset).astype(np.int32).tolist(),
+                            'cls_id': cls_id})
+    elif dr.boxes is not None:
+        for dbox in dr.boxes:
+            cls_id = int(dbox.cls[0]); cnf = float(dbox.conf[0])
+            if cnf < CONF_DISEASE_CLASSES.get(DISEASE_CLASSES.get(cls_id, ''), CONF_DISEASE):
+                continue
+            dx1, dy1, dx2, dy2 = map(int, dbox.xyxy[0].tolist())
+            regions.append({'pts': [[dx1+ox, dy1+oy], [dx2+ox, dy1+oy],
+                                    [dx2+ox, dy2+oy], [dx1+ox, dy2+oy]],
+                            'cls_id': cls_id})
+    return regions
+
+
+def _collect_map_regions_frame(dr, fx1: int, fy1: int, T) -> list:
+    """Convert disease detections (frame-crop space) to orthomosaic-space polygon list.
+    fx1, fy1: top-left of the frame crop in frame pixel coordinates.
+    T: 3×3 homography that maps frame → orthomosaic space."""
+    regions = []
+    if dr is None:
+        return regions
+    T = np.array(T, dtype=np.float64)
+
+    def _proj(pts2d):
+        h = np.hstack([pts2d.astype(np.float64),
+                       np.ones((len(pts2d), 1), dtype=np.float64)])
+        p = (T @ h.T).T
+        p /= p[:, 2:3]
+        return p[:, :2].astype(np.int32)
+
+    off = np.array([fx1, fy1], dtype=np.float64)
+    if dr.masks is not None and len(dr.masks.xy):
+        for j, pts in enumerate(dr.masks.xy):
+            cls_id = int(dr.boxes.cls[j]) if dr.boxes is not None else 0
+            cnf    = float(dr.boxes.conf[j]) if dr.boxes is not None else 1.0
+            if cnf < CONF_DISEASE_CLASSES.get(DISEASE_CLASSES.get(cls_id, ''), CONF_DISEASE):
+                continue
+            regions.append({'pts': _proj(pts.astype(np.float64) + off).tolist(),
+                            'cls_id': cls_id})
+    elif dr.boxes is not None:
+        for dbox in dr.boxes:
+            cls_id = int(dbox.cls[0]); cnf = float(dbox.conf[0])
+            if cnf < CONF_DISEASE_CLASSES.get(DISEASE_CLASSES.get(cls_id, ''), CONF_DISEASE):
+                continue
+            dx1, dy1, dx2, dy2 = map(int, dbox.xyxy[0].tolist())
+            corners = np.array([[dx1+fx1, dy1+fy1], [dx2+fx1, dy1+fy1],
+                                 [dx2+fx1, dy2+fy1], [dx1+fx1, dy2+fy1]], dtype=np.float64)
+            regions.append({'pts': _proj(corners).tolist(), 'cls_id': cls_id})
+    return regions
+
+
+def _disease_from_ortho(session_id: str, trees: list,
+                         map_np, img_h: int, img_w: int) -> None:
+    """Disease analysis using orthomosaic crops (fallback when video is unavailable)."""
+    disease_model = _get_disease_model()
+    total = len(trees)
+    for idx, tree in enumerate(trees, 1):
+        x1, y1, x2, y2 = tree['x1'], tree['y1'], tree['x2'], tree['y2']
+        ox = max(0, x1 - CROP_PAD)
+        oy = max(0, y1 - CROP_PAD)
+        crop_rgb = map_np[oy: min(img_h, y2 + CROP_PAD), ox: min(img_w, x2 + CROP_PAD)]
+        crop_bgr = cv2.cvtColor(crop_rgb, cv2.COLOR_RGB2BGR) if crop_rgb.size > 0 else None
+        dr = _run_disease_on_crop(tree, crop_bgr, disease_model)
+        tree['_map_regions'] = _collect_map_regions_ortho(dr, ox, oy)
+        if idx % 5 == 0 or idx == total:
+            _update(session_id, 'disease', 'running',
+                    int(idx / total * 100), f'Disease analysis {idx}/{total} trees…')
+
+
+def _disease_from_frames(session_id: str, trees: list, video_path: str,
+                          traj_path: str, job_dir: str,
+                          map_np, img_h: int, img_w: int) -> None:
+    """
+    Disease analysis on original video frames.
+
+    For each orthomosaic-detected tree, the canvas centroid is reverse-projected
+    through the inverse homography of every trajectory frame.  The frame where
+    the tree appears most centred (least lens distortion) is chosen.  The bbox
+    corners are projected the same way to define the crop region.
+
+    Falls back to orthomosaic crop for trees with no suitable frame.
+    """
+    with open(traj_path) as f:
+        traj = json.load(f)
+
+    transforms    = traj['transforms']
+    frame_indices = traj['frame_indices']
+    fw_orig, fh_orig = traj['orig_frame_wh']
+    half_diag = math.hypot(fw_orig / 2, fh_orig / 2)
+
+    # ── Find best frame for each tree via inverse homography ──────────────────
+    for tree in trees:
+        cx, cy     = tree['cx_px'], tree['cy_px']
+        best_score = -1.0
+        best_tidx  = -1
+        best_fcrop = None
+
+        for tidx, T_list in enumerate(transforms):
+            T     = np.array(T_list, dtype=np.float64)
+            T_inv = np.linalg.inv(T)
+
+            # Project canvas centroid to original-frame space
+            pt  = T_inv @ np.array([cx, cy, 1.0])
+            pt /= pt[2]
+            fx, fy = pt[0], pt[1]
+
+            # Estimate the crop half-size in frame pixels using the local scale
+            # factor of the homography.  det(T_2×2) is the canvas/frame AREA
+            # ratio so its square root is the linear canvas→frame scale factor.
+            det_T = abs(float(np.linalg.det(T[:2, :2])))
+            c2f   = 1.0 / (det_T ** 0.5 + 1e-9)   # canvas px → frame px
+            half_w = max(CROP_PAD, int((tree['x2'] - tree['x1']) * c2f / 2) + CROP_PAD)
+            half_h = max(CROP_PAD, int((tree['y2'] - tree['y1']) * c2f / 2) + CROP_PAD)
+
+            # Require the full crop to sit inside the frame (no edge truncation)
+            if not (half_w <= fx <= fw_orig - half_w and
+                    half_h <= fy <= fh_orig - half_h):
+                continue
+
+            # Prefer trees that appear near the frame centre (less distortion)
+            score = 1.0 - math.hypot(fx - fw_orig / 2, fy - fh_orig / 2) / half_diag
+            if score <= best_score:
+                continue
+
+            bfx1 = max(0,            int(fx) - half_w)
+            bfy1 = max(0,            int(fy) - half_h)
+            bfx2 = min(int(fw_orig), int(fx) + half_w)
+            bfy2 = min(int(fh_orig), int(fy) + half_h)
+
+            best_score = score
+            best_tidx  = tidx
+            best_fcrop = (bfx1, bfy1, bfx2, bfy2)
+
+        tree['_tidx']  = best_tidx
+        tree['_fcrop'] = best_fcrop
+
+    # ── Group by video frame number for a single cap.set() per frame ──────────
+    frame_to_trees: dict = defaultdict(list)
+    for tree in trees:
+        fno = frame_indices[tree['_tidx']] if tree['_tidx'] >= 0 else -1
+        frame_to_trees[fno].append(tree)
+
+    disease_model = _get_disease_model()
+    total     = len(trees)
+    processed = 0
+
+    cap = cv2.VideoCapture(video_path)
+    try:
+        for fno, tree_list in sorted(frame_to_trees.items()):
+            frame_bgr = None
+            if fno >= 0:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, fno)
+                ret, frame_bgr = cap.read()
+                if not ret:
+                    frame_bgr = None
+
+            fw_v = frame_bgr.shape[1] if frame_bgr is not None else 0
+            fh_v = frame_bgr.shape[0] if frame_bgr is not None else 0
+
+            for tree in tree_list:
+                crop_bgr   = None
+                used_frame = False
+
+                if frame_bgr is not None and tree.get('_fcrop'):
+                    fx1, fy1, fx2, fy2 = tree['_fcrop']
+                    fx1 = max(0, fx1);  fy1 = max(0, fy1)
+                    fx2 = min(fw_v, fx2); fy2 = min(fh_v, fy2)
+                    if fx2 > fx1 and fy2 > fy1:
+                        crop_bgr   = frame_bgr[fy1:fy2, fx1:fx2].copy()
+                        used_frame = True
+
+                if crop_bgr is None or crop_bgr.size == 0:
+                    # Orthomosaic fallback for trees with no matching frame
+                    x1, y1, x2, y2 = tree['x1'], tree['y1'], tree['x2'], tree['y2']
+                    fb = cv2.cvtColor(
+                        map_np[max(0, y1 - CROP_PAD): min(img_h, y2 + CROP_PAD),
+                               max(0, x1 - CROP_PAD): min(img_w, x2 + CROP_PAD)],
+                        cv2.COLOR_RGB2BGR
+                    )
+                    crop_bgr   = fb if fb.size > 0 else None
+                    used_frame = False
+
+                dr = _run_disease_on_crop(tree, crop_bgr, disease_model)
+
+                # Build orthomosaic-space disease polygons for map overlay
+                if used_frame and dr is not None and tree.get('_tidx', -1) >= 0 and tree.get('_fcrop'):
+                    tree['_map_regions'] = _collect_map_regions_frame(
+                        dr, fx1, fy1, transforms[tree['_tidx']])
+                else:
+                    # Ortho fallback or no dr: use direct offset
+                    x1, y1 = tree['x1'], tree['y1']
+                    ox = max(0, x1 - CROP_PAD); oy = max(0, y1 - CROP_PAD)
+                    tree['_map_regions'] = _collect_map_regions_ortho(dr, ox, oy)
+
+                # Replace the raw crop file with the higher-quality frame crop
+                if crop_bgr is not None and crop_bgr.size > 0:
+                    cv2.imwrite(os.path.join(job_dir, tree['crop_file']),
+                                crop_bgr, [cv2.IMWRITE_JPEG_QUALITY, 90])
+
+                processed += 1
+                if processed % 5 == 0 or processed == total:
+                    _update(session_id, 'disease', 'running',
+                            int(processed / total * 100),
+                            f'Disease analysis {processed}/{total} trees…')
+    finally:
+        cap.release()
+
+    for tree in trees:
+        tree.pop('_tidx', None)
+        tree.pop('_fcrop', None)
+
+
+# ── Stage 2: tile-detect on orthomosaic + disease pre-analysis ────────────────────
+# Scanning the final stitched image gives complete farm coverage —
+# no trajectory keyframe gaps and no homography projection drift.
+# Frame-based detection (_detect_from_frames) is kept as a legacy fallback only.
+def _detect_ortho(session_id: str, map_path: str, job_dir: str, conf: float,
+                  video_path: str = None):
     _update(session_id, 'detect', 'running', 0, 'Loading tree model…')
     model  = _get_tree_model()
 
@@ -494,106 +803,138 @@ def _detect_ortho(session_id: str, map_path: str, job_dir: str, conf: float):
     img_w, img_h = img_pil.size
     map_np  = np.array(img_pil)
 
-    step  = TILE_SIZE - OVERLAP
-    tiles = [
-        (x, y, min(x + TILE_SIZE, img_w), min(y + TILE_SIZE, img_h))
-        for y in range(0, img_h, step)
-        for x in range(0, img_w, step)
-    ]
-    total = len(tiles)
-    all_boxes, all_scores, all_masks = [], [], []
+    step = TILE_SIZE - OVERLAP
+    all_boxes, all_scores = [], []
 
-    for idx, (tx, ty, tx2, ty2) in enumerate(tiles, 1):
-        tile    = map_np[ty:ty2, tx:tx2]
-        results = model.predict(source=tile, imgsz=1280,
-                                conf=conf, iou=IOU_TREE, verbose=False)
-        r = results[0]
-        if r.boxes is not None:
-            for j, box in enumerate(r.boxes):
-                x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                all_boxes.append([x1 + tx, y1 + ty, x2 + tx, y2 + ty])
-                all_scores.append(float(box.conf))
-                if r.masks is not None:
-                    pts = r.masks.xy[j] + np.array([tx, ty])
-                    all_masks.append(pts.astype(np.int32))
-                else:
-                    all_masks.append(None)
+    # Count total tiles across all scales for progress reporting
+    total_tiles = 0
+    for s in DETECT_SCALES:
+        sw = max(TILE_SIZE, int(img_w * s))
+        sh = max(TILE_SIZE, int(img_h * s))
+        total_tiles += len(range(0, sh, step)) * len(range(0, sw, step))
+    done_tiles = 0
 
-        if idx % 4 == 0 or idx == total:
-            _update(session_id, 'detect', 'running',
-                    int(idx / total * 100), f'Scanning tile {idx}/{total}…')
+    for scale in DETECT_SCALES:
+        if scale == 1.0:
+            sw, sh, scaled_np = img_w, img_h, map_np
+        else:
+            sw = max(TILE_SIZE, int(img_w * scale))
+            sh = max(TILE_SIZE, int(img_h * scale))
+            scaled_np = np.array(img_pil.resize((sw, sh), Image.LANCZOS))
 
-    kept = _nms(all_boxes, all_scores, 0.4)
+        tiles = [
+            (x, y, min(x + TILE_SIZE, sw), min(y + TILE_SIZE, sh))
+            for y in range(0, sh, step)
+            for x in range(0, sw, step)
+        ]
 
-    # ── Draw annotated map + save crops ───────────────────────────────────────
-    out   = map_np.copy()
+        for tx, ty, tx2, ty2 in tiles:
+            tile    = scaled_np[ty:ty2, tx:tx2]
+            results = model.predict(source=tile, imgsz=1280,
+                                    conf=conf, iou=IOU_TREE, verbose=False)
+            r = results[0]
+            if r.boxes is not None:
+                for box in r.boxes:
+                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                    # Convert back to original-resolution orthomosaic coordinates
+                    all_boxes.append([(x1 + tx) / scale, (y1 + ty) / scale,
+                                      (x2 + tx) / scale, (y2 + ty) / scale])
+                    all_scores.append(float(box.conf))
+
+            done_tiles += 1
+            if done_tiles % 4 == 0 or done_tiles == total_tiles:
+                _update(session_id, 'detect', 'running',
+                        int(done_tiles / total_tiles * 100),
+                        f'Scanning tile {done_tiles}/{total_tiles}…')
+
+    # IoU 0.30: same tree seen in two overlapping tiles or at two scales merges;
+    # distinct adjacent trees (typically IoU < 0.15) are kept separate.
+    kept = _nms(all_boxes, all_scores, 0.30)
+
+    # ── Post-NMS false-positive filter ────────────────────────────────────────
+    # Removes detections on: (a) black unstitched zones, (b) bare soil/roads,
+    # (c) implausibly large regions that are never a single tree crown.
+    valid = []
+    for i in kept:
+        x1, y1, x2, y2 = [int(v) for v in all_boxes[i]]
+        if (x2 - x1) > MAX_TREE_PX or (y2 - y1) > MAX_TREE_PX:
+            continue
+        crop_rgb = map_np[max(0, y1):min(img_h, y2), max(0, x1):min(img_w, x2)]
+        if not _valid_tree_crop(crop_rgb):
+            continue
+        valid.append(i)
+    kept = valid
+
+    # ── Build initial tree list + save raw crops ──────────────────────────────
     trees = []
-
     for tree_id, i in enumerate(kept, 1):
         x1, y1, x2, y2 = [int(v) for v in all_boxes[i]]
         cx, cy   = (x1 + x2) // 2, (y1 + y2) // 2
         conf_val = all_scores[i]
 
-        if all_masks[i] is not None:
-            overlay = out.copy()
-            cv2.fillPoly(overlay, [all_masks[i]], (0, 200, 100))
-            cv2.addWeighted(overlay, 0.25, out, 0.75, 0, out)
-            cv2.polylines(out, [all_masks[i]], True, (0, 220, 80), 2)
-        else:
-            cv2.rectangle(out, (x1, y1), (x2, y2), (0, 220, 80), 2)
-
-        # Label badge
-        label = f'#{tree_id}'
-        (lw, lh), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-        cv2.rectangle(out, (cx - lw // 2 - 3, cy - lh - 6),
-                      (cx + lw // 2 + 3, cy), (0, 180, 60), -1)
-        cv2.putText(out, label, (cx - lw // 2, cy - 3),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
-
-        # Save tree crop
-        crop = map_np[
-            max(0, y1 - CROP_PAD): y2 + CROP_PAD,
-            max(0, x1 - CROP_PAD): x2 + CROP_PAD
-        ]
         crop_name = f'tree_{tree_id:04d}.jpg'
-        crop_path = os.path.join(job_dir, crop_name)
-        if crop.size > 0:
-            cv2.imwrite(crop_path, cv2.cvtColor(crop, cv2.COLOR_RGB2BGR),
+        crop_rgb  = map_np[max(0, y1 - CROP_PAD): min(img_h, y2 + CROP_PAD),
+                           max(0, x1 - CROP_PAD): min(img_w, x2 + CROP_PAD)]
+        if crop_rgb.size > 0:
+            cv2.imwrite(os.path.join(job_dir, crop_name),
+                        cv2.cvtColor(crop_rgb, cv2.COLOR_RGB2BGR),
                         [cv2.IMWRITE_JPEG_QUALITY, 88])
 
         trees.append({
-            'tree_id':    tree_id,
-            'cx_px':      cx,
-            'cy_px':      cy,
+            'tree_id':            tree_id,
+            'cx_px':              cx,
+            'cy_px':              cy,
             'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2,
-            'confidence': round(conf_val, 4),
-            'crop_file':  crop_name,
-            'disease':    None,
+            'confidence':         round(conf_val, 4),
+            'crop_file':          crop_name,
+            'disease':            None,
             'disease_confidence': None,
-            'all_detections': [],
+            'all_detections':     [],
+            'crop_image':         '',
         })
 
-    # Save annotated map
+    # ── Disease pre-analysis ──────────────────────────────────────────────────
+    # Use original video frames (no stitching artefacts) when trajectory data
+    # is available; fall back to orthomosaic crops otherwise.
+    traj_path  = os.path.join(job_dir, 'trajectory.json')
+    use_frames = (video_path and os.path.exists(video_path)
+                  and os.path.exists(traj_path) and bool(trees))
+    if use_frames:
+        _update(session_id, 'disease', 'running', 0,
+                f'Pre-analysing disease for {len(trees)} trees (video frames)…')
+        _disease_from_frames(session_id, trees, video_path, traj_path,
+                             job_dir, map_np, img_h, img_w)
+    else:
+        _update(session_id, 'disease', 'running', 0,
+                f'Pre-analysing disease for {len(trees)} trees…')
+        _disease_from_ortho(session_id, trees, map_np, img_h, img_w)
+
+    # ── Save clean orthomosaic (no annotations — React canvas draws markers) ──
+    out  = map_np.copy()
+
     annotated_path = os.path.join(job_dir, 'detected_trees.png')
     cv2.imwrite(annotated_path, cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
 
-    # Save CSV
-    csv_path = os.path.join(job_dir, 'tree_detections.csv')
-    if trees:
-        with open(csv_path, 'w', newline='') as f:
-            w = csv.DictWriter(f, fieldnames=['tree_id', 'cx_px', 'cy_px',
-                                               'x1', 'y1', 'x2', 'y2', 'confidence'])
-            w.writeheader()
-            w.writerows([{k: t[k] for k in w.fieldnames} for t in trees])
+    # ── Save outputs ──────────────────────────────────────────────────────────
+    for tree in trees:
+        tree.pop('_map_regions', None)   # internal drawing data, not needed in JSON
 
-    # Save trees.json
     trees_path = os.path.join(job_dir, 'trees.json')
     with open(trees_path, 'w') as f:
         json.dump(trees, f)
 
-    _update(session_id, 'detect', 'running', 100,
-            f'{len(kept)} trees detected — finalising…')
-    return annotated_path, trees_path, len(kept)
+    csv_path = os.path.join(job_dir, 'tree_detections.csv')
+    if trees:
+        fieldnames = ['tree_id', 'cx_px', 'cy_px', 'x1', 'y1', 'x2', 'y2',
+                      'confidence', 'disease', 'disease_confidence']
+        with open(csv_path, 'w', newline='') as f:
+            w = csv.DictWriter(f, fieldnames=fieldnames)
+            w.writeheader()
+            w.writerows([{k: t.get(k) for k in fieldnames} for t in trees])
+
+    _update(session_id, 'disease', 'running', 100,
+            f'{len(trees)} trees analysed — finalising…')
+    return annotated_path, trees_path, len(trees)
 
 # ── Master runner (called in background thread) ────────────────────────────────
 def run_farm_map(session_id: str, video_path: str, settings: dict):
@@ -607,16 +948,12 @@ def run_farm_map(session_id: str, video_path: str, settings: dict):
         # Stage 1
         map_path = _stitch(session_id, video_path, job_dir)
 
-        # Stage 2 + disease pre-analysis
-        # Prefer frame-based detection (uses trajectory.json for clean crops).
-        # Falls back to tiled orthomosaic detection if trajectory is missing.
-        traj_path = os.path.join(job_dir, 'trajectory.json')
-        if os.path.exists(traj_path):
-            annotated_path, trees_path, tree_count = _detect_from_frames(
-                session_id, video_path, job_dir, conf)
-        else:
-            annotated_path, trees_path, tree_count = _detect_ortho(
-                session_id, map_path, job_dir, conf)
+        # Stage 2 + disease pre-analysis.
+        # Tree localisation: tile-detect on the orthomosaic (complete coverage).
+        # Disease analysis: reverse-project each tree back to the best original
+        # video frame for a clean, artefact-free crop.
+        annotated_path, trees_path, tree_count = _detect_ortho(
+            session_id, map_path, job_dir, conf, video_path)
 
         # Encode map as base64 for immediate preview
         img = cv2.imread(annotated_path)
@@ -745,6 +1082,12 @@ def analyze_drone_image(image_path: str, conf: float = None) -> dict:
     Detect trees in a single drone top-view image using the tree model, then run
     disease_v5 on each detected tree crop.  Returns the annotated full image and
     per-tree results (disease, confidence, annotated crop).
+
+    Two inference passes at different imgsz values are merged via NMS so that
+    both normally-sized trees (imgsz=1280) and large trees that fill the frame
+    (imgsz=640, which halves the effective pixel width) are detected.
+    Tiling is intentionally avoided here — it fragments close-up frond images
+    into frond-level detections that look like individual trees to the model.
     """
     tree_model    = _get_tree_model()
     disease_model = _get_disease_model()
@@ -753,134 +1096,113 @@ def analyze_drone_image(image_path: str, conf: float = None) -> dict:
     if img_bgr is None:
         raise RuntimeError(f'Cannot read image: {image_path}')
     img_h, img_w = img_bgr.shape[:2]
+    img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
 
-    # ── Tree detection ────────────────────────────────────────────────────────
-    _conf   = conf if conf is not None else CONF_TREE
-    results = tree_model.predict(source=img_bgr, imgsz=1280,
-                                  conf=_conf, iou=IOU_TREE, verbose=False)
-    r   = results[0]
-    out = img_bgr.copy()
+    _conf = conf if conf is not None else CONF_TREE
+
+    # ── Two-pass detection: normal scale + half scale ─────────────────────────
+    # imgsz=1280: standard — tree fills a typical fraction of inference window.
+    # imgsz=640:  YOLO downsamples the same image to half width; a tree that
+    #             fills 90 % of the frame goes from ~1152 px to ~576 px, which
+    #             is within the model's training distribution.
+    all_boxes, all_scores = [], []
+    for imgsz in (1280, 640):
+        r = tree_model.predict(source=img_bgr, imgsz=imgsz,
+                               conf=_conf, iou=IOU_TREE, verbose=False)[0]
+        if r.boxes is not None:
+            for box in r.boxes:
+                all_boxes.append(box.xyxy[0].cpu().numpy().tolist())
+                all_scores.append(float(box.conf))
+
+    # ── NMS + vegetation filter ───────────────────────────────────────────────
+    kept = _nms(all_boxes, all_scores, 0.35)
+    valid = []
+    for i in kept:
+        x1, y1, x2, y2 = [int(v) for v in all_boxes[i]]
+        crop_rgb = img_rgb[max(0, y1):min(img_h, y2), max(0, x1):min(img_w, x2)]
+        if _valid_tree_crop(crop_rgb):
+            valid.append(i)
+    kept = valid
+
+    # ── Disease analysis + annotation ─────────────────────────────────────────
+    out   = img_bgr.copy()
+    _d2c  = {v: k for k, v in DISEASE_CLASSES.items()}
     trees = []
 
-    if r.boxes is not None:
-        for i, box in enumerate(r.boxes):
-            tree_id         = i + 1
-            x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
-            cx, cy          = (x1 + x2) // 2, (y1 + y2) // 2
-            tree_conf       = float(box.conf[0])
+    for tree_id, i in enumerate(kept, 1):
+        x1, y1, x2, y2 = [int(v) for v in all_boxes[i]]
+        cx, cy    = (x1 + x2) // 2, (y1 + y2) // 2
+        tree_conf = all_scores[i]
 
-            # ── Padded crop ──────────────────────────────────────────────────
-            cx1  = max(0, x1 - CROP_PAD);      cy1  = max(0, y1 - CROP_PAD)
-            cx2  = min(img_w, x2 + CROP_PAD);  cy2  = min(img_h, y2 + CROP_PAD)
-            crop = img_bgr[cy1:cy2, cx1:cx2]
+        cx1 = max(0, x1 - CROP_PAD);     cy1 = max(0, y1 - CROP_PAD)
+        cx2 = min(img_w, x2 + CROP_PAD); cy2 = min(img_h, y2 + CROP_PAD)
+        crop = img_bgr[cy1:cy2, cx1:cx2]
 
-            # Mask background before disease detection: zero-out every pixel
-            # outside the tree's own segmentation polygon so the disease model
-            # only sees canopy, not soil / surrounding vegetation.
-            ch, cw = crop.shape[:2]
-            if r.masks is not None:
-                tree_pts_full = r.masks.xy[i].astype(np.float32)
-                tree_pts_crop = (tree_pts_full - np.array([cx1, cy1],
-                                  dtype=np.float32)).astype(np.int32)
-                tree_pts_crop[:, 0] = np.clip(tree_pts_crop[:, 0], 0, cw - 1)
-                tree_pts_crop[:, 1] = np.clip(tree_pts_crop[:, 1], 0, ch - 1)
-                seg_mask = np.zeros((ch, cw), dtype=np.uint8)
-                cv2.fillPoly(seg_mask, [tree_pts_crop], 255)
-                masked_crop = crop.copy()
-                masked_crop[seg_mask == 0] = 0   # black out background
-            else:
-                masked_crop = crop
+        dr             = disease_model.predict(source=crop, conf=_CONF_DISEASE_MIN,
+                                               verbose=False)[0]
+        annotated_crop = _plot_clean(crop.copy(), dr, CONF_DISEASE_CLASSES, DISEASE_CLASSES)
 
-            # ── Disease on masked crop ────────────────────────────────────────
-            dr             = disease_model.predict(source=masked_crop, conf=_CONF_DISEASE_MIN, verbose=False)[0]
-            annotated_crop = _plot_clean(crop.copy(), dr, CONF_DISEASE_CLASSES, DISEASE_CLASSES)
+        detections = []
+        if dr.boxes is not None:
+            for dbox in dr.boxes:
+                cls_id   = int(dbox.cls[0])
+                cnf      = float(dbox.conf[0])
+                cls_name = DISEASE_CLASSES.get(cls_id, f'Class {cls_id}')
+                if cnf < CONF_DISEASE_CLASSES.get(cls_name, CONF_DISEASE):
+                    continue
+                detections.append({'disease': cls_name, 'confidence': round(cnf, 3)})
 
-            detections = []
-            if dr.boxes is not None:
-                for dbox in dr.boxes:
-                    cls_id   = int(dbox.cls[0])
-                    cnf      = float(dbox.conf[0])
-                    cls_name = DISEASE_CLASSES.get(cls_id, f'Class {cls_id}')
-                    if cnf < CONF_DISEASE_CLASSES.get(cls_name, CONF_DISEASE):
-                        continue
-                    detections.append({
-                        'disease':    cls_name,
-                        'confidence': round(cnf, 3),
-                    })
+        if detections:
+            top          = max(detections, key=lambda d: d['confidence'])
+            disease      = top['disease']; disease_conf = top['confidence']
+        else:
+            disease      = 'Healthy';     disease_conf = 1.0
 
-            if detections:
-                top          = max(detections, key=lambda d: d['confidence'])
-                disease      = top['disease'];  disease_conf = top['confidence']
-            else:
-                disease      = 'Healthy';       disease_conf = 1.0
+        color = _DISEASE_COLORS_BGR.get(_d2c.get(disease), (0, 200, 100))
 
-            # colour for rect border / badge (healthy=green, diseased=disease colour)
-            _d2c  = {v: k for k, v in DISEASE_CLASSES.items()}
-            color = _DISEASE_COLORS_BGR.get(_d2c.get(disease), (0, 200, 100))
+        # Tree bounding box on full image
+        cv2.rectangle(out, (x1, y1), (x2, y2), color, 2)
 
-            # ── Full image: rectangle border (disease-coloured) ───────────────
-            cv2.rectangle(out, (x1, y1), (x2, y2), color, 2)
+        # Disease region overlays offset into full-image coordinates
+        if disease != 'Healthy' and dr.boxes is not None:
+            for dbox in dr.boxes:
+                dis_cls  = int(dbox.cls[0])
+                dis_cnf  = float(dbox.conf[0])
+                dis_name = DISEASE_CLASSES.get(dis_cls, '')
+                if dis_cnf < CONF_DISEASE_CLASSES.get(dis_name, CONF_DISEASE):
+                    continue
+                dx1b, dy1b, dx2b, dy2b = map(int, dbox.xyxy[0].tolist())
+                fx1 = max(x1, dx1b + cx1); fy1 = max(y1, dy1b + cy1)
+                fx2 = min(x2, dx2b + cx1); fy2 = min(y2, dy2b + cy1)
+                dis_color = _DISEASE_COLORS_BGR.get(dis_cls, (128, 128, 128))
+                ov = out.copy()
+                cv2.rectangle(ov, (fx1, fy1), (fx2, fy2), dis_color, -1)
+                cv2.addWeighted(ov, 0.30, out, 0.70, 0, out)
+                cv2.rectangle(out, (fx1, fy1), (fx2, fy2), dis_color, 2)
 
-            # Disease polygons / boxes drawn on the full image.
-            # Because the crop was pre-masked to the tree polygon, all disease
-            # detections are already confined to canopy pixels — no background
-            # spill.  We simply offset crop-space coords by (cx1, cy1) to land
-            # them in full-image space.
-            if disease != 'Healthy':
-                if dr.masks is not None and len(dr.masks.xy):
-                    for j, pts_crop in enumerate(dr.masks.xy):
-                        dis_cls  = int(dr.boxes.cls[j]) if dr.boxes is not None else 0
-                        dis_cnf  = float(dr.boxes.conf[j]) if dr.boxes is not None else 1.0
-                        dis_name = DISEASE_CLASSES.get(dis_cls, '')
-                        if dis_cnf < CONF_DISEASE_CLASSES.get(dis_name, CONF_DISEASE):
-                            continue
-                        pts_full  = (pts_crop + np.array([cx1, cy1])).astype(np.int32)
-                        dis_color = _DISEASE_COLORS_BGR.get(dis_cls, (128, 128, 128))
-                        ov = out.copy()
-                        cv2.fillPoly(ov, [pts_full], dis_color)
-                        cv2.addWeighted(ov, 0.30, out, 0.70, 0, out)
-                        cv2.polylines(out, [pts_full], True, dis_color, 2)
-                elif dr.boxes is not None:
-                    for dbox in dr.boxes:
-                        dis_cls  = int(dbox.cls[0])
-                        dis_cnf  = float(dbox.conf[0])
-                        dis_name = DISEASE_CLASSES.get(dis_cls, '')
-                        if dis_cnf < CONF_DISEASE_CLASSES.get(dis_name, CONF_DISEASE):
-                            continue
-                        dx1b, dy1b, dx2b, dy2b = map(int, dbox.xyxy[0].tolist())
-                        fx1 = max(x1, dx1b + cx1);  fy1 = max(y1, dy1b + cy1)
-                        fx2 = min(x2, dx2b + cx1);  fy2 = min(y2, dy2b + cy1)
-                        dis_color = _DISEASE_COLORS_BGR.get(dis_cls, (128, 128, 128))
-                        ov = out.copy()
-                        cv2.rectangle(ov, (fx1, fy1), (fx2, fy2), dis_color, -1)
-                        cv2.addWeighted(ov, 0.30, out, 0.70, 0, out)
-                        cv2.rectangle(out, (fx1, fy1), (fx2, fy2), dis_color, 2)
+        # Number badge pinned to top-left corner
+        label       = f'#{tree_id}'
+        (lw, lh), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
+        bx1, by1    = x1, max(0, y1 - lh - 6)
+        bx2, by2    = x1 + lw + 6, y1
+        cv2.rectangle(out, (bx1, by1), (bx2, by2), color, -1)
+        cv2.putText(out, label, (bx1 + 3, by2 - 3),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1, cv2.LINE_AA)
 
-            # Number badge pinned to top-left corner of the rectangle
-            label       = f'#{tree_id}'
-            (lw, lh), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
-            bx1, by1    = x1, max(0, y1 - lh - 6)
-            bx2, by2    = x1 + lw + 6, y1
-            cv2.rectangle(out, (bx1, by1), (bx2, by2), color, -1)
-            cv2.putText(out, label, (bx1 + 3, by2 - 3),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1, cv2.LINE_AA)
+        _, buf   = cv2.imencode('.jpg', annotated_crop, [cv2.IMWRITE_JPEG_QUALITY, 88])
+        crop_b64 = 'data:image/jpeg;base64,' + base64.b64encode(buf.tobytes()).decode()
 
-            # ── Encode annotated crop ─────────────────────────────────────────
-            _, buf   = cv2.imencode('.jpg', annotated_crop, [cv2.IMWRITE_JPEG_QUALITY, 88])
-            crop_b64 = 'data:image/jpeg;base64,' + base64.b64encode(buf.tobytes()).decode()
+        trees.append({
+            'tree_id':            tree_id,
+            'cx_px': cx, 'cy_px': cy,
+            'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2,
+            'confidence':         round(tree_conf, 4),
+            'disease':            disease,
+            'disease_confidence': disease_conf,
+            'all_detections':     detections,
+            'crop_image':         crop_b64,
+        })
 
-            trees.append({
-                'tree_id':            tree_id,
-                'cx_px': cx, 'cy_px': cy,
-                'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2,
-                'confidence':         round(tree_conf, 4),
-                'disease':            disease,
-                'disease_confidence': disease_conf,
-                'all_detections':     detections,
-                'crop_image':         crop_b64,
-            })
-
-    # ── Encode full annotated image ───────────────────────────────────────────
     _, buf        = cv2.imencode('.jpg', out, [cv2.IMWRITE_JPEG_QUALITY, 82])
     annotated_b64 = 'data:image/jpeg;base64,' + base64.b64encode(buf.tobytes()).decode()
 

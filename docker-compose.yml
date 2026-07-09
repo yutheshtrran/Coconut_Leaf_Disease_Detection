@@ -28,6 +28,8 @@ services:
     environment:
       NODE_ENV: production
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost}
+    volumes:
+      - backend_uploads:/usr/src/app/uploads
     depends_on:
       - mongo
     restart: unless-stopped
@@ -70,5 +72,6 @@ services:
 
 volumes:
   mongo_data:
+  backend_uploads:
   ml_jobs:
   ml_uploads:
