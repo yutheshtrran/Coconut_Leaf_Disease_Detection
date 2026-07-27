@@ -1,9 +1,8 @@
 const ML = import.meta.env.VITE_ML_URL || 'http://127.0.0.1:5001';
 
-export const startFarmMap = async (videoFile, conf = 0.35) => {
+export const startFarmMap = async (videoFile) => {
   const fd = new FormData();
   fd.append('file', videoFile);
-  fd.append('conf', String(conf));
   const r = await fetch(`${ML}/farm-map/start`, { method: 'POST', body: fd });
   if (!r.ok) throw new Error(`Upload failed (${r.status})`);
   return r.json();

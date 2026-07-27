@@ -83,7 +83,13 @@ export function JobProvider({ children }) {
               stage: data.stage,
             });
           }
-        } catch { /* network hiccup — keep polling */ }
+        } catch (err) {
+          // 404 = session gone (ML server restarted) — stop polling this job
+          if (err.message?.includes('404') || err.message?.includes('not found')) {
+            updateJob(job.sessionId, { status: 'error', error: 'Session expired — ML server was restarted. Please resubmit.' });
+          }
+          // Other errors (transient network blip) — keep polling silently
+        }
       }
     };
 

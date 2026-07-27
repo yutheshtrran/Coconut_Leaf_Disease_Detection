@@ -156,8 +156,8 @@ exports.createReport = async (req, res) => {
         } = req.body;
         const userId = req.user._id;
 
-        if (!req.user || (req.user.role !== 'admin' && req.user.role !== 'agronomist')) {
-            return res.status(403).json({ message: 'Only admin or agronomist users can create reports' });
+        if (!req.user) {
+            return res.status(401).json({ message: 'Authentication required' });
         }
 
         // Resolve farm name — prefer farmId lookup, fall back to plain string
@@ -179,11 +179,14 @@ exports.createReport = async (req, res) => {
             if (!issue)    issue    = `${top.name} detected (${Math.round((top.topConfidence || 0) * 100)}%)`;
             if (!severity) severity = deriveSeverity(top.topConfidence || 0);
         }
+        // Fallback for healthy-only results (no diseases detected)
+        if (!issue)    issue    = 'No disease detected — plantation healthy';
+        if (!severity) severity = { value: 0, label: 'LOW' };
 
-        if (!resolvedFarmName || !date || !issue || !severity) {
-            return res.status(400).json({ message: 'Missing required fields: farm, date, issue, severity' });
+        if (!resolvedFarmName || !date) {
+            return res.status(400).json({ message: 'Missing required fields: farm, date' });
         }
-        if (!severity.value || !severity.label) {
+        if (severity.value == null || !severity.label) {
             return res.status(400).json({ message: 'Severity must have value and label' });
         }
 

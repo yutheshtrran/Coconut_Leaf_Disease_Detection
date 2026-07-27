@@ -11,3 +11,4 @@ PyYAML>=6.0
 scipy>=1.11.0
 kornia>=0.7.0
 requests>=2.31.0
+waitress>=3.0.0

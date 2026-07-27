@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { LayoutDashboard, FileText, Map, Users, TrendingUp, Info, LogOut, Menu, X, Leaf, Bell, Loader2 } from "lucide-react";
+import { LayoutDashboard, FileText, Map, Users, TrendingUp, Info, LogOut, Menu, X, Leaf, Bell, Loader2, Video } from "lucide-react";
 import NavLink from "./NavLink.jsx";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -76,6 +76,11 @@ const Sidebar = () => {
         {/* About Us Link */}
         <div onClick={isMobile ? closeMobileMenu : undefined}>
           <NavLink name="About Us" icon={Info} to="/about" />
+        </div>
+
+        {/* Video to Map Link */}
+        <div onClick={isMobile ? closeMobileMenu : undefined}>
+          <NavLink name="Video to Map" icon={Video} to="/video-to-map" />
         </div>
       </nav>
 

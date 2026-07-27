@@ -626,12 +626,14 @@ def stitch_video(
     if b_imgs:                               # flush remaining partial batch
         _flush_batch(b_imgs, b_Ts, fi)
 
+    coverage = best_weight > 0          # pixels touched by at least one frame
     del best_weight, b_imgs, b_Ts;  gc.collect()
 
     # ── Fill residual gaps ────────────────────────────────────────────────────
     if progress_cb:
         progress_cb(93, 'Filling gaps…')
     canvas = _fill_gaps(canvas)
+    canvas[~coverage] = 0              # restore edge/corner regions to black
 
     # ── Unsharp mask ──────────────────────────────────────────────────────────
     if progress_cb:
@@ -726,11 +728,13 @@ def stitch_frames(
             if progress_cb:
                 progress_cb(44 + int((b_i + 1) / nb * 48), f'Painting {b_i+1}/{nb}…')
 
+    coverage = best_weight > 0          # pixels touched by at least one frame
     del best_weight;  gc.collect()
 
     if progress_cb:
         progress_cb(93, 'Filling gaps…')
     canvas = _fill_gaps(canvas)
+    canvas[~coverage] = 0              # restore edge/corner regions to black
 
     if progress_cb:
         progress_cb(97, 'Sharpening…')

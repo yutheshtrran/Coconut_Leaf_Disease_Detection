@@ -3,11 +3,12 @@ import { useSearchParams } from "react-router-dom";
 import {
   Upload as UploadIcon, AlertCircle, CheckCircle, Video,
   Loader2, Download, RefreshCw, ZoomIn, ZoomOut, Maximize2, Activity,
-  TreePine, X, MapPin, Microscope, BarChart3, Eye, Image as ImageIcon,
-  ChevronLeft, ChevronRight, Plus, FileText,
+  TreePine, X, MapPin, Microscope, BarChart3, Eye, EyeOff, Image as ImageIcon,
+  ChevronLeft, ChevronRight, Plus, FileText, Save, Trash2,
 } from "lucide-react";
 import API from "../services/api";
 import * as farmMapService from "../services/farmMapService";
+import * as droneDetectionService from "../services/droneDetectionService";
 import { useJobs } from "../context/JobContext";
 import GenerateReportModal from "../components/GenerateReportModal";
 import { buildDroneImageAnalysisData, buildDroneVideoAnalysisData } from "../utils/buildAnalysisData";
@@ -37,6 +38,8 @@ const FEATURES = [
 const fmtSize = (b) => b < 1048576 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1048576).toFixed(1)} MB`;
 const dColor  = (d) => DISEASE_PALETTE[d] || '#6b7280';
 const dBg     = (d) => DISEASE_BG[d]      || 'rgba(107,114,128,0.12)';
+// Returns the best available crop image source: base64 (live session) → Cloudinary URL (saved detection)
+const cropSrc = (tree) => tree?.crop_image || tree?.crop_url || null;
 
 // ── HealthRing ─────────────────────────────────────────────────────────────
 function HealthRing({ healthy, total }) {
@@ -56,11 +59,62 @@ function HealthRing({ healthy, total }) {
   );
 }
 
+// ── DiseaseRing — multi-segment donut pie ─────────────────────────────────
+function DiseaseRing({ trees }) {
+  const total = trees.length;
+  const healthyCount = trees.filter(t => t.disease === 'Healthy').length;
+  const pct = total > 0 ? Math.round((healthyCount / total) * 100) : 0;
+  const r = 28, circ = 2 * Math.PI * r;
+
+  if (total === 0) {
+    return (
+      <div className="relative flex items-center justify-center" style={{ width: 72, height: 72 }}>
+        <svg width="72" height="72" style={{ transform: 'rotate(-90deg)' }}>
+          <circle cx="36" cy="36" r={r} fill="none" stroke="currentColor"
+            className="text-gray-100 dark:text-gray-700" strokeWidth="7" />
+        </svg>
+        <span className="absolute text-sm font-extrabold text-gray-400">—</span>
+      </div>
+    );
+  }
+
+  const counts = {};
+  trees.forEach(t => { const d = t.disease || 'Unanalysed'; counts[d] = (counts[d] || 0) + 1; });
+  const colorOf = d => d === 'Unanalysed' ? '#9ca3af' : (DISEASE_PALETTE[d] || '#6b7280');
+  const sorted = Object.entries(counts).sort(([a], [b]) =>
+    a === 'Healthy' ? -1 : b === 'Healthy' ? 1 :
+    a === 'Unanalysed' ? 1 : b === 'Unanalysed' ? -1 : a.localeCompare(b));
+
+  let cum = 0;
+  const segs = sorted.map(([label, count]) => {
+    const len = (count / total) * circ;
+    const off = cum; cum += len;
+    return { label, len, off, color: colorOf(label) };
+  });
+
+  return (
+    <div className="relative flex items-center justify-center" style={{ width: 72, height: 72 }}>
+      <svg width="72" height="72" style={{ transform: 'rotate(-90deg)' }}>
+        <circle cx="36" cy="36" r={r} fill="none" stroke="currentColor"
+          className="text-gray-100 dark:text-gray-700" strokeWidth="7" />
+        {segs.map(({ label, len, off, color }) => (
+          <circle key={label} cx="36" cy="36" r={r} fill="none"
+            stroke={color} strokeWidth="7" strokeLinecap="butt"
+            strokeDasharray={`${len} ${circ}`}
+            strokeDashoffset={-off} />
+        ))}
+      </svg>
+      <span className="absolute text-sm font-extrabold text-gray-800 dark:text-gray-100">{pct}%</span>
+    </div>
+  );
+}
+
 // ── MapViewer canvas ───────────────────────────────────────────────────────
 function MapViewer({ mapImage, trees, selectedTree, onTreeClick }) {
   const canvasRef    = useRef(null);
   const containerRef = useRef(null);
-  const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
+  const [transform, setTransform]   = useState({ x: 0, y: 0, scale: 1 });
+  const [showLabels, setShowLabels] = useState(false);
   const transformRef = useRef(transform);
   const dragStart    = useRef({ active: false, moved: false, mx: 0, my: 0, tx: 0, ty: 0 });
   const treesRef     = useRef(trees);
@@ -96,29 +150,98 @@ function MapViewer({ mapImage, trees, selectedTree, onTreeClick }) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.save(); ctx.translate(x, y); ctx.scale(scale, scale);
     ctx.drawImage(mapImage, 0, 0);
-    const R = 14 / scale, FONT = Math.max(7, 10 / scale);
-    trees.forEach(tree => {
-      const isSel = selectedTree?.tree_id === tree.tree_id;
-      const color = dColor(tree.disease || null);
-      if (isSel) {
-        ctx.beginPath(); ctx.arc(tree.cx_px, tree.cy_px, R + 7 / scale, 0, Math.PI * 2);
-        ctx.fillStyle = `${color}30`; ctx.fill();
-        ctx.beginPath(); ctx.arc(tree.cx_px, tree.cy_px, R + 4 / scale, 0, Math.PI * 2);
-        ctx.strokeStyle = color; ctx.lineWidth = 2 / scale; ctx.stroke();
-      }
-      ctx.beginPath(); ctx.arc(tree.cx_px, tree.cy_px, R, 0, Math.PI * 2);
-      ctx.fillStyle = isSel ? '#fff' : color;
-      ctx.strokeStyle = isSel ? color : 'rgba(255,255,255,0.9)';
-      ctx.lineWidth = (isSel ? 3 : 2) / scale;
-      ctx.shadowColor = 'rgba(0,0,0,0.4)'; ctx.shadowBlur = 6 / scale;
-      ctx.fill(); ctx.stroke(); ctx.shadowBlur = 0;
-      ctx.fillStyle = isSel ? color : '#fff';
-      ctx.font = `bold ${FONT}px system-ui,sans-serif`;
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(String(tree.tree_id), tree.cx_px, tree.cy_px);
-    });
+    if (showLabels) {
+      // R and font sizes are in image-space pixels (divided by scale so they appear
+      // constant-size on screen regardless of zoom level).
+      const R    = 14 / scale;
+      const FONT = Math.max(8, 11 / scale);
+      const PAD  = 3 / scale;
+
+      trees.forEach(tree => {
+        const isSel   = selectedTree?.tree_id === tree.tree_id;
+        const color   = dColor(tree.disease || null);
+        const allDets = (tree.all_detections || []);
+        const isMulti = allDets.length > 1;
+        const cx = tree.cx_px, cy = tree.cy_px;
+
+        // selection halo
+        if (isSel) {
+          ctx.beginPath(); ctx.arc(cx, cy, R + 7 / scale, 0, Math.PI * 2);
+          ctx.fillStyle = `${color}30`; ctx.fill();
+          ctx.beginPath(); ctx.arc(cx, cy, R + 4 / scale, 0, Math.PI * 2);
+          ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5 / scale; ctx.stroke();
+        }
+
+        if (isMulti) {
+          // pie segments — one slice per disease, proportional to confidence
+          const total = allDets.reduce((s, d) => s + d.confidence, 0);
+          let startAngle = -Math.PI / 2;
+          allDets.forEach(det => {
+            const sweep = (det.confidence / total) * Math.PI * 2;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            ctx.arc(cx, cy, R, startAngle, startAngle + sweep);
+            ctx.closePath();
+            ctx.fillStyle = dColor(det.disease);
+            ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = 7 / scale;
+            ctx.fill(); ctx.shadowBlur = 0;
+            startAngle += sweep;
+          });
+          // thin dividers between slices
+          let divAngle = -Math.PI / 2;
+          allDets.forEach(det => {
+            const sweep = (det.confidence / total) * Math.PI * 2;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            ctx.lineTo(cx + Math.cos(divAngle) * R, cy + Math.sin(divAngle) * R);
+            ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 0.8 / scale; ctx.stroke();
+            divAngle += sweep;
+          });
+          // outer ring
+          ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2);
+          ctx.strokeStyle = isSel ? '#fff' : 'rgba(255,255,255,0.85)';
+          ctx.lineWidth = (isSel ? 3 : 2) / scale; ctx.stroke();
+        } else {
+          // solid circle
+          ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2);
+          ctx.fillStyle = isSel ? '#fff' : color;
+          ctx.strokeStyle = isSel ? color : 'rgba(255,255,255,0.9)';
+          ctx.lineWidth = (isSel ? 3 : 2) / scale;
+          ctx.shadowColor = 'rgba(0,0,0,0.4)'; ctx.shadowBlur = 6 / scale;
+          ctx.fill(); ctx.stroke(); ctx.shadowBlur = 0;
+        }
+
+        // ── number badge pinned just above the circle ──────────────────────
+        const label = String(tree.tree_id);
+        ctx.font = `bold ${FONT}px system-ui,sans-serif`;
+        const tw = ctx.measureText(label).width;
+        const bw = tw + PAD * 2;
+        const bh = FONT + PAD * 2;
+        const bx = cx - bw / 2;
+        const by = cy - R - bh - 2 / scale;   // directly above the circle
+
+        // badge background — use the dominant disease colour
+        ctx.beginPath();
+        const br = bh / 2;
+        ctx.roundRect(bx, by, bw, bh, br);
+        ctx.fillStyle = color;
+        ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 5 / scale;
+        ctx.fill(); ctx.shadowBlur = 0;
+
+        // badge border
+        ctx.beginPath();
+        ctx.roundRect(bx, by, bw, bh, br);
+        ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+        ctx.lineWidth = 1.2 / scale; ctx.stroke();
+
+        // badge text
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(label, cx, by + bh / 2);
+      });
+    }
     ctx.restore();
-  }, [mapImage, trees, selectedTree, transform]);
+  }, [mapImage, trees, selectedTree, transform, showLabels]);
 
   const handleWheel = useCallback((e) => {
     e.preventDefault();
@@ -152,13 +275,12 @@ function MapViewer({ mapImage, trees, selectedTree, onTreeClick }) {
     const canvas = canvasRef.current, rect = canvas.getBoundingClientRect();
     const { x, y, scale } = transformRef.current;
     const cx = (e.clientX - rect.left - x) / scale, cy = (e.clientY - rect.top - y) / scale;
-    const hit = treesRef.current.find(t => Math.hypot(cx - t.cx_px, cy - t.cy_px) < 18 / scale);
+    const hit = treesRef.current.find(t => Math.hypot(cx - t.cx_px, cy - t.cy_px) < 16 / scale);
     onClickRef.current(hit || null);
   };
 
   return (
-    <div ref={containerRef} className="relative w-full h-full overflow-hidden rounded-2xl select-none"
-      style={{ background: 'linear-gradient(135deg,#0f172a 0%,#1e293b 100%)' }}>
+    <div ref={containerRef} className="relative w-full h-full overflow-hidden rounded-2xl select-none bg-white dark:bg-black">
       <canvas ref={canvasRef} className="absolute inset-0"
         style={{ cursor: dragStart.current?.moved ? 'grabbing' : 'grab' }}
         onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp}
@@ -174,6 +296,15 @@ function MapViewer({ mapImage, trees, selectedTree, onTreeClick }) {
             {icon}
           </button>
         ))}
+        <button
+          title={showLabels ? 'Hide markers' : 'Show markers'}
+          onClick={() => setShowLabels(v => !v)}
+          className={`w-8 h-8 flex items-center justify-center rounded-xl backdrop-blur-md border shadow-lg transition
+            ${showLabels
+              ? 'bg-green-500/80 hover:bg-green-500 border-green-400/60 text-white'
+              : 'bg-white/10 hover:bg-white/20 border-white/10 text-white'}`}>
+          {showLabels ? <Eye size={14} /> : <EyeOff size={14} />}
+        </button>
       </div>
       <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-4 py-2
         bg-gradient-to-t from-black/60 to-transparent">
@@ -186,12 +317,13 @@ function MapViewer({ mapImage, trees, selectedTree, onTreeClick }) {
 
 // ── StageStepper ───────────────────────────────────────────────────────────
 const STAGES = [
-  { key: 'stitch', label: 'Stitching Frames', icon: '🛸', desc: 'Aligning drone footage into orthomosaic' },
-  { key: 'detect', label: 'Detecting Trees',  icon: '🌴', desc: 'Running YOLO tiled inference' },
+  { key: 'stitch',  label: 'Stitching Frames',  icon: '🛸', desc: 'Building orthomosaic from drone footage' },
+  { key: 'detect',  label: 'Detecting Trees',   icon: '🌴', desc: 'Running YOLO tiled inference on the map' },
+  { key: 'disease', label: 'Analysing Disease', icon: '🔬', desc: 'Running disease_v5 on each tree crop' },
 ];
 function StageStepper({ progressData }) {
   const { stage, progress = 0, detail } = progressData;
-  const STAGE_MAP = { stitch: 1, detect: 2, complete: 3 };
+  const STAGE_MAP = { stitch: 1, detect: 2, disease: 3, complete: 4 };
   const cur = STAGE_MAP[stage] || 1;
   return (
     <div className="space-y-8">
@@ -386,7 +518,7 @@ function DroneImageViewer({ src, trees, focusTree }) {
   const cW   = containerRef.current?.clientWidth  || 600;
   const cH   = containerRef.current?.clientHeight || 500;
   const PW   = 224;
-  const PH   = popupTree?.tree?.crop_image ? 340 : 160;
+  const PH   = cropSrc(popupTree?.tree) ? 340 : 160;
   const pLeft = popupTree ? Math.min(popupTree.px + 14, cW - PW - 8) : 0;
   const pTop  = popupTree ? Math.min(popupTree.py + 14, cH - PH - 8) : 0;
 
@@ -421,9 +553,9 @@ function DroneImageViewer({ src, trees, focusTree }) {
       {popupTree && (
         <div className="absolute z-20 rounded-2xl overflow-hidden border border-white/15 shadow-2xl"
           style={{ left: pLeft, top: pTop, width: PW, background: 'rgba(15,23,42,0.97)', backdropFilter: 'blur(16px)' }}>
-          {popupTree.tree.crop_image && (
+          {cropSrc(popupTree.tree) && (
             <div style={{ aspectRatio: '1/1', background: '#111827' }}>
-              <img src={popupTree.tree.crop_image} alt={`Tree #${popupTree.tree.tree_id}`}
+              <img src={cropSrc(popupTree.tree)} alt={`Tree #${popupTree.tree.tree_id}`}
                 className="w-full h-full object-contain" />
             </div>
           )}
@@ -647,6 +779,11 @@ const Upload = () => {
   const [fmDiseaseError,   setFmDiseaseError]   = useState('');
   const [fmDetectedGps,    setFmDetectedGps]    = useState(null);
   const [showFmReportModal, setShowFmReportModal] = useState(false);
+  const [fmSaving,          setFmSaving]          = useState(false);
+  const [fmSaveSuccess,     setFmSaveSuccess]     = useState(false);
+  const [savedDetections,   setSavedDetections]   = useState([]);
+  const [savedDetLoading,   setSavedDetLoading]   = useState(false);
+  const [savedDetError,     setSavedDetError]     = useState('');
   const [fmFsTree,         setFmFsTree]         = useState(null); // {treeIdx} for fullscreen tree viewer
 
   const handleNotesChange = (e) => setNotes(e.target.value);
@@ -926,8 +1063,9 @@ const Upload = () => {
         }
       } catch (err) {
         // 404 = session gone (server restarted); stop polling and reset
-        if (err.message?.includes('404')) {
+        if (err.message?.includes('404') || err.message?.includes('not found')) {
           clearInterval(fmPollRef.current);
+          setFmSessionId(null);
           setFmErrorMsg('Session expired — the ML server was restarted. Please upload the video again.');
           setFmPhase('error');
         }
@@ -938,6 +1076,68 @@ const Upload = () => {
     fmPollRef.current = setInterval(poll, 2000);
     return () => clearInterval(fmPollRef.current);
   }, [fmSessionId, fmPhase]);
+
+  const handleSaveDetection = async () => {
+    if (fmSaving || !fmMapSrc || !fmTrees.length) return;
+    setFmSaving(true);
+    setFmSaveSuccess(false);
+    try {
+      await droneDetectionService.saveDetection({
+        mapImage:   fmMapSrc,
+        mapDims:    fmMapDims,
+        treeCount:  fmTreeCount,
+        trees:      fmTrees,
+        gps:        fmDetectedGps || null,
+        sessionId:  fmSessionId || null,
+        title:      `Analysis – ${new Date().toLocaleDateString()} (${fmTreeCount} trees)`,
+      });
+      setFmSaveSuccess(true);
+      // Refresh saved list
+      droneDetectionService.listDetections()
+        .then(list => setSavedDetections(list || []))
+        .catch(() => {});
+      setTimeout(() => setFmSaveSuccess(false), 3000);
+    } catch (err) {
+      console.error('Save failed', err);
+    } finally {
+      setFmSaving(false);
+    }
+  };
+
+  const handleLoadSavedDetection = async (id) => {
+    try {
+      const det = await droneDetectionService.getDetection(id);
+      // mapUrl is the Cloudinary URL; mapImage (legacy base64) may not exist
+      const src = det.mapUrl || det.mapImage;
+      if (!src) return;
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        setFmMapImage(img);
+        setFmMapSrc(src);
+        setFmMapDims(det.mapDims || { w: img.naturalWidth, h: img.naturalHeight });
+        setFmTrees(det.trees || []);
+        setFmTreeCount(det.treeCount || det.trees?.length || 0);
+        setFmDetectedGps(det.gps || null);
+        setFmSessionId(null);
+        setFmPhase('done');
+      };
+      img.src = src;
+    } catch (err) {
+      console.error('Load detection failed', err);
+    }
+  };
+
+  // Load saved detections when drone-video tab is active
+  useEffect(() => {
+    if (activeTab !== 'drone-video') return;
+    setSavedDetLoading(true);
+    setSavedDetError('');
+    droneDetectionService.listDetections()
+      .then(list => setSavedDetections(list || []))
+      .catch(() => setSavedDetError('Could not load saved detections'))
+      .finally(() => setSavedDetLoading(false));
+  }, [activeTab]);
 
   const fmFetchResult = async (sid) => {
     try {
@@ -1032,10 +1232,10 @@ const Upload = () => {
   // ── Auto-populate disease when pre-analysed tree is selected ─────────
   useEffect(() => {
     if (!fmSelectedTree) { setFmDiseaseResult(null); return; }
-    if (fmSelectedTree.crop_image && fmSelectedTree.disease) {
+    if ((fmSelectedTree.crop_image || fmSelectedTree.crop_url) && fmSelectedTree.disease) {
       setFmDiseaseResult({
         tree_id:            fmSelectedTree.tree_id,
-        crop_image:         fmSelectedTree.crop_image,
+        crop_image:         cropSrc(fmSelectedTree),
         disease:            fmSelectedTree.disease,
         disease_confidence: fmSelectedTree.disease_confidence ?? 1.0,
         all_detections:     fmSelectedTree.all_detections || [],
@@ -1789,17 +1989,25 @@ const Upload = () => {
                       <div className="space-y-4">
                         {/* Summary row */}
                         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-3 sm:p-4 flex flex-wrap items-center gap-3">
-                          <HealthRing healthy={healthyCount} total={totalTrees} />
+                          <DiseaseRing trees={cur.trees || []} />
                           <div className="flex-1 min-w-0 flex flex-wrap gap-2 sm:gap-3">
-                            {[
-                              { label: 'Healthy', value: healthyCount,              color: '#16a34a', bg: 'rgba(22,163,74,0.1)'  },
-                              { label: 'At Risk', value: totalTrees - healthyCount, color: '#dc2626', bg: 'rgba(220,38,38,0.1)'  },
-                            ].map(s => (
-                              <div key={s.label} className="flex-1 min-w-[90px] flex items-center justify-between rounded-xl px-3 py-2" style={{ backgroundColor: s.bg }}>
-                                <span className="text-xs text-gray-600 dark:text-gray-400">{s.label}</span>
-                                <span className="text-sm font-extrabold" style={{ color: s.color }}>{s.value}</span>
-                              </div>
-                            ))}
+                            {(() => {
+                              const counts = {};
+                              (cur.trees || []).forEach(t => { const d = t.disease || 'Unknown'; counts[d] = (counts[d] || 0) + 1; });
+                              const bgOf = d => DISEASE_BG[d] || 'rgba(107,114,128,0.1)';
+                              const colOf = d => DISEASE_PALETTE[d] || '#6b7280';
+                              return Object.entries(counts)
+                                .sort(([a], [b]) => a === 'Healthy' ? -1 : b === 'Healthy' ? 1 : a.localeCompare(b))
+                                .map(([label, value]) => (
+                                  <div key={label} className="flex-1 min-w-[90px] flex items-center justify-between rounded-xl px-3 py-2" style={{ backgroundColor: bgOf(label) }}>
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: colOf(label) }} />
+                                      <span className="text-xs text-gray-600 dark:text-gray-400 truncate">{label}</span>
+                                    </div>
+                                    <span className="text-sm font-extrabold ml-2 flex-shrink-0" style={{ color: colOf(label) }}>{value}</span>
+                                  </div>
+                                ));
+                            })()}
                           </div>
                         </div>
 
@@ -1814,8 +2022,8 @@ const Upload = () => {
                               onClick={() => setDiTreeFs({ treeIdx, trees: cur.trees })}>
                               {/* Square thumbnail */}
                               <div className="relative aspect-square overflow-hidden bg-gray-100 dark:bg-gray-700">
-                                {tree.crop_image
-                                  ? <img src={tree.crop_image} alt={`Tree #${tree.tree_id}`}
+                                {cropSrc(tree)
+                                  ? <img src={cropSrc(tree)} alt={`Tree #${tree.tree_id}`}
                                       className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />
                                   : <div className="absolute inset-0 flex items-center justify-center">
                                       <TreePine size={20} className="text-gray-300 dark:text-gray-600" />
@@ -1966,8 +2174,8 @@ const Upload = () => {
                 </button>
 
                 <div className="flex-1 min-h-0 h-full relative">
-                  {tree.crop_image
-                    ? <ZoomableImage key={tree.tree_id} src={tree.crop_image} alt={`Tree #${tree.tree_id}`} />
+                  {cropSrc(tree)
+                    ? <ZoomableImage key={tree.tree_id} src={cropSrc(tree)} alt={`Tree #${tree.tree_id}`} />
                     : <div className="w-full h-full flex flex-col items-center justify-center gap-3 text-white/30">
                         <TreePine size={48} />
                         <p className="text-sm">No crop available</p>
@@ -2097,10 +2305,20 @@ const Upload = () => {
             {fmPhase !== 'idle' && (
               <div className="flex items-center gap-2">
                 {fmPhase === 'done' && fmTrees.length > 0 && (
-                  <button onClick={() => setShowFmReportModal(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-600 hover:bg-green-700 text-white transition">
-                    <FileText size={13} /> Generate Report
-                  </button>
+                  <>
+                    <button onClick={handleSaveDetection} disabled={fmSaving || fmSaveSuccess}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition
+                        ${fmSaveSuccess
+                          ? 'bg-emerald-500 text-white cursor-default'
+                          : 'bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-60'}`}>
+                      {fmSaving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+                      {fmSaveSuccess ? 'Saved!' : fmSaving ? 'Saving…' : 'Save Detection'}
+                    </button>
+                    <button onClick={() => setShowFmReportModal(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-600 hover:bg-green-700 text-white transition">
+                      <FileText size={13} /> Generate Report
+                    </button>
+                  </>
                 )}
                 <button onClick={fmHandleReset}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition">
@@ -2179,6 +2397,59 @@ const Upload = () => {
                     : { background: '#d1d5db' }}>
                   <Activity size={18} /> Start Analysis
                 </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Saved Detections ───────────────────────────────────── */}
+          {fmPhase === 'idle' && (savedDetections.length > 0 || savedDetLoading) && (
+            <div className="bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-lg overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+                <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200 flex items-center gap-2">
+                  <MapPin size={14} className="text-green-500" /> Saved Detections
+                </h3>
+                {savedDetLoading && <Loader2 size={14} className="animate-spin text-gray-400" />}
+              </div>
+              {savedDetError && (
+                <p className="text-xs text-red-500 px-6 py-3">{savedDetError}</p>
+              )}
+              <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                {savedDetections.map(det => (
+                  <div key={det._id} className="flex items-center gap-4 px-6 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition group cursor-pointer"
+                    onClick={() => handleLoadSavedDetection(det._id)}>
+                    {/* Thumbnail placeholder */}
+                    <div className="w-14 h-10 rounded-lg bg-gray-100 dark:bg-gray-700 flex-shrink-0 flex items-center justify-center overflow-hidden">
+                      <MapPin size={18} className="text-gray-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate">{det.title}</p>
+                      <div className="flex items-center gap-3 mt-0.5">
+                        <span className="text-xs text-gray-400">{new Date(det.savedAt).toLocaleDateString(undefined, { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}</span>
+                        <span className="inline-flex items-center gap-1 text-xs text-green-600 dark:text-green-400 font-medium">
+                          <TreePine size={10} /> {det.treeCount} trees
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition">
+                      <button
+                        className="w-7 h-7 flex items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 transition text-xs font-bold"
+                        onClick={e => { e.stopPropagation(); handleLoadSavedDetection(det._id); }}
+                        title="Load this detection">
+                        <Eye size={13} />
+                      </button>
+                      <button
+                        className="w-7 h-7 flex items-center justify-center rounded-lg bg-red-50 dark:bg-red-900/30 text-red-500 dark:text-red-400 hover:bg-red-100 transition"
+                        onClick={async e => {
+                          e.stopPropagation();
+                          await droneDetectionService.deleteDetection(det._id);
+                          setSavedDetections(prev => prev.filter(d => d._id !== det._id));
+                        }}
+                        title="Delete">
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -2269,18 +2540,27 @@ const Upload = () => {
                     <span className="text-xs text-gray-400">{fmTreeCount} total</span>
                   </div>
                   <div className="flex items-center gap-4">
-                    <HealthRing healthy={fmHealthyCount} total={fmTreeCount} />
+                    <DiseaseRing trees={fmTrees} />
                     <div className="flex-1 space-y-1.5">
-                      {[
-                        { label: 'Healthy',    value: fmHealthyCount,    color: '#16a34a', bg: 'rgba(22,163,74,0.1)' },
-                        { label: 'At Risk',    value: fmAtRiskCount,     color: '#dc2626', bg: 'rgba(220,38,38,0.1)' },
-                        { label: 'Unanalysed', value: fmUnanalysedCount, color: '#9ca3af', bg: 'rgba(156,163,175,0.1)' },
-                      ].map(s => (
-                        <div key={s.label} className="flex items-center justify-between rounded-lg px-2.5 py-1.5" style={{ backgroundColor: s.bg }}>
-                          <span className="text-xs text-gray-600 dark:text-gray-400">{s.label}</span>
-                          <span className="text-sm font-extrabold" style={{ color: s.color }}>{s.value}</span>
-                        </div>
-                      ))}
+                      {(() => {
+                        const counts = {};
+                        fmTrees.forEach(t => { const d = t.disease || 'Unanalysed'; counts[d] = (counts[d] || 0) + 1; });
+                        const bgOf = d => d === 'Unanalysed' ? 'rgba(156,163,175,0.1)' : (DISEASE_BG[d] || 'rgba(107,114,128,0.1)');
+                        return Object.entries(counts)
+                          .sort(([a], [b]) => a === 'Healthy' ? -1 : b === 'Healthy' ? 1 : a === 'Unanalysed' ? 1 : b === 'Unanalysed' ? -1 : a.localeCompare(b))
+                          .map(([label, value]) => (
+                            <div key={label} className="flex items-center justify-between rounded-lg px-2.5 py-1.5"
+                              style={{ backgroundColor: bgOf(label) }}>
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                                  style={{ backgroundColor: label === 'Unanalysed' ? '#9ca3af' : (DISEASE_PALETTE[label] || '#6b7280') }} />
+                                <span className="text-xs text-gray-600 dark:text-gray-400 truncate">{label}</span>
+                              </div>
+                              <span className="text-sm font-extrabold flex-shrink-0 ml-2"
+                                style={{ color: label === 'Unanalysed' ? '#9ca3af' : (DISEASE_PALETTE[label] || '#6b7280') }}>{value}</span>
+                            </div>
+                          ));
+                      })()}
                     </div>
                   </div>
                 </div>
@@ -2428,8 +2708,8 @@ const Upload = () => {
                         style={{ borderColor: isSel ? col : 'transparent', boxShadow: isSel ? `0 0 0 2px ${col}40` : undefined, background: 'transparent' }}>
                         {/* Crop image */}
                         <div className="relative" style={{ aspectRatio: '1' }}>
-                          {tree.crop_image ? (
-                            <img src={tree.crop_image} alt={`Tree ${tree.tree_id}`}
+                          {cropSrc(tree) ? (
+                            <img src={cropSrc(tree)} alt={`Tree ${tree.tree_id}`}
                               className="w-full h-full object-cover group-hover:scale-[1.04] transition-transform duration-300" />
                           ) : (
                             <div className="w-full h-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
@@ -2502,8 +2782,8 @@ const Upload = () => {
               <ChevronLeft size={30} />
             </button>
             <div className="flex-1 min-w-0 p-4">
-              {fmTrees[fmFsTree.treeIdx]?.crop_image ? (
-                <ZoomableImage src={fmTrees[fmFsTree.treeIdx].crop_image} alt={`Tree #${fmTrees[fmFsTree.treeIdx].tree_id}`} />
+              {cropSrc(fmTrees[fmFsTree.treeIdx]) ? (
+                <ZoomableImage src={cropSrc(fmTrees[fmFsTree.treeIdx])} alt={`Tree #${fmTrees[fmFsTree.treeIdx].tree_id}`} />
               ) : (
                 <div className="w-full h-full flex flex-col items-center justify-center gap-3 text-white/30">
                   <TreePine size={48} />

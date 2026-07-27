@@ -836,7 +836,7 @@ def start_api():
     print_header("Starting Flask API Server")
     print("API Server running at http://127.0.0.1:5001")
     print("Press Ctrl+C to stop\n")
-    app.run(host="0.0.0.0", port=5001, debug=True)
+    app.run(host="0.0.0.0", port=5001, debug=False, threaded=True, use_reloader=False)
 
 # ------------------------------------------------------------------
 # Main CLI interface

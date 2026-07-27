@@ -13,8 +13,9 @@ class_names:
 # ── Detection thresholds ──────────────────────────────────────────────────────
 # Raise a value to require higher certainty (fewer detections, less noise).
 # Lower a value to catch more instances (more detections, more false positives).
-conf_tree:         0.12   # tree-detection model  (coconut_tree_v6-3.pt) — kept low so
-                           # trees with reduced confidence from stitching blending are not dropped
+conf_tree:         0.10   # tree-detection model  (coconut_tree_v6-3.pt).
+                           # 0.10 recovers shadowed/partially-occluded crowns;
+                           # containment NMS + veg filter absorb the extra false positives.
 max_tree_px:       640    # max bounding-box side length in orthomosaic pixels;
                            # boxes larger than this are almost never a single tree crown
 conf_disease:      0.20   # fallback disease confidence when no per-class value is set
@@ -22,11 +23,11 @@ conf_disease_leaf: 0.30   # fallback disease confidence for single uploaded leaf
 iou_tree:          0.45   # NMS IOU for tree bounding-box deduplication (within a single tile)
 
 # ── Frame-based deduplication (drone video) ───────────────────────────────────
-# Raise merge_radius if the same tree still appears multiple times.
-# Lower it only if adjacent trees are being incorrectly merged into one.
+# Raise merge_radius if the same tree still appears multiple times in the
+# frame-based pipeline. Lower only if adjacent trees are incorrectly merged.
 # The adaptive algorithm uses max(60% of projected box diagonal, merge_radius),
 # so this is a floor, not a hard cap.
-merge_radius:      120    # canvas-pixel minimum centroid-distance for tree clustering
+merge_radius:      180    # canvas-pixel minimum centroid-distance for tree clustering
 
 # Per-class confidence thresholds for the disease model (coconut_disease_v5.pt).
 # These override conf_disease / conf_disease_leaf for the named class.

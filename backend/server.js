@@ -83,6 +83,7 @@ try {
   // app.use('/api/ml', require('./routes/mlRoutes'));
 
   app.use('/api/diseases', require('./routes/diseaseRoutes'));
+  app.use('/api/drone-detections', require('./routes/droneDetectionRoutes'));
 } catch (error) {
   console.error('⚠️ Route loading error:', error.message);
 }

@@ -139,6 +139,9 @@ export function buildDroneImageAnalysisData(diResults) {
  * @param {Object} mapData  - { src, w, h } — compressed JPEG data URL + original map dimensions
  */
 export function buildDroneVideoAnalysisData(trees, gps, mapData = null) {
+  // crop_image = base64 from live ML run; crop_url = Cloudinary URL from saved detection
+  const cropSrc = (t) => t?.crop_image || t?.crop_url || null;
+
   const { diseases, healthy, total } = aggregateDiseases(
     trees,
     t => t.disease,
@@ -149,28 +152,28 @@ export function buildDroneVideoAnalysisData(trees, gps, mapData = null) {
 
   // Grab crop images from diseased trees for the legacy annotatedImages field (max 3)
   const annotatedImages = trees
-    .filter(t => t.crop_image && t.disease && t.disease !== 'Healthy')
+    .filter(t => cropSrc(t) && t.disease && t.disease !== 'Healthy')
     .slice(0, 3)
-    .map(t => t.crop_image);
+    .map(t => cropSrc(t));
 
   // All diseased trees with their crop image for the per-tree gallery in the report
   const affectedTrees = trees
-    .filter(t => t.disease && t.disease !== 'Healthy' && t.crop_image)
+    .filter(t => t.disease && t.disease !== 'Healthy' && cropSrc(t))
     .map(t => ({
       tree_id:            t.tree_id,
       disease:            t.disease,
       disease_confidence: t.disease_confidence ?? 0,
-      crop_image:         t.crop_image,
+      crop_image:         cropSrc(t),
     }));
 
   // All trees (healthy + diseased) with crop images for the full per-tree gallery
   const allTrees = trees
-    .filter(t => t.crop_image)
+    .filter(t => cropSrc(t))
     .map(t => ({
       tree_id:            t.tree_id,
       disease:            t.disease || 'Healthy',
       disease_confidence: t.disease_confidence ?? 0,
-      crop_image:         t.crop_image,
+      crop_image:         cropSrc(t),
     }));
 
   // Tree positions as percentages of original map dimensions for the overlay rendering

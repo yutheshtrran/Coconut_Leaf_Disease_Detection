@@ -83,9 +83,9 @@ os.makedirs(JOBS_DIR, exist_ok=True)
 TILE_SIZE     = 1280
 OVERLAP       = 400   # 31 % overlap — trees up to 400 px wide are fully inside ≥1 tile
 CROP_PAD      = 24
-# Run detection at these fractions of the orthomosaic resolution.
-# The second pass at 0.65× catches trees that appear oversized in native tiles
-# (low-altitude shots) and also gives boundary trees a second inference chance.
+# Two-scale tiled detection: 1.0 (native) + 0.65 (wide view).
+# The wide-view pass catches trees whose crowns straddle multiple tiles and
+# are never fully inside a single 1280px tile at native resolution.
 DETECT_SCALES = [1.0, 0.65]
 # MERGE_RADIUS loaded from config.yaml (merge_radius key, default 120)
 
@@ -148,10 +148,12 @@ def _valid_tree_crop(crop_rgb: np.ndarray,
                      min_brightness: float = 22.0,
                      min_veg_ratio:  float = 0.12) -> bool:
     """
-    Reject detections that are not vegetation:
+    Reject detections that are clearly not vegetation:
     - Near-black crops → unstitched orthomosaic zones (brightness < 22)
-    - Crops with < 12 % green pixels → bare soil, roads, shadows
+    - < 12 % green pixels → bare soil, roads, shadows
     The excess-green index (2G − R − B > 10) flags vegetation pixels.
+    Kept deliberately permissive (original working threshold) — coconut fronds
+    with brown tips or heavy shadow can drop below stricter veg-ratio cuts.
     """
     if crop_rgb.size == 0:
         return False
@@ -162,6 +164,40 @@ def _valid_tree_crop(crop_rgb: np.ndarray,
     b = crop_rgb[..., 2].astype(np.float32)
     veg_ratio = float(np.mean((2 * g - r - b) > 10))
     return veg_ratio >= min_veg_ratio
+
+
+# ── Confidence-weighted centroid ──────────────────────────────────────────────
+def _weighted_centroid(kept_idx: list, all_boxes: list, all_scores: list,
+                       iou_thr: float = 0.10):
+    """
+    For each surviving NMS box, pool ALL detections that overlap it above
+    `iou_thr` and compute their confidence-weighted centroid.
+    This is more accurate than the raw bounding-box midpoint when the YOLO
+    box clips one side of the crown (common near tile edges).
+    Returns a list of (cx, cy) int tuples parallel to `kept_idx`.
+    """
+    boxes  = np.array(all_boxes,  dtype=np.float32)
+    scores = np.array(all_scores, dtype=np.float32)
+    areas  = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+    centroids = []
+    for i in kept_idx:
+        x1k, y1k, x2k, y2k = boxes[i]
+        # IoU of every detection against the kept box
+        ix1 = np.maximum(x1k, boxes[:, 0]); iy1 = np.maximum(y1k, boxes[:, 1])
+        ix2 = np.minimum(x2k, boxes[:, 2]); iy2 = np.minimum(y2k, boxes[:, 3])
+        inter = np.maximum(0, ix2 - ix1) * np.maximum(0, iy2 - iy1)
+        iou   = inter / (areas[i] + areas - inter + 1e-6)
+        mask  = iou >= iou_thr
+        if mask.sum() == 0:
+            mask[i] = True
+        ws  = scores[mask]
+        cxs = (boxes[mask, 0] + boxes[mask, 2]) / 2
+        cys = (boxes[mask, 1] + boxes[mask, 3]) / 2
+        total_w = ws.sum()
+        cx = int(round(float((ws * cxs).sum() / total_w)))
+        cy = int(round(float((ws * cys).sum() / total_w)))
+        centroids.append((cx, cy))
+    return centroids
 
 
 # ── NMS ───────────────────────────────────────────────────────────────────────
@@ -185,6 +221,43 @@ def _nms(boxes, scores, iou_thr: float = 0.4):
                   (boxes[order[1:], 3] - boxes[order[1:], 1]))
         iou   = inter / (area_i + area_j - inter + 1e-6)
         order = order[1:][iou < iou_thr]
+    return keep
+
+
+def _nms_contain(boxes, scores, iou_thr: float = 0.30, contain_thr: float = 0.60):
+    """NMS that also suppresses partial-crown boxes largely contained in a larger box.
+
+    Standard IoU-NMS fails when the same tree produces two detections:
+      A) full crown box  (e.g. 300×300 px)
+      B) partial-crown box seen from a different tile or scale (e.g. 150×120 px
+         entirely inside A)
+    IoU(A,B) = area(B) / (area(A)+area(B)-area(B)) ≈ 0.15 — well below iou_thr,
+    so standard NMS keeps both.
+
+    Suppression rule: discard box j if EITHER
+      • IoU(i,j) ≥ iou_thr  (standard)
+      • intersection(i,j) / area(j) ≥ contain_thr  (j is mostly inside i)
+    """
+    if not boxes:
+        return []
+    boxes  = np.array(boxes,  dtype=np.float32)
+    scores = np.array(scores, dtype=np.float32)
+    order  = scores.argsort()[::-1]
+    keep   = []
+    while order.size:
+        i = order[0]
+        keep.append(i)
+        xx1 = np.maximum(boxes[i, 0], boxes[order[1:], 0])
+        yy1 = np.maximum(boxes[i, 1], boxes[order[1:], 1])
+        xx2 = np.minimum(boxes[i, 2], boxes[order[1:], 2])
+        yy2 = np.minimum(boxes[i, 3], boxes[order[1:], 3])
+        inter  = np.maximum(0, xx2 - xx1) * np.maximum(0, yy2 - yy1)
+        area_i = (boxes[i, 2] - boxes[i, 0]) * (boxes[i, 3] - boxes[i, 1])
+        area_j = ((boxes[order[1:], 2] - boxes[order[1:], 0]) *
+                  (boxes[order[1:], 3] - boxes[order[1:], 1]))
+        iou        = inter / (area_i + area_j - inter + 1e-6)
+        containment = inter / (area_j + 1e-6)   # fraction of box-j covered by box-i
+        order = order[1:][(iou < iou_thr) & (containment < contain_thr)]
     return keep
 
 # ── Stage 1: stitch ────────────────────────────────────────────────────────────
@@ -211,18 +284,19 @@ def _stitch(session_id: str, video_path: str, job_dir: str) -> str:
     _cpu = __import__('torch').device('cpu')
     _orig_gw_device  = gpu_warp.DEVICE
     _orig_gw_use_gpu = gpu_warp._USE_GPU
-    _orig_sc_device  = _stitch_mod.DEVICE   # stitch_opencv imported DEVICE as its own name
+    _orig_sc_device  = _stitch_mod.DEVICE
     try:
         gpu_warp.DEVICE      = _cpu
         gpu_warp._USE_GPU    = False
-        _stitch_mod.DEVICE   = _cpu         # makes _disk_lg_H / _sp_lg_H / _loftr_H skip GPU
+        _stitch_mod.DEVICE   = _cpu
 
         out_path = os.path.join(job_dir, 'orthophoto.png')
 
-        def _cb(pct: int, detail: str):
-            _update(session_id, 'stitch', 'running', max(2, min(pct, 98)), detail)
+        def _cb(pct: int, msg: str):
+            _update(session_id, 'stitch', 'running', max(2, min(pct, 98)), msg)
 
-        result_path = stitch_video(video_path, out_path, 10, _cb)
+        stitch_video(video_path, out_path, 10, progress_cb=_cb)
+        result_path = out_path
     finally:
         gpu_warp.DEVICE      = _orig_gw_device
         gpu_warp._USE_GPU    = _orig_gw_use_gpu
@@ -847,21 +921,38 @@ def _detect_ortho(session_id: str, map_path: str, job_dir: str, conf: float,
                         int(done_tiles / total_tiles * 100),
                         f'Scanning tile {done_tiles}/{total_tiles}…')
 
-    # IoU 0.30: same tree seen in two overlapping tiles or at two scales merges;
-    # distinct adjacent trees (typically IoU < 0.15) are kept separate.
-    kept = _nms(all_boxes, all_scores, 0.30)
+    # Containment-aware NMS: suppresses a box if IoU ≥ 0.30 (same-crown overlap)
+    # OR if ≥ 60 % of the smaller box is contained inside the larger one
+    # (catches the "partial crown + full crown" duplicate from multi-scale / multi-tile).
+    kept = _nms_contain(all_boxes, all_scores, iou_thr=0.30, contain_thr=0.60)
 
     # ── Post-NMS false-positive filter ────────────────────────────────────────
-    # Removes detections on: (a) black unstitched zones, (b) bare soil/roads,
-    # (c) implausibly large regions that are never a single tree crown.
     valid = []
     for i in kept:
         x1, y1, x2, y2 = [int(v) for v in all_boxes[i]]
+        cx_i = (x1 + x2) // 2
+        cy_i = (y1 + y2) // 2
+
+        # 1. Size guard — reject implausibly large boxes
         if (x2 - x1) > MAX_TREE_PX or (y2 - y1) > MAX_TREE_PX:
             continue
+
+        # 2. Vegetation filter on the full bounding box
+        #    Rejects bare soil, roads, and mostly-black crops.
         crop_rgb = map_np[max(0, y1):min(img_h, y2), max(0, x1):min(img_w, x2)]
         if not _valid_tree_crop(crop_rgb):
             continue
+
+        # 3. Centroid-region brightness check.
+        #    A 40×40 px patch centred on the detection must be in a well-lit
+        #    stitched area.  Detections centred on the black unstitched
+        #    corners/edges fail this even if the box edge clips some vegetation.
+        r = 20
+        ctr = map_np[max(0, cy_i - r):min(img_h, cy_i + r),
+                     max(0, cx_i - r):min(img_w, cx_i + r)]
+        if ctr.size == 0 or float(np.mean(ctr)) < 35.0:
+            continue
+
         valid.append(i)
     kept = valid
 
@@ -943,7 +1034,7 @@ def run_farm_map(session_id: str, video_path: str, settings: dict):
 
     try:
         farm_map_jobs[session_id]['status'] = 'running'
-        conf = float(settings.get('conf', CONF_TREE))
+        conf = CONF_TREE   # always use config.yaml conf_tree (currently 0.12)
 
         # Stage 1
         map_path = _stitch(session_id, video_path, job_dir)
